@@ -112,7 +112,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: e2e
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           # The API fixture imports node:sqlite (unflagged from 22.13).
           node-version: "22"

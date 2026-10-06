@@ -1,0 +1,102 @@
+{
+  "Archived {count} page(s).": {
+    "one": "Заархівовано {count} сторінку.",
+    "few": "Заархівовано {count} сторінки.",
+    "many": "Заархівовано {count} сторінок."
+  },
+  "Can't delete “{title}” — it has {count} child page(s). Delete or move them first.": {
+    "one": "Неможливо видалити «{title}» — вона має {count} дочірню сторінку. Спершу видаліть або перемістіть її.",
+    "few": "Неможливо видалити «{title}» — вона має {count} дочірні сторінки. Спершу видаліть або перемістіть їх.",
+    "many": "Неможливо видалити «{title}» — вона має {count} дочірніх сторінок. Спершу видаліть або перемістіть їх."
+  },
+  "Can't delete “{title}” — {count} page(s) have history under it. Toggle Active off instead.": {
+    "one": "Неможливо видалити «{title}» — {count} сторінка має історію під нею. Натомість вимкніть «Активна».",
+    "few": "Неможливо видалити «{title}» — {count} сторінки мають історію під нею. Натомість вимкніть «Активна».",
+    "many": "Неможливо видалити «{title}» — {count} сторінок мають історію під нею. Натомість вимкніть «Активна»."
+  },
+  "Deleted {count} page(s).": {
+    "few": "Видалено {count} сторінки.",
+    "many": "Видалено {count} сторінок.",
+    "one": "Видалено {count} сторінку."
+  },
+  "Deleted {count} unused media item(s).": {
+    "few": "Видалено {count} невикористані медіаелементи.",
+    "many": "Видалено {count} невикористаних медіаелементів.",
+    "one": "Видалено {count} невикористаний медіаелемент."
+  },
+  "Deleted “{title}”. Promoted {count} alias(es) to standalone page(s) with the source's last content.": {
+    "few": "Видалено «{title}». Підвищено {count} псевдоніми до самостійних сторінок з останнім вмістом джерела.",
+    "many": "Видалено «{title}». Підвищено {count} псевдонімів до самостійних сторінок з останнім вмістом джерела.",
+    "one": "Видалено «{title}». Підвищено {count} псевдонім до самостійної сторінки з останнім вмістом джерела."
+  },
+  "Moved {count} item(s) {dest}.": {
+    "few": "Переміщено {count} елементи {dest}.",
+    "many": "Переміщено {count} елементів {dest}.",
+    "one": "Переміщено {count} елемент {dest}."
+  },
+  "Moved {count} page(s) under “{parent}”.": {
+    "few": "Переміщено {count} сторінки до «{parent}».",
+    "many": "Переміщено {count} сторінок до «{parent}».",
+    "one": "Переміщено {count} сторінку до «{parent}»."
+  },
+  "Published {count} page(s) ({already} already in the target state).": {
+    "few": "Опубліковано {count} сторінки ({already} вже в цільовому стані).",
+    "many": "Опубліковано {count} сторінок ({already} вже в цільовому стані).",
+    "one": "Опубліковано {count} сторінку ({already} вже в цільовому стані)."
+  },
+  "Saved {count} pinned result(s).": {
+    "few": "Збережено {count} закріплені результати.",
+    "many": "Збережено {count} закріплених результатів.",
+    "one": "Збережено {count} закріплений результат."
+  },
+  "Saved “{title}”. Auto-created {count} redirect(s) from the old URL(s).": {
+    "one": "Збережено «{title}». Автоматично створено {count} переадресацію зі старого URL.",
+    "few": "Збережено «{title}». Автоматично створено {count} переадресації зі старих URL.",
+    "many": "Збережено «{title}». Автоматично створено {count} переадресацій зі старих URL."
+  },
+  "Seeded “{name}” with {count} item(s) from pages marked Show in menus.": {
+    "few": "Заповнено «{name}» {count} елементами зі сторінок, позначених «Показувати в меню».",
+    "many": "Заповнено «{name}» {count} елементами зі сторінок, позначених «Показувати в меню».",
+    "one": "Заповнено «{name}» {count} елементом зі сторінок, позначених «Показувати в меню»."
+  },
+  "Unarchived {count} page(s).": {
+    "one": "Розархівовано {count} сторінку.",
+    "few": "Розархівовано {count} сторінки.",
+    "many": "Розархівовано {count} сторінок."
+  },
+  "Unpublished {count} page(s) ({already} already in the target state).": {
+    "few": "Знято з публікації {count} сторінки ({already} вже в цільовому стані).",
+    "many": "Знято з публікації {count} сторінок ({already} вже в цільовому стані).",
+    "one": "Знято з публікації {count} сторінку ({already} вже в цільовому стані)."
+  },
+  "{action}: touched {count} row(s) in `{type_name}`.": {
+    "one": "{action}: оброблено {count} рядок у `{type_name}`.",
+    "few": "{action}: оброблено {count} рядки у `{type_name}`.",
+    "many": "{action}: оброблено {count} рядків у `{type_name}`."
+  },
+  "{count} extra permission(s) preserved on save": {
+    "one": "{count} додатковий дозвіл збережено при збереженні",
+    "few": "{count} додаткові дозволи збережено при збереженні",
+    "many": "{count} додаткових дозволів збережено при збереженні"
+  },
+  "{count} field(s)": {
+    "few": "{count} поля",
+    "many": "{count} полів",
+    "one": "{count} поле"
+  },
+  "{count} page(s)": {
+    "few": "{count} сторінки",
+    "many": "{count} сторінок",
+    "one": "{count} сторінка"
+  },
+  "{count} revision(s)": {
+    "few": "{count} ревізії",
+    "many": "{count} ревізій",
+    "one": "{count} ревізія"
+  },
+  "{count} row(s).": {
+    "one": "{count} рядок.",
+    "few": "{count} рядки.",
+    "many": "{count} рядків."
+  }
+}

@@ -1,0 +1,69 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{% if mode == "new" %}{{ "New locale" | translate(locale=LANG) }}{% else %}{{ "Edit locale" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% block heading %}{% if mode == "new" %}{{ "Add locale" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} {{ locale.code }} — {{ locale.name }}{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:locales:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="rcms-breadcrumbs">
+    <a href="{{ url(name='rcms-admin:locales:list') }}">{{ "Locales" | translate(locale=LANG) }}</a>
+    <span class="rcms-sep">›</span>
+    <span>{% if mode == "new" %}{{ "New" | translate(locale=LANG) }}{% else %}{{ locale.code }}{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<form method="post" action="{% if mode == "new" %}{{ url(name='rcms-admin:locales:new') }}{% else %}{{ url(name='rcms-admin:locales:edit', id=locale.id) }}{% endif %}" class="rcms-card rcms-maxw-600" data-primary-save>
+    {{ csrf_token | csrf_input | safe }}
+    <div class="rcms-field-row">
+        <div class="rcms-field">
+            <label>{{ "Code" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+            <input type="text" name="code" required value="{{ locale.code | default(value="") }}" maxlength="16" placeholder="en, fr-CA, pt-BR" list="rcms-known-locales" autocomplete="off" data-locale-code>
+            <datalist id="rcms-known-locales">
+                {% for k in known_locales %}<option value="{{ k.code }}">{{ k.name }}</option>{% endfor %}
+            </datalist>
+            <div class="rcms-hint">{{ "BCP-47 tag. Lowercase language; optional region (e.g. fr-CA)." | translate(locale=LANG) }} <span data-locale-support></span></div>
+        </div>
+        <div class="rcms-field">
+            <label>{{ "Display name" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+            <input type="text" name="name" required value="{{ locale.name | default(value="") }}" maxlength="64" placeholder="English, Français (Canada)">
+        </div>
+    </div>
+
+    <div class="rcms-field-row">
+        <div class="rcms-field rcms-checkbox-field">
+            <input type="checkbox" id="is_default" name="is_default"{% if locale.is_default %} checked{% endif %}>
+            <label for="is_default">{{ "Default locale" | translate(locale=LANG) }}</label>
+        </div>
+        <div class="rcms-field rcms-checkbox-field">
+            <input type="checkbox" id="active" name="active"{% if locale.active %} checked{% endif %}>
+            <label for="active">{{ "Active" | translate(locale=LANG) }}</label>
+        </div>
+        <div class="rcms-field">
+            <label>{{ "Sort order" | translate(locale=LANG) }}</label>
+            <input type="number" name="sort_order" value="{{ locale.sort_order | default(value=100) }}" min="0" max="9999">
+            <div class="rcms-hint">{{ "Low first." | translate(locale=LANG) }}</div>
+        </div>
+    </div>
+
+    {% if mode == "new" or not locale.is_default %}
+    <p class="rcms-hint" style="margin-top: -8px;">
+        Promoting this locale to <strong>default</strong> demotes the previous default automatically.
+    </p>
+    {% endif %}
+
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:locales:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">{% if mode == "new" %}{{ "Create locale" | translate(locale=LANG) }}{% else %}{{ "Save changes" | translate(locale=LANG) }}{% endif %}</button>
+    </div>
+</form>
+<script type="application/json" data-locale-support-config>
+{"meta": {{ known_locales_meta | json_script }},
+ "phrases": {"full": {{ "full support" | translate(locale=LANG) | json_script }},
+             "content_only": {{ "content-only" | translate(locale=LANG) | json_script }},
+             "unknown": {{ "unknown to core" | translate(locale=LANG) | json_script }},
+             "rtl": {{ "RTL" | translate(locale=LANG) | json_script }}}}
+</script>
+{% endblock %}

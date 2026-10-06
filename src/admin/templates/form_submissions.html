@@ -1,0 +1,54 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ form_title }}{% endblock %}
+{% block heading %}{{ "Forms" | translate(locale=LANG) }}{% endblock %}
+{% block content %}
+<div class="rcms-fb-topbar">
+  <div class="rcms-fb-topbar-left">
+    <a href="{{ build_url }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+      <span class="material-symbols-rounded sm">arrow_back</span> {{ "Builder" | translate(locale=LANG) }}
+    </a>
+    <h1 class="rcms-fb-form-title">{{ "Submissions:" | translate(locale=LANG) }} {{ form_title }}</h1>
+  </div>
+  <div class="rcms-fb-topbar-right">
+    <a href="{{ csv_url }}" class="rcms-btn rcms-btn-outlined">
+      <span class="material-symbols-rounded sm">download</span> {{ "Export CSV" | translate(locale=LANG) }}
+    </a>
+  </div>
+</div>
+
+<p class="rcms-hint rcms-mt-0">
+  <strong>{{ total }}</strong> submission{{ total | pluralize }}.
+  {{ "Columns mirror the current form fields; fields removed since a submission show blank." | translate(locale=LANG) }}
+</p>
+
+{% if total == 0 %}
+  <p><em>{{ "No submissions yet." | translate(locale=LANG) }}</em></p>
+{% else %}
+<div class="rcms-table-wrap">
+  <table class="rcms-data">
+    <thead>
+      <tr>
+        <th>{{ "Submitted" | translate(locale=LANG) }}</th>
+        <th>{{ "Source page" | translate(locale=LANG) }}</th>
+        {% for c in columns %}<th>{{ c }}</th>{% endfor %}
+        <th>{{ "IP" | translate(locale=LANG) }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td><time datetime="{{ r.submitted_at }}" data-utc="{{ r.submitted_at }}">{{ r.submitted_at_text }}</time></td>
+        <td>
+          {% if r.source_page %}
+            <a href="{{ r.source_page.url }}" target="_blank" rel="noopener">{{ r.source_page.url }}</a>
+          {% else %}—{% endif %}
+        </td>
+        {% for cell in r.cells %}<td>{% if cell.url %}<a href="{{ cell.url }}">{{ cell.value }}</a>{% else %}{{ cell.value }}{% endif %}</td>{% endfor %}
+        <td>{{ r.ip }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

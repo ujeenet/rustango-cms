@@ -1,0 +1,111 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Analytics" | translate(locale=LANG) }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Analytics" | translate(locale=LANG) }}{% endblock %}
+
+{% block content %}
+<div class="rcms-card rcms-mb-4">
+    <form method="get" action="/cms-admin/analytics" class="rcms-field-row">
+        <div class="rcms-field">
+            <label>{{ "Date range" | translate(locale=LANG) }}</label>
+            <select name="days">
+                {% for d in [7, 30, 90, 365] %}
+                    <option value="{{ d }}"{% if days == d %} selected{% endif %}>{{ "Last {days} days" | translate(locale=LANG, days=d) }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="rcms-field">
+            <button type="submit" class="rcms-btn rcms-btn-tonal rcms-btn-small">{{ "Apply" | translate(locale=LANG) }}</button>
+        </div>
+    </form>
+    <p class="rcms-hint rcms-mt-3 rcms-mx-0 rcms-mb-0">
+        {{ "First-party, cookie-light analytics. Pageviews are collected via a beacon that works even when pages are served from a CDN cache; engagement + “active now” come from a live WebSocket." | translate(locale=LANG) }}
+    </p>
+</div>
+
+{# ---- KPI cards ---- #}
+<div class="rcms-grid rcms-gap-4 rcms-mb-4" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+    <div class="rcms-card">
+        <div class="rcms-text-2xs rcms-text-muted">{{ "Active now" | translate(locale=LANG) }}</div>
+        <div style="font-size:1.9rem;font-weight:700;line-height:1.1;color:var(--md-sys-color-primary,#6750a4)">{{ active_now }}</div>
+    </div>
+    <div class="rcms-card">
+        <div class="rcms-text-2xs rcms-text-muted">{{ "Unique visitors" | translate(locale=LANG) }}</div>
+        <div style="font-size:1.9rem;font-weight:700;line-height:1.1">{{ metrics.unique_visitors }}</div>
+    </div>
+    <div class="rcms-card">
+        <div class="rcms-text-2xs rcms-text-muted">{{ "Pageviews" | translate(locale=LANG) }}</div>
+        <div style="font-size:1.9rem;font-weight:700;line-height:1.1">{{ metrics.pageviews }}</div>
+    </div>
+    <div class="rcms-card">
+        <div class="rcms-text-2xs rcms-text-muted">{{ "Sessions" | translate(locale=LANG) }}</div>
+        <div style="font-size:1.9rem;font-weight:700;line-height:1.1">{{ metrics.sessions }}</div>
+    </div>
+    <div class="rcms-card">
+        <div class="rcms-text-2xs rcms-text-muted">{{ "Bounce rate" | translate(locale=LANG) }}</div>
+        <div style="font-size:1.9rem;font-weight:700;line-height:1.1">{{ metrics.bounce_rate }}%</div>
+    </div>
+    <div class="rcms-card">
+        <div class="rcms-text-2xs rcms-text-muted">{{ "Avg. time on page" | translate(locale=LANG) }}</div>
+        <div style="font-size:1.9rem;font-weight:700;line-height:1.1">{{ metrics.avg_seconds }}s</div>
+    </div>
+</div>
+
+{# ---- Traffic over time (per-day bars) ---- #}
+<div class="rcms-card rcms-mb-4">
+    <div class="rcms-text-sm rcms-fw-medium rcms-mb-3">{{ "Traffic — last {days} days" | translate(locale=LANG, days=days) }}</div>
+    {% if metrics.series | length == 0 %}
+        <p class="rcms-hint rcms-m-0">{{ "No pageviews recorded yet in this window." | translate(locale=LANG) }}</p>
+    {% else %}
+        <div style="display:flex;align-items:flex-end;gap:3px;height:130px;overflow-x:auto;padding-top:4px">
+            {% for p in metrics.series %}
+                <div title="{{ p.day }} · {{ p.pageviews }} {{ "views" | translate(locale=LANG) }} · {{ p.visitors }} {{ "visitors" | translate(locale=LANG) }}"
+                     style="flex:1 0 8px;max-width:32px;min-height:3px;height:{{ (p.pageviews * 100 / series_max) | round }}%;background:var(--md-sys-color-primary,#6750a4);border-radius:4px 4px 0 0"></div>
+            {% endfor %}
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px">
+            <span class="rcms-hint rcms-text-2xs">{{ metrics.series | first | get(key="day") }}</span>
+            <span class="rcms-hint rcms-text-2xs">{{ metrics.series | last | get(key="day") }}</span>
+        </div>
+    {% endif %}
+</div>
+
+{# ---- Breakdown tables ---- #}
+<div class="rcms-grid rcms-gap-4" style="grid-template-columns:repeat(auto-fit,minmax(280px,1fr))">
+    <div class="rcms-card">
+        <div class="rcms-text-sm rcms-fw-medium rcms-mb-3">{{ "Top pages" | translate(locale=LANG) }}</div>
+        {% if metrics.top_pages | length == 0 %}<p class="rcms-hint rcms-m-0">{{ "No data." | translate(locale=LANG) }}</p>{% else %}
+        <table class="rcms-data"><tbody>
+            {% for b in metrics.top_pages %}
+                <tr><td><code class="rcms-text-2xs">{{ b.label }}</code></td><td style="text-align:right"><strong>{{ b.count }}</strong></td></tr>
+            {% endfor %}
+        </tbody></table>{% endif %}
+    </div>
+    <div class="rcms-card">
+        <div class="rcms-text-sm rcms-fw-medium rcms-mb-3">{{ "Top referrers" | translate(locale=LANG) }}</div>
+        {% if metrics.top_referrers | length == 0 %}<p class="rcms-hint rcms-m-0">{{ "No referrers (direct traffic only)." | translate(locale=LANG) }}</p>{% else %}
+        <table class="rcms-data"><tbody>
+            {% for b in metrics.top_referrers %}
+                <tr><td>{{ b.label }}</td><td style="text-align:right"><strong>{{ b.count }}</strong></td></tr>
+            {% endfor %}
+        </tbody></table>{% endif %}
+    </div>
+    <div class="rcms-card">
+        <div class="rcms-text-sm rcms-fw-medium rcms-mb-3">{{ "Countries" | translate(locale=LANG) }}</div>
+        {% if metrics.countries | length == 0 %}<p class="rcms-hint rcms-m-0">{{ "No data (no CDN geo header)." | translate(locale=LANG) }}</p>{% else %}
+        <table class="rcms-data"><tbody>
+            {% for b in metrics.countries %}
+                <tr><td>{% if b.label %}{{ b.label }}{% else %}<em class="rcms-hint">{{ "Unknown" | translate(locale=LANG) }}</em>{% endif %}</td><td style="text-align:right"><strong>{{ b.count }}</strong></td></tr>
+            {% endfor %}
+        </tbody></table>{% endif %}
+    </div>
+    <div class="rcms-card">
+        <div class="rcms-text-sm rcms-fw-medium rcms-mb-3">{{ "Devices" | translate(locale=LANG) }}</div>
+        {% if metrics.devices | length == 0 %}<p class="rcms-hint rcms-m-0">{{ "No data." | translate(locale=LANG) }}</p>{% else %}
+        <table class="rcms-data"><tbody>
+            {% for b in metrics.devices %}
+                <tr><td>{{ b.label }}</td><td style="text-align:right"><strong>{{ b.count }}</strong></td></tr>
+            {% endfor %}
+        </tbody></table>{% endif %}
+    </div>
+</div>
+{% endblock %}

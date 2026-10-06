@@ -1,0 +1,361 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Styleguide — CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Styleguide" | translate(locale=LANG) }}{% endblock %}
+
+{% block description %}
+    {{ "Component gallery + registered-handler index. Use this page to
+    eyeball the admin chrome under the active theme, and as a quick
+    reference for what blocks / page types / library types the
+    current build ships." | translate(locale=LANG) }}
+{% endblock %}
+
+{% block body %}
+
+<h2 class="rcms-styleguide-section">{{ "Buttons" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <div class="rcms-styleguide-row">
+        <button type="button" class="rcms-btn">Primary</button>
+        <button type="button" class="rcms-btn rcms-btn-tonal">Tonal</button>
+        <button type="button" class="rcms-btn rcms-btn-outlined">Outlined</button>
+        <button type="button" class="rcms-btn rcms-btn-text">Text</button>
+        <button type="button" class="rcms-btn rcms-btn-danger">Danger</button>
+    </div>
+    <div class="rcms-styleguide-row">
+        <button type="button" class="rcms-btn rcms-btn-small">Primary small</button>
+        <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small">Outlined small</button>
+        <button type="button" class="rcms-btn rcms-btn-danger rcms-btn-small">Danger small</button>
+    </div>
+    <div class="rcms-styleguide-row">
+        <button type="button" class="rcms-btn">
+            <span class="material-symbols-rounded sm">save</span> With icon
+        </button>
+        <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+            <span class="material-symbols-rounded sm">edit</span> Edit
+        </button>
+    </div>
+</div>
+
+<h2 class="rcms-styleguide-section">{{ "Tags / status chips" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <div class="rcms-styleguide-row">
+        <span class="rcms-tag draft">draft</span>
+        <span class="rcms-tag scheduled">scheduled</span>
+        <span class="rcms-tag published">published</span>
+        <span class="rcms-tag archived">archived</span>
+    </div>
+</div>
+
+<h2 class="rcms-styleguide-section">{{ "Form fields" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <div class="rcms-field">
+        <label>{{ "Single-line input" | translate(locale=LANG) }}</label>
+        <input type="text" value="Hello world">
+        <div class="rcms-hint">{{ "Helptext example." | translate(locale=LANG) }}</div>
+    </div>
+    <div class="rcms-field">
+        <label>{{ "Required field" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+        <input type="text" required placeholder="{{ "Cannot be empty" | translate(locale=LANG) }}">
+    </div>
+    <div class="rcms-field">
+        <label>{{ "Multi-line textarea" | translate(locale=LANG) }}</label>
+        <textarea rows="3">Some multi-line content for demonstration.</textarea>
+    </div>
+    <div class="rcms-field">
+        <label>{{ "Select" | translate(locale=LANG) }}</label>
+        <select>
+            <option>Option A</option>
+            <option>Option B</option>
+        </select>
+    </div>
+    <div class="rcms-field rcms-checkbox-field">
+        <input type="checkbox" id="sg_chk_a" checked>
+        <label for="sg_chk_a">{{ "Checkbox checked" | translate(locale=LANG) }}</label>
+    </div>
+    <div class="rcms-field rcms-checkbox-field">
+        <input type="checkbox" id="sg_chk_b">
+        <label for="sg_chk_b">{{ "Checkbox unchecked" | translate(locale=LANG) }}</label>
+    </div>
+</div>
+
+{# #326 — every HTML input type cms.css styles, so the
+   `input[type="…"]` chrome stays visually regression-checkable. #}
+<h2 class="rcms-styleguide-section">{{ "Input types" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <div class="rcms-field"><label>{{ "Email" | translate(locale=LANG) }}</label><input type="email" value="user@example.com"></div>
+    <div class="rcms-field"><label>{{ "URL" | translate(locale=LANG) }}</label><input type="url" value="https://example.com"></div>
+    <div class="rcms-field"><label>{{ "Telephone" | translate(locale=LANG) }}</label><input type="tel" value="+1 555 0100"></div>
+    <div class="rcms-field"><label>{{ "Password" | translate(locale=LANG) }}</label><input type="password" value="secret123"></div>
+    <div class="rcms-field"><label>{{ "Search" | translate(locale=LANG) }}</label><input type="search" value="query"></div>
+    <div class="rcms-field"><label>{{ "Number" | translate(locale=LANG) }}</label><input type="number" value="42"></div>
+    <div class="rcms-field"><label>{{ "Date" | translate(locale=LANG) }}</label><input type="date" value="2026-06-01"></div>
+    <div class="rcms-field"><label>{{ "Time" | translate(locale=LANG) }}</label><input type="time" value="13:45"></div>
+    <div class="rcms-field"><label>{{ "Datetime-local" | translate(locale=LANG) }}</label><input type="datetime-local" value="2026-06-01T13:45"></div>
+    <div class="rcms-field"><label>{{ "Month" | translate(locale=LANG) }}</label><input type="month" value="2026-06"></div>
+    <div class="rcms-field"><label>{{ "Week" | translate(locale=LANG) }}</label><input type="week" value="2026-W23"></div>
+    <div class="rcms-field"><label>{{ "Color" | translate(locale=LANG) }}</label><input type="color" value="#6750a4"></div>
+    <div class="rcms-field"><label>{{ "Range" | translate(locale=LANG) }}</label><input type="range" min="0" max="100" value="60"></div>
+    <div class="rcms-field"><label>{{ "File" | translate(locale=LANG) }}</label><input type="file"></div>
+    <div class="rcms-field"><label>{{ "Disabled" | translate(locale=LANG) }}</label><input type="text" value="Read-only" disabled></div>
+    <div class="rcms-field rcms-checkbox-field">
+        <input type="radio" id="sg_radio_a" name="sg_radio" checked>
+        <label for="sg_radio_a">{{ "Radio selected" | translate(locale=LANG) }}</label>
+    </div>
+    <div class="rcms-field rcms-checkbox-field">
+        <input type="radio" id="sg_radio_b" name="sg_radio">
+        <label for="sg_radio_b">{{ "Radio unselected" | translate(locale=LANG) }}</label>
+    </div>
+</div>
+
+{# #326 — switch variant of the checkbox (`checkbox-field--switch` +
+   `rcms-switch-track`/`-knob`), the iOS-style toggle from _widget.html. #}
+<h2 class="rcms-styleguide-section">{{ "Switches" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <div class="rcms-checkbox-field rcms-checkbox-field--switch">
+        <input type="checkbox" id="sg_switch_on" checked>
+        <label for="sg_switch_on" class="rcms-switch-track" aria-hidden="true"><span class="rcms-switch-knob"></span></label>
+        <label for="sg_switch_on">{{ "Switch — on" | translate(locale=LANG) }}</label>
+    </div>
+    <div class="rcms-checkbox-field rcms-checkbox-field--switch">
+        <input type="checkbox" id="sg_switch_off">
+        <label for="sg_switch_off" class="rcms-switch-track" aria-hidden="true"><span class="rcms-switch-knob"></span></label>
+        <label for="sg_switch_off">{{ "Switch — off" | translate(locale=LANG) }}</label>
+    </div>
+</div>
+
+{# #324 — standalone (non-.field) select. Filter bars and bulk-action
+   toolbars render bare <select>s that pick up the canonical
+   `select:not(.field select)` chrome (custom chevron + focus ring),
+   distinct from the in-form `.field select` above (native chevron).
+   Kept here so that single source of truth stays visually regression-
+   checkable. #}
+<h2 class="rcms-styleguide-section">{{ "Filter-bar select (standalone)" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <div class="rcms-styleguide-row">
+        <select>
+            <option>All statuses</option>
+            <option>Published</option>
+            <option>Draft</option>
+        </select>
+    </div>
+</div>
+
+{# #294 — RichText (TipTap WYSIWYG) vs Markdown, side by side. The richtext
+   textarea is progressively enhanced by richtext-editor.js into a TipTap
+   editor; the markdown one keeps its textarea + syntax toolbar. #}
+<h2 class="rcms-styleguide-section">{{ "Rich text editor (RichText) vs Markdown" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <div class="rcms-field">
+        <label>RichText field — WYSIWYG (<code>data-widget-mode="richtext"</code>)</label>
+        <textarea data-widget-mode="richtext"><h2>Welcome</h2><p>A <strong>real</strong> WYSIWYG with <em>formatting</em>, <a href="https://example.com">links</a>, and lists:</p><ul><li>bold / italic / code</li><li>headings + quotes</li></ul></textarea>
+        <div class="rcms-hint rcms-hint--sm">Output is sanitized server-side (ammonia) at the <code>| richtext</code> render choke point.</div>
+    </div>
+    <div class="rcms-field">
+        <label>Markdown field — textarea + syntax toolbar (<code>data-widget-mode="markdown"</code>)</label>
+        <textarea data-widget-mode="markdown"># Welcome
+
+A **markdown** body with _emphasis_ and a [link](https://example.com).</textarea>
+    </div>
+</div>
+
+{# #324 — hint variants. `.hint` is the base helptext; the `.hint--*`
+   modifiers (md-sys-token-driven) replace per-widget inline-styled hints
+   in _widget.html. #}
+<h2 class="rcms-styleguide-section">{{ "Hints" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <p class="rcms-hint">{{ "Base hint — neutral helptext under a field." | translate(locale=LANG) }}</p>
+    <p class="rcms-hint rcms-hint--sm">Small hint (<code>.hint--sm</code>) — secondary, denser.</p>
+    <p class="rcms-hint rcms-hint--error">Error hint (<code>.hint--error</code>) — uses <code>--md-sys-color-error</code>.</p>
+    <p class="rcms-hint rcms-hint--warning">Warning hint (<code>.hint--warning</code>) — uses <code>--md-sys-color-warning</code>.</p>
+</div>
+
+{# #324 — `.alert` persistent status banner (vs the quiet inline `.hint`
+   above, the one-shot `.flash` message region, and the transient toast). #}
+<h2 class="rcms-styleguide-section">{{ "Alerts (status banners)" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <div class="rcms-alert rcms-alert--error" role="alert">
+        <span class="material-symbols-rounded">error</span>
+        <div class="rcms-alert-body"><strong>Error alert</strong> — <code>.alert.alert--error</code>, md-sys error-container tokens.</div>
+    </div>
+    <div class="rcms-alert rcms-alert--warning" role="alert">
+        <span class="material-symbols-rounded">warning</span>
+        <div class="rcms-alert-body"><strong>Warning alert</strong> — <code>.alert.alert--warning</code>, md-sys warning-container tokens.</div>
+    </div>
+</div>
+
+{# #326 — one-shot rustango::messages flash region (`.flash--*`),
+   rendered in _base.html after a redirect. Distinct from the persistent
+   `.alert` banner above and the transient JS `.rcms-toast`. #}
+<h2 class="rcms-styleguide-section">{{ "Flash messages" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <div class="rcms-flash rcms-flash--success"><span class="material-symbols-rounded rcms-flash-icon">check_circle</span><span class="rcms-flash-body">Saved — <code>.flash--success</code>.</span></div>
+    <div class="rcms-flash rcms-flash--info"><span class="material-symbols-rounded rcms-flash-icon">info</span><span class="rcms-flash-body">Heads up — <code>.flash--info</code>.</span></div>
+    <div class="rcms-flash rcms-flash--warning"><span class="material-symbols-rounded rcms-flash-icon">warning</span><span class="rcms-flash-body">Careful — <code>.flash--warning</code>.</span></div>
+    <div class="rcms-flash rcms-flash--error"><span class="material-symbols-rounded rcms-flash-icon">error</span><span class="rcms-flash-body">Something failed — <code>.flash--error</code>.</span></div>
+    <div class="rcms-flash rcms-flash--debug"><span class="material-symbols-rounded rcms-flash-icon">bug_report</span><span class="rcms-flash-body">Debug — <code>.flash--debug</code>.</span></div>
+</div>
+
+{# #326 — transient toasts (`.rcms-toast`), normally JS-injected into a
+   `position:fixed` `.rcms-toast-stack`. Shown here in-flow with the
+   `--in` visible state (a bare `.rcms-toast` is opacity:0 until shown). #}
+<h2 class="rcms-styleguide-section">{{ "Toasts" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <div class="rcms-styleguide-row">
+        <div class="rcms-toast rcms-toast--in rcms-toast--success">
+            <span class="material-symbols-rounded rcms-toast-icon" aria-hidden="true">check_circle</span>
+            <span class="rcms-toast-body">Page published — <code>.rcms-toast--success</code>.</span>
+            <button type="button" class="rcms-toast-close" aria-label="{{ "Dismiss" | translate(locale=LANG) }}"><span class="material-symbols-rounded">close</span></button>
+        </div>
+    </div>
+    <div class="rcms-styleguide-row">
+        <div class="rcms-toast rcms-toast--in rcms-toast--info">
+            <span class="material-symbols-rounded rcms-toast-icon" aria-hidden="true">info</span>
+            <span class="rcms-toast-body">Draft autosaved — <code>.rcms-toast--info</code>.</span>
+            <button type="button" class="rcms-toast-close" aria-label="{{ "Dismiss" | translate(locale=LANG) }}"><span class="material-symbols-rounded">close</span></button>
+        </div>
+    </div>
+    <div class="rcms-styleguide-row">
+        <div class="rcms-toast rcms-toast--in rcms-toast--warning">
+            <span class="material-symbols-rounded rcms-toast-icon" aria-hidden="true">warning</span>
+            <span class="rcms-toast-body">Unsaved changes — <code>.rcms-toast--warning</code>.</span>
+            <button type="button" class="rcms-toast-close" aria-label="{{ "Dismiss" | translate(locale=LANG) }}"><span class="material-symbols-rounded">close</span></button>
+        </div>
+    </div>
+    <div class="rcms-styleguide-row">
+        <div class="rcms-toast rcms-toast--in rcms-toast--error">
+            <span class="material-symbols-rounded rcms-toast-icon" aria-hidden="true">error</span>
+            <span class="rcms-toast-body">Publish failed — <code>.rcms-toast--error</code>.</span>
+            <button type="button" class="rcms-toast-close" aria-label="{{ "Dismiss" | translate(locale=LANG) }}"><span class="material-symbols-rounded">close</span></button>
+        </div>
+    </div>
+</div>
+
+{# #326 — tab strip (`.tab-strip`/`.tab-tab`/`.tab-count`), the page-editor
+   section nav. One tab selected; counts ride in `.tab-count` bubbles. #}
+<h2 class="rcms-styleguide-section">{{ "Tabs" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <nav class="rcms-tab-strip" role="tablist" aria-label="{{ "Styleguide tab demo" | translate(locale=LANG) }}">
+        <button type="button" class="rcms-tab-tab" role="tab" aria-selected="true">Content</button>
+        <button type="button" class="rcms-tab-tab" role="tab" aria-selected="false">Promote</button>
+        <button type="button" class="rcms-tab-tab" role="tab" aria-selected="false">Comments <span class="rcms-tab-count">3</span></button>
+        <button type="button" class="rcms-tab-tab" role="tab" aria-selected="false">References <span class="rcms-tab-count">12</span></button>
+    </nav>
+    <div class="rcms-tab-panel" role="tabpanel">
+        <p class="rcms-hint">Selected tab's panel content renders here (<code>.tab-panel</code>).</p>
+    </div>
+</div>
+
+{# #326 — chip cluster (`.chip-cluster`) — a horizontal, wrapping group of
+   status `.tag`s (e.g. the page-status bar in the editor). #}
+<h2 class="rcms-styleguide-section">{{ "Chip cluster" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <div class="rcms-chip-cluster" aria-label="{{ "Chip cluster demo" | translate(locale=LANG) }}">
+        <span class="rcms-tag draft">draft</span>
+        <span class="rcms-tag scheduled">scheduled</span>
+        <span class="rcms-tag published">published</span>
+        <span class="rcms-tag archived">archived</span>
+    </div>
+</div>
+
+{# #326 — overlay components are JS-driven (opened via dialog.showModal()),
+   so they can't render statically without covering the page; documented
+   here for the catalog. #}
+<h2 class="rcms-styleguide-section">{{ "Dialogs &amp; overlays (JS-driven)" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <ul class="rcms-styleguide-tag-list">
+        <li><code>.rcms-confirm-dialog</code> <span class="rcms-hint">destructive-action confirm (the <code>data-confirm</code> / <code>data-confirm-style="danger"</code> intercept)</span></li>
+        <li><code>.rcms-chooser-dialog</code> <span class="rcms-hint">page / media / snippet picker modal</span></li>
+        <li><code>.rcms-kbd-modal</code> <span class="rcms-hint">keyboard-shortcuts help (the <kbd>?</kbd> shortcut)</span></li>
+    </ul>
+</div>
+
+{# #324 / #326 — "badges" are deliberately NOT a single `.badge` base: the
+   family is the status `.tag` chips (above) plus the `.tab-count` count
+   bubble (on Tabs). Documented so the distinction stays intentional. #}
+<h2 class="rcms-styleguide-section">{{ "Badges (intentionally distinct)" | translate(locale=LANG) }}</h2>
+<div class="rcms-card rcms-styleguide-card">
+    <p class="rcms-hint rcms-mt-0">Badges are not unified under one class — see the status <code>.tag</code> chips and the <code>.tab-count</code> bubble on the Tabs strip above.</p>
+</div>
+
+<h2 class="rcms-styleguide-section">{{ "Registered page types" | translate(locale=LANG) }} ({{ page_types | length }})</h2>
+<div class="rcms-card rcms-styleguide-card">
+    {% if page_types | length == 0 %}
+        <p class="rcms-hint">{{ "No page types registered." | translate(locale=LANG) }}</p>
+    {% else %}
+        <table class="rcms-data">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>{{ "Type name" | translate(locale=LANG) }}</th>
+                    <th>{{ "Label" | translate(locale=LANG) }}</th>
+                    <th>{{ "Description" | translate(locale=LANG) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pt in page_types %}
+                    <tr>
+                        <td>
+                            {% if pt.icon %}
+                                <span class="material-symbols-rounded">{{ pt.icon }}</span>
+                            {% else %}
+                                <span class="material-symbols-rounded">article</span>
+                            {% endif %}
+                        </td>
+                        <td><code>{{ pt.type_name }}</code></td>
+                        <td>{{ pt.verbose_name }}</td>
+                        <td>{{ pt.description | default(value="—") }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</div>
+
+<h2 class="rcms-styleguide-section">{{ "Registered library types" | translate(locale=LANG) }} ({{ library_types | length }})</h2>
+<div class="rcms-card rcms-styleguide-card">
+    {% if library_types | length == 0 %}
+        <p class="rcms-hint">{{ "No library types registered." | translate(locale=LANG) }}</p>
+    {% else %}
+        <ul class="rcms-styleguide-tag-list">
+            {% for lt in library_types %}
+                <li><code>{{ lt.type_name }}</code> <span class="rcms-hint">{{ lt.verbose_name }}</span></li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+</div>
+
+<h2 class="rcms-styleguide-section">{{ "Registered blocks" | translate(locale=LANG) }} ({{ blocks | length }})</h2>
+<div class="rcms-card rcms-styleguide-card">
+    {% if blocks | length == 0 %}
+        <p class="rcms-hint">{{ "No blocks registered." | translate(locale=LANG) }}</p>
+    {% else %}
+        <table class="rcms-data">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>{{ "Type name" | translate(locale=LANG) }}</th>
+                    <th>{{ "Label" | translate(locale=LANG) }}</th>
+                    <th>{{ "Group" | translate(locale=LANG) }}</th>
+                    <th class="rcms-actions">{{ "Fields" | translate(locale=LANG) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for b in blocks %}
+                    <tr>
+                        <td>
+                            {% if b.icon %}
+                                <span class="material-symbols-rounded">{{ b.icon }}</span>
+                            {% else %}
+                                <span class="material-symbols-rounded">widgets</span>
+                            {% endif %}
+                        </td>
+                        <td><code>{{ b.type_name }}</code></td>
+                        <td>{{ b.verbose_name }}</td>
+                        <td>{{ b.group | default(value="Other") }}</td>
+                        <td class="rcms-actions">{{ b.field_count }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</div>
+{% endblock %}

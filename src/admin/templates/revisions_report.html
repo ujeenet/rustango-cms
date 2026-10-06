@@ -1,0 +1,70 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Revision storage" | translate(locale=LANG) }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Revision storage" | translate(locale=LANG) }}{% endblock %}
+
+{% block description %}
+    {{ total_revisions }} revision row{% if total_revisions != 1 %}s{% endif %} across this tenant.
+    {{ "High-edit pages accumulate history fastest — use the prune action below to trim back to a configurable cap." | translate(locale=LANG) }}
+{% endblock %}
+
+{% block body %}
+
+<form method="post" action="{{ url(name='rcms-admin:reports:revisions:prune') }}"
+      class="rcms-card rcms-revisions-prune-form"
+      data-confirm="{{ "Prune old revisions across every page? The latest N + the most-recent published revision per page always stay." | translate(locale=LANG) }}"
+      data-confirm-style="danger">
+    {{ csrf_token | csrf_input | safe }}
+    <h2 class="rcms-revisions-prune-heading">{{ "Prune now" | translate(locale=LANG) }}</h2>
+    <div class="rcms-field-row">
+        <div class="rcms-field">
+            <label>{{ "Keep latest" | translate(locale=LANG) }}</label>
+            <input type="number" name="keep_latest" min="1" max="10000" value="{{ default_keep_latest }}">
+            <div class="rcms-hint">{{ "Per-page floor. Always at least 1." | translate(locale=LANG) }}</div>
+        </div>
+        <div class="rcms-field rcms-checkbox-field">
+            <input type="checkbox" id="include_published" name="include_published" value="1">
+            <label for="include_published">{{ "Also delete published-status revisions" | translate(locale=LANG) }}</label>
+            <div class="rcms-hint">{{ "Default off — the most-recent published revision is always kept as a rollback anchor regardless." | translate(locale=LANG) }}</div>
+        </div>
+    </div>
+    <div class="rcms-form-actions">
+        <button type="submit" class="rcms-btn rcms-btn-danger">
+            <span class="material-symbols-rounded sm">delete_sweep</span> {{ "Prune now" | translate(locale=LANG) }}
+        </button>
+    </div>
+</form>
+
+{% if rows | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "No revisions to report." | translate(locale=LANG) }}</p>
+        <p class="rcms-hint">{{ "Revisions capture on every page save in the admin." | translate(locale=LANG) }}</p>
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Page" | translate(locale=LANG) }}</th>
+                <th>{{ "URL" | translate(locale=LANG) }}</th>
+                <th>{{ "Status" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Revisions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+                <tr>
+                    <td>
+                        <a href="{{ url(name='rcms-admin:pages:edit', id=r.page_id) }}">
+                            <strong>{{ r.title }}</strong>
+                        </a>
+                    </td>
+                    <td><code class="rcms-text-2xs">{{ r.url_path }}</code></td>
+                    <td><span class="rcms-tag {{ r.status }}">{{ r.status }}</span></td>
+                    <td class="rcms-actions">{{ r.revision_count }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+{% endblock %}

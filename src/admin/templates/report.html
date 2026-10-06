@@ -1,0 +1,62 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ report_title | translate(locale=LANG) }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ report_title | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="/cms-admin/report/{{ report_slug }}?format=csv" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">download</span> {{ "Export CSV" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block description %}
+    {% if report_description %}{{ report_description | translate(locale=LANG) }}
+    {% endif %}
+    {{ translate_plural(key="{count} row(s).", n=total, locale=LANG, count=total) }}
+{% endblock %}
+
+{% block body %}
+
+    {% if rows | length == 0 %}
+        <div class="rcms-empty">
+            <p>{{ "Nothing to report." | translate(locale=LANG) }}</p>
+        </div>
+    {% else %}
+        <div class="rcms-table-wrap">
+        <table class="rcms-data">
+            <thead>
+                <tr>
+                    {% for col in columns %}<th>{{ col | translate(locale=LANG) }}</th>{% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr>
+                        {% for cell in row.cells %}
+                            <td{% if cell.kind == "number" %} class="rcms-text-right"{% elif cell.kind == "datetime" %} class="rcms-text-muted rcms-text-xs"{% endif %}>
+                                {%- if loop.first and row.edit_url -%}
+                                    <a href="{{ row.edit_url }}">
+                                {%- endif -%}
+                                {%- if cell.kind == "status" and cell.value -%}
+                                    <span class="rcms-tag {{ cell.value }}">{{ cell.value }}</span>
+                                {%- elif cell.kind == "datetime" and cell.value -%}
+                                    {{ cell.value | naturaltime }}
+                                    <br>
+                                    <time class="rcms-hint rcms-text-2xs" data-utc="{{ cell.value | date(format='%+') }}">{{ cell.value }}</time>
+                                {%- elif cell.value -%}
+                                    {{ cell.value }}
+                                {%- else -%}
+                                    <span class="rcms-hint">—</span>
+                                {%- endif -%}
+                                {%- if loop.first and row.edit_url -%}
+                                    </a>
+                                {%- endif -%}
+                            </td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+
+{% endblock %}

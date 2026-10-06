@@ -1,0 +1,82 @@
+{
+  "Archived {count} page(s).": {
+    "one": "{count} page archivée.",
+    "other": "{count} pages archivées."
+  },
+  "Can't delete “{title}” — it has {count} child page(s). Delete or move them first.": {
+    "one": "Impossible de supprimer « {title} » — elle a {count} page enfant. Supprimez-la ou déplacez-la d'abord.",
+    "other": "Impossible de supprimer « {title} » — elle a {count} pages enfants. Supprimez-les ou déplacez-les d'abord."
+  },
+  "Can't delete “{title}” — {count} page(s) have history under it. Toggle Active off instead.": {
+    "one": "Impossible de supprimer « {title} » — {count} page possède un historique sous celle-ci. Désactivez plutôt l'option Actif.",
+    "other": "Impossible de supprimer « {title} » — {count} pages possèdent un historique sous celle-ci. Désactivez plutôt l'option Actif."
+  },
+  "Deleted {count} page(s).": {
+    "one": "{count} page supprimée.",
+    "other": "{count} pages supprimées."
+  },
+  "Deleted {count} unused media item(s).": {
+    "one": "{count} élément multimédia inutilisé supprimé.",
+    "other": "{count} éléments multimédias inutilisés supprimés."
+  },
+  "Deleted “{title}”. Promoted {count} alias(es) to standalone page(s) with the source's last content.": {
+    "one": "« {title} » supprimé. {count} alias promu en page autonome avec le dernier contenu de la source.",
+    "other": "« {title} » supprimé. {count} alias promus en pages autonomes avec le dernier contenu de la source."
+  },
+  "Moved {count} item(s) {dest}.": {
+    "one": "{count} élément déplacé {dest}.",
+    "other": "{count} éléments déplacés {dest}."
+  },
+  "Moved {count} page(s) under “{parent}”.": {
+    "one": "{count} page déplacée sous « {parent} ».",
+    "other": "{count} pages déplacées sous « {parent} »."
+  },
+  "Published {count} page(s) ({already} already in the target state).": {
+    "one": "{count} page publiée ({already} déjà dans l'état cible).",
+    "other": "{count} pages publiées ({already} déjà dans l'état cible)."
+  },
+  "Saved {count} pinned result(s).": {
+    "one": "{count} résultat épinglé enregistré.",
+    "other": "{count} résultats épinglés enregistrés."
+  },
+  "Saved “{title}”. Auto-created {count} redirect(s) from the old URL(s).": {
+    "one": "« {title} » enregistré. {count} redirection créée automatiquement depuis l'ancienne URL.",
+    "other": "« {title} » enregistré. {count} redirections créées automatiquement depuis les anciennes URL."
+  },
+  "Seeded “{name}” with {count} item(s) from pages marked Show in menus.": {
+    "one": "« {name} » initialisé avec {count} élément issu des pages marquées « Afficher dans les menus ».",
+    "other": "« {name} » initialisé avec {count} éléments issus des pages marquées « Afficher dans les menus »."
+  },
+  "Unarchived {count} page(s).": {
+    "one": "{count} page désarchivée.",
+    "other": "{count} pages désarchivées."
+  },
+  "Unpublished {count} page(s) ({already} already in the target state).": {
+    "one": "{count} page dépubliée ({already} déjà dans l'état cible).",
+    "other": "{count} pages dépubliées ({already} déjà dans l'état cible)."
+  },
+  "{action}: touched {count} row(s) in `{type_name}`.": {
+    "one": "{action} : {count} ligne modifiée dans `{type_name}`.",
+    "other": "{action} : {count} lignes modifiées dans `{type_name}`."
+  },
+  "{count} extra permission(s) preserved on save": {
+    "one": "{count} permission supplémentaire conservée à l'enregistrement",
+    "other": "{count} permissions supplémentaires conservées à l'enregistrement"
+  },
+  "{count} field(s)": {
+    "one": "{count} champ",
+    "other": "{count} champs"
+  },
+  "{count} page(s)": {
+    "one": "{count} page",
+    "other": "{count} pages"
+  },
+  "{count} revision(s)": {
+    "one": "{count} révision",
+    "other": "{count} révisions"
+  },
+  "{count} row(s).": {
+    "one": "{count} ligne.",
+    "other": "{count} lignes."
+  }
+}

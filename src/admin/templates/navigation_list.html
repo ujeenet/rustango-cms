@@ -1,0 +1,81 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Navigation" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Navigation menus" | translate(locale=LANG) }}{% endblock %}
+
+{% block description %}
+    Editor-curated menus. Templates pull them via the
+    <code>{% raw %}{% set nav = menu(slug="…") %}{% endraw %}</code> Tera helper and render the
+    returned nested struct however the theme prefers — the helper carries no opinions about markup.
+{% endblock %}
+
+{% block body %}
+<div class="rcms-card rcms-mb-4">
+    <form method="post" action="{{ url(name='rcms-admin:navigation:new') }}" class="rcms-field-row rcms-flex-wrap">
+        {{ csrf_token | csrf_input | safe }}
+        <div class="rcms-field rcms-minw-160">
+            <label>{{ "Slug" | translate(locale=LANG) }}</label>
+            <input type="text" name="slug" id="nav-new-slug"
+                   data-slug-source="#nav-new-name"
+                   placeholder="main" required pattern="[a-z0-9\-]+"
+                   title="{{ "Lowercase letters, digits, hyphens only." | translate(locale=LANG) }}">
+            <div class="rcms-hint">{{ "Stable handle templates reference." | translate(locale=LANG) }}</div>
+        </div>
+        <div class="rcms-field rcms-minw-220">
+            <label>{{ "Display name" | translate(locale=LANG) }}</label>
+            <input type="text" name="name" id="nav-new-name" placeholder="{{ "Main navigation" | translate(locale=LANG) }}" required>
+        </div>
+        <button type="submit" class="rcms-btn">{{ "+ New menu" | translate(locale=LANG) }}</button>
+    </form>
+</div>
+
+{% if menus | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "No menus yet. Create one above to start." | translate(locale=LANG) }}</p>
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Name" | translate(locale=LANG) }}</th>
+                <th>{{ "Slug" | translate(locale=LANG) }}</th>
+                <th>{{ "Items" | translate(locale=LANG) }}</th>
+                <th>{{ "Created" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for m in menus %}
+                <tr>
+                    <td>{{ m.name }}</td>
+                    <td><code>{{ m.slug }}</code></td>
+                    <td>{{ m.item_count }}</td>
+                    <td class="rcms-text-muted rcms-text-xs">
+                        {% if m.created_at %}
+                            {{ m.created_at | naturaltime }}
+                            <br>
+                            <time class="rcms-hint rcms-text-2xs" data-utc="{{ m.created_at | date(format='%+') }}">{{ m.created_at }}</time>
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+                    <td class="rcms-actions">
+                        <a href="{{ url(name='rcms-admin:navigation:edit', id=m.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit items" | translate(locale=LANG) }}</a>
+                        <form method="post" action="{{ url(name='rcms-admin:navigation:clone', id=m.id) }}"
+                              data-confirm="Duplicate “{{ m.name }}”? The copy includes every item.">
+                            {{ csrf_token | csrf_input | safe }}
+                            <button type="submit" class="rcms-btn rcms-btn-text rcms-btn-small">{{ "Clone" | translate(locale=LANG) }}</button>
+                        </form>
+                        <form method="post" action="{{ url(name='rcms-admin:navigation:delete', id=m.id) }}"
+                              data-confirm="Delete the {{ m.name }} menu? Items are deleted too." data-confirm-style="danger">
+                            {{ csrf_token | csrf_input | safe }}
+                            <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">{{ "Delete" | translate(locale=LANG) }}</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+{% endblock %}

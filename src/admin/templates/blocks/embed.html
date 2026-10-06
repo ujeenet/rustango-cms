@@ -1,0 +1,18 @@
+<div class="rcms-block-embed">
+    {%- if embed_src -%}
+        {# embed_src is server-built from a validated [A-Za-z0-9_-] id
+           and aspect_ratio is a static literal, so emit them raw —
+           Tera would otherwise escape the URL slashes to &#x2F;. The
+           link-out href below stays escaped (it's the user's URL). #}
+        <iframe src="{{ embed_src | safe }}" title="{{ provider }} embed"
+                style="width:100%;aspect-ratio:{{ aspect_ratio | safe }};border:0;display:block"
+                loading="lazy"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen></iframe>
+    {%- elif safe_href -%}
+        {# Unrecognised provider — link out instead of iframing an
+           arbitrary URL (provider whitelist, #402), never to a script
+           scheme (#724). #}
+        <a class="rcms-embed-link" href="{{ safe_href }}" rel="noopener noreferrer" target="_blank">{{ safe_href }}</a>
+    {%- endif -%}
+</div>

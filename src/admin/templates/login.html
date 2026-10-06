@@ -1,0 +1,63 @@
+{# CMS-branded login template — overrides the framework's
+   `login.html` (same Tera name) so /login renders this instead.
+   Context provided by `rustango::admin::login_view` and our shadow
+   GET handler `cms_login_form`: title, action, error, admin_title,
+   admin_prefix, static_url. #}
+{% extends "rcms_admin/_auth_layout.html" %}
+
+{% block page_title %}{{ "Sign in" | translate(locale=LANG) }} — {{ admin_title | default(value="CMS") }}{% endblock %}
+{% block brand_name %}{{ admin_title | default(value="CMS Admin") }}{% endblock %}
+{% block brand_sub %}{{ "Sign in to manage your content" | translate(locale=LANG) }}{% endblock %}
+
+{% block body %}
+<form method="post" action="{{ action }}">
+    {# The framework's POST /login verifies a double-submit token; its login
+       handler seeds `csrf_token` and the cookie on this GET (#677). #}
+    <input type="hidden" name="_csrf" value="{{ csrf_token | default(value='') }}">
+    <h1>{{ "Welcome back" | translate(locale=LANG) }}</h1>
+    <p class="rcms-lead">{{ "Enter your credentials to continue." | translate(locale=LANG) }}</p>
+    {% if error %}<p class="rcms-error">{{ error }}</p>{% endif %}
+    {# SSO (admin-sso) — the framework's /login/sso/callback bounces failures
+       back here with `?sso_error=<reason>`; show a generic message (details
+       stay in the server log). Kept English to match the framework's own SSO
+       chrome — provider names are proper nouns. #}
+    {% if sso_error %}<p class="rcms-error">Single sign-on failed — try again, or sign in with your password.</p>{% endif %}
+    {# #279 — `next` is the post-login destination. The handler always
+       sets it (either to the `?next=` query param or to `/cms-admin/`),
+       so the framework's POST `/login` redirects there on success
+       instead of falling back to `/` (the tenant homepage). #}
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    <label for="login-username">{{ "Username" | translate(locale=LANG) }}</label>
+    <input id="login-username" type="text" name="username" autocomplete="username" autofocus required>
+    <label for="login-password">{{ "Password" | translate(locale=LANG) }}</label>
+    <input id="login-password" type="password" name="password" autocomplete="current-password" required>
+    <div class="rcms-actions">
+        <a class="rcms-forgot" href="{{ url(name='rcms-admin:password-reset') }}">{{ "Forgot password?" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">{{ "Sign in" | translate(locale=LANG) }}</button>
+    </div>
+</form>
+{# SSO sign-in — one button per enabled `SsoProvider` row (DB-backed,
+   multi-provider). Each links to the framework's `/login/sso/{slug}`, which
+   runs the OAuth flow and mints the same session cookie password login does.
+   `p.label` is the full button text (e.g. "Sign in with Google"). #}
+{% if sso_enabled %}
+<div class="rcms-sso-block">
+    <div class="rcms-sso-sep"><span>or</span></div>
+    {% for p in sso_providers %}
+    {# `.btn.btn-outlined` = the admin's themed outlined button (md-sys tokens),
+       so the SSO button follows light/dark correctly. The old hand-rolled
+       colors used `var(--surface, #fff)` — a variable that doesn't exist —
+       so the background was stuck white while the text followed the theme:
+       white-on-white in dark mode. Only layout is custom here. #}
+    <a class="rcms-btn rcms-btn-outlined rcms-sso-button" href="{{ p.login_url }}">{{ p.label }}</a>
+    {% endfor %}
+</div>
+<style>
+    .rcms-sso-block { margin-top: 1.25rem; }
+    .rcms-sso-sep { display: flex; align-items: center; gap: .75rem; margin: 1rem 0; color: var(--muted); font-size: .85rem; }
+    .rcms-sso-sep::before, .rcms-sso-sep::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+    .rcms-sso-button { display: flex; width: 100%; justify-content: center; }
+    .rcms-sso-button + .rcms-sso-button { margin-top: .5rem; }
+</style>
+{% endif %}
+{% endblock %}

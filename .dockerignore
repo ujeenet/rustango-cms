@@ -1,0 +1,34 @@
+# This crate is consumed as a path dependency by host apps that build in
+# a container (passed to it as a named build context), so
+# the directory is a build context even though nothing here builds an
+# image of its own. Without this file every such build uploads `target/`
+# to the daemon — half a gigabyte that no image layer wants.
+
+# Build output.
+target/
+**/target/
+
+# Secrets and local databases. A SQLite file copied into an image is a
+# stale-state bug and a data leak at once.
+.env
+.env.*
+!.env.example
+var/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Nothing a dependent crate compiles reads these.
+.git/
+.github/
+docs/
+e2e/
+**/node_modules/
+.playwright-mcp/
+*.log
+
+# Editor / OS noise.
+.DS_Store
+.idea/
+.vscode/

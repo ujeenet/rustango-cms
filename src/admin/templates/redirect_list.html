@@ -1,0 +1,201 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Redirects" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Redirects" | translate(locale=LANG) }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* #555 — list controls: search + filter chips + sortable headers +
+       pagination. Scoped here; leans on the M3 tokens used elsewhere. */
+    .rcms-redirect-controls {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .rcms-redirect-controls .rcms-search-input { flex: 1 1 260px; }
+    .rcms-redirect-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .rcms-redirect-chips .rcms-tag {
+        text-decoration: none;
+        cursor: pointer;
+        transition: filter 0.15s ease;
+    }
+    .rcms-redirect-chips .rcms-tag:hover { filter: brightness(1.06); }
+    .rcms-redirect-chips .rcms-tag.is-active {
+        outline: 2px solid var(--md-sys-color-primary);
+        outline-offset: 1px;
+    }
+    .rcms-redirect-chips .rcms-chip-count {
+        font-variant-numeric: tabular-nums;
+        opacity: 0.7;
+        margin-left: 2px;
+    }
+    a.th-sort {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        color: inherit;
+        text-decoration: none;
+    }
+    a.th-sort:hover { color: var(--md-sys-color-primary); }
+    a.th-sort.is-active { color: var(--md-sys-color-primary); font-weight: 600; }
+    a.th-sort .material-symbols-rounded { font-size: 15px; }
+    .rcms-redirect-pagination {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        justify-content: center;
+        margin-top: 18px;
+    }
+</style>
+{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:redirects:import') }}" class="rcms-btn rcms-btn-outlined">
+        <span class="material-symbols-rounded sm">upload</span> {{ "Import CSV" | translate(locale=LANG) }}
+    </a>
+    <a href="{{ url(name='rcms-admin:redirects:export') }}" class="rcms-btn rcms-btn-outlined">
+        <span class="material-symbols-rounded sm">download</span> {{ "Export CSV" | translate(locale=LANG) }}
+    </a>
+    <a href="{{ url(name='rcms-admin:redirects:new') }}" class="rcms-btn">{{ "+ Add redirect" | translate(locale=LANG) }}</a>
+{% endblock %}
+
+{% block description %}
+    {{ "Redirects fire when a visitor hits a URL that has no live page. Live pages always win — a redirect from <code>/about</code> is ignored while a published page at <code>/about</code> exists." | translate(locale=LANG) | safe }}
+{% endblock %}
+
+{% block body %}
+{% if count_all == 0 and filter == "all" and q == "" %}
+    <div class="rcms-empty">
+        <p>{{ "No redirects yet." | translate(locale=LANG) }}</p>
+        <a href="{{ url(name='rcms-admin:redirects:new') }}" class="rcms-btn">{{ "Add the first redirect" | translate(locale=LANG) }}</a>
+    </div>
+{% else %}
+    <div class="rcms-redirect-controls">
+        <form method="get" action="{{ url(name='rcms-admin:redirects:list') }}" role="search" class="rcms-flex rcms-items-center rcms-gap-2 rcms-redirect-search-form">
+            <input type="hidden" name="filter" value="{{ filter }}">
+            <input type="hidden" name="sort" value="{{ sort }}">
+            <input type="hidden" name="dir" value="{{ dir }}">
+            <label class="rcms-search-input rcms-flex-1">
+                <span class="material-symbols-rounded">search</span>
+                <input type="search" name="q" value="{{ q }}" autocomplete="off"
+                       placeholder="{{ "Search from, to or note…" | translate(locale=LANG) }}">
+            </label>
+            {% if q %}<a href="?filter={{ filter }}&sort={{ sort }}&dir={{ dir }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Clear" | translate(locale=LANG) }}</a>{% endif %}
+        </form>
+        <div class="rcms-redirect-chips">
+            <a href="?q={{ q | urlencode }}&filter=all&sort={{ sort }}&dir={{ dir }}" class="rcms-tag{% if filter == "all" %} is-active{% endif %}">{{ "All" | translate(locale=LANG) }} <span class="rcms-chip-count">{{ count_all }}</span></a>
+            <a href="?q={{ q | urlencode }}&filter=active&sort={{ sort }}&dir={{ dir }}" class="rcms-tag published{% if filter == "active" %} is-active{% endif %}">{{ "Active" | translate(locale=LANG) }} <span class="rcms-chip-count">{{ count_active }}</span></a>
+            <a href="?q={{ q | urlencode }}&filter=stale&sort={{ sort }}&dir={{ dir }}" class="rcms-tag scheduled{% if filter == "stale" %} is-active{% endif %}">{{ "Stale" | translate(locale=LANG) }} <span class="rcms-chip-count">{{ count_stale }}</span></a>
+            <a href="?q={{ q | urlencode }}&filter=disabled&sort={{ sort }}&dir={{ dir }}" class="rcms-tag archived{% if filter == "disabled" %} is-active{% endif %}">{{ "Disabled" | translate(locale=LANG) }} <span class="rcms-chip-count">{{ count_disabled }}</span></a>
+        </div>
+    </div>
+
+    {% if items | length == 0 %}
+        <div class="rcms-empty">
+            <p>{{ "No redirects match your search." | translate(locale=LANG) }}</p>
+        </div>
+    {% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            {# #555 — sortable headers: each carries the current search +
+               filter, and flips direction when re-clicking its column. #}
+            <tr>
+                <th>
+                    <a href="?q={{ q | urlencode }}&filter={{ filter }}&sort=from&dir={% if sort == "from" and dir == "asc" %}desc{% else %}asc{% endif %}" class="th-sort{% if sort == "from" %} is-active{% endif %}">
+                        {{ "From" | translate(locale=LANG) }}
+                        {% if sort == "from" %}<span class="material-symbols-rounded">{% if dir == "asc" %}arrow_upward{% else %}arrow_downward{% endif %}</span>{% endif %}
+                    </a>
+                </th>
+                <th>{{ "To" | translate(locale=LANG) }}</th>
+                <th>{{ "Kind" | translate(locale=LANG) }}</th>
+                <th>
+                    <a href="?q={{ q | urlencode }}&filter={{ filter }}&sort=hits&dir={% if sort == "hits" and dir == "asc" %}desc{% else %}asc{% endif %}" class="th-sort{% if sort == "hits" %} is-active{% endif %}">
+                        {{ "Hits" | translate(locale=LANG) }}
+                        {% if sort == "hits" %}<span class="material-symbols-rounded">{% if dir == "asc" %}arrow_upward{% else %}arrow_downward{% endif %}</span>{% endif %}
+                    </a>
+                </th>
+                <th>
+                    <a href="?q={{ q | urlencode }}&filter={{ filter }}&sort=last_used&dir={% if sort == "last_used" and dir == "asc" %}desc{% else %}asc{% endif %}" class="th-sort{% if sort == "last_used" %} is-active{% endif %}">
+                        {{ "Last used" | translate(locale=LANG) }}
+                        {% if sort == "last_used" %}<span class="material-symbols-rounded">{% if dir == "asc" %}arrow_upward{% else %}arrow_downward{% endif %}</span>{% endif %}
+                    </a>
+                </th>
+                <th>
+                    <a href="?q={{ q | urlencode }}&filter={{ filter }}&sort=created&dir={% if sort == "created" and dir == "asc" %}desc{% else %}asc{% endif %}" class="th-sort{% if sort == "created" %} is-active{% endif %}">
+                        {{ "Created" | translate(locale=LANG) }}
+                        {% if sort == "created" %}<span class="material-symbols-rounded">{% if dir == "asc" %}arrow_upward{% else %}arrow_downward{% endif %}</span>{% endif %}
+                    </a>
+                </th>
+                <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for r in items %}
+            <tr{% if not r.is_active %} class="rcms-opacity-60"{% endif %}>
+                <td>
+                    <code>{{ r.from_path }}</code>
+                    {% if "*" in r.from_path %}<span class="rcms-tag" title="{{ "Wildcard pattern" | translate(locale=LANG) }}">{{ "pattern" | translate(locale=LANG) }}</span>{% endif %}
+                    {% if r.from_page_id %}<span class="material-symbols-rounded sm rcms-text-muted" title="{{ "Linked to a page" | translate(locale=LANG) }}">link</span>{% endif %}
+                </td>
+                <td>
+                    <code>{{ r.to_path }}</code>
+                    {% if r.to_page_id %}<span class="material-symbols-rounded sm rcms-text-muted" title="{{ "Follows the linked page's current URL" | translate(locale=LANG) }}">link</span>{% endif %}
+                </td>
+                <td>
+                    {% if r.is_permanent %}
+                        <span class="rcms-tag published">{{ "301 permanent" | translate(locale=LANG) }}</span>
+                    {% else %}
+                        <span class="rcms-tag">{{ "302 temporary" | translate(locale=LANG) }}</span>
+                    {% endif %}
+                    {% if r.overrides_live %}
+                        <span class="rcms-tag scheduled" title="{{ "Serves even when a published page exists at the from-path" | translate(locale=LANG) }}">{{ "override" | translate(locale=LANG) }}</span>
+                    {% endif %}
+                    {% if not r.is_active %}
+                        <span class="rcms-tag archived">{{ "disabled" | translate(locale=LANG) }}</span>
+                    {% endif %}
+                </td>
+                <td>{{ r.hit_count | intcomma }}</td>
+                <td class="rcms-text-muted rcms-text-xs">
+                    {% if r.last_hit_at %}{{ r.last_hit_at | naturaltime }}{% else %}<span title="{{ "Never served since tracking began" | translate(locale=LANG) }}">{{ "never" | translate(locale=LANG) }}</span>{% endif %}
+                </td>
+                <td class="rcms-text-muted rcms-text-xs">{{ r.created_at | naturaltime }}</td>
+                <td class="rcms-actions">
+                    {% if not r.is_active %}
+                        <form method="post" action="/cms-admin/redirects/{{ r.id }}/enable">
+                            {{ csrf_token | csrf_input | safe }}
+                            <button type="submit" class="rcms-btn rcms-btn-tonal rcms-btn-small">{{ "Re-enable" | translate(locale=LANG) }}</button>
+                        </form>
+                    {% endif %}
+                    <a href="{{ url(name='rcms-admin:redirects:edit', id=r.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit" | translate(locale=LANG) }}</a>
+                    <form method="post" action="{{ url(name='rcms-admin:redirects:delete', id=r.id) }}" data-confirm="{{ "Delete redirect {from} → {to}?" | translate(locale=LANG, from=r.from_path, to=r.to_path) }}" data-confirm-style="danger">
+                        {{ csrf_token | csrf_input | safe }}
+                        <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">{{ "Delete" | translate(locale=LANG) }}</button>
+                    </form>
+                </td>
+            </tr>
+            {% if not r.is_active and r.disabled_reason %}
+                <tr>
+                    <td colspan="7" class="rcms-text-muted rcms-text-xs rcms-pt-0">
+                        <span class="material-symbols-rounded sm">block</span>
+                        <em>{{ r.disabled_reason }}</em>
+                    </td>
+                </tr>
+            {% endif %}
+            {% if r.note %}
+                <tr>
+                    <td colspan="7" class="rcms-text-muted rcms-text-xs rcms-pt-0">
+                        <em>{{ r.note }}</em>
+                    </td>
+                </tr>
+            {% endif %}
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+    {% include "rcms_admin/_pagination.html" %}
+    {% endif %}
+{% endif %}
+{% endblock %}

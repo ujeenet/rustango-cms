@@ -1,0 +1,40 @@
+{# Public members-area self-service registration. Posts to
+   `/members/signup` (CSRF-protected). Context: action, next, error,
+   login_url, branding. On success the handler signs the new member in
+   and redirects to `next`. #}
+{% extends "rcms_admin/_auth_layout.html" %}
+
+{% block page_title %}{{ "Create account" | translate(locale=LANG) }}{% endblock %}
+{% block brand_mark %}<span class="rcms-brand-icon"><span class="material-symbols-rounded">person_add</span></span>{% endblock %}
+{% block brand_name %}{{ site_name }}{% endblock %}
+{% block brand_sub %}{{ "Create an account to access members-only content" | translate(locale=LANG) }}{% endblock %}
+
+{% block body %}
+<form method="post" action="{{ action }}">
+    {{ csrf_token | csrf_input | safe }}
+    <h1>{{ "Create your account" | translate(locale=LANG) }}</h1>
+    <p class="rcms-lead">{{ "It only takes a moment." | translate(locale=LANG) }}</p>
+    {% if error %}
+        {% if error == "invalid_email" %}<p class="rcms-error">{{ "Please enter a valid email address." | translate(locale=LANG) }}</p>
+        {% elif error == "weak_password" %}<p class="rcms-error">{{ "Password must be at least 8 characters." | translate(locale=LANG) }}</p>
+        {% elif error == "password_mismatch" %}<p class="rcms-error">{{ "The passwords didn't match." | translate(locale=LANG) }}</p>
+        {% elif error == "email_taken" %}<p class="rcms-error">{{ "An account with that email already exists." | translate(locale=LANG) }}</p>
+        {% else %}<p class="rcms-error">{{ "Something went wrong. Please try again." | translate(locale=LANG) }}</p>{% endif %}
+    {% endif %}
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    <label for="member-display-name">{{ "Display name" | translate(locale=LANG) }}</label>
+    <input id="member-display-name" type="text" name="display_name" autocomplete="name">
+    <label for="member-email">{{ "Email" | translate(locale=LANG) }}</label>
+    <input id="member-email" type="email" name="email" autocomplete="email" autofocus required>
+    <label for="member-password">{{ "Password" | translate(locale=LANG) }}</label>
+    <input id="member-password" type="password" name="password" autocomplete="new-password" minlength="8" required>
+    <label for="member-password-confirm">{{ "Confirm password" | translate(locale=LANG) }}</label>
+    <input id="member-password-confirm" type="password" name="password_confirm" autocomplete="new-password" minlength="8" required>
+    <div class="rcms-actions">
+        <a class="rcms-forgot" href="{{ login_url }}{% if next %}?next={{ next }}{% endif %}">{{ "Already have an account?" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">{{ "Create account" | translate(locale=LANG) }}</button>
+    </div>
+</form>
+{#- Visitors arrive here from the site: give them a way back. -#}
+<p class="rcms-auth-back"><a href="/">← {{ "Back to {site}" | translate(locale=LANG, site=site_name) }}</a></p>
+{% endblock %}

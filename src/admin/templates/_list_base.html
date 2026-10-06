@@ -1,0 +1,29 @@
+{#- The canonical page shape: an intro card, then the page body.
+
+    Every admin list and report page opens the same way — a sentence or
+    two saying what the page is — but each template used to hand-roll
+    that opening. Some wrapped the prose in a `.rcms-card`; others
+    dropped a bare `<p class="rcms-hint">` straight into the content
+    column, so Taxonomies and Library described themselves in visibly
+    different boxes. The wrapper now lives here, once.
+
+    Extend this instead of `_base.html` and fill the two blocks:
+
+        {% extends "rcms_admin/_list_base.html" %}
+        {% block description %}What this page is for.{% endblock %}
+        {% block body %}<div class="rcms-table-wrap">…</div>{% endblock %}
+
+    A page with nothing to say extends `_base.html` directly — an empty
+    intro card reads worse than no card at all.
+
+    `.rcms-card + .rcms-table-wrap` in cms.css supplies the gap to
+    whatever `body` opens with, so neither block carries margin classes.
+-#}
+{% extends "rcms_admin/_base.html" %}
+
+{% block content %}
+    <div class="rcms-card rcms-page-intro">
+        <p class="rcms-hint rcms-m-0">{% block description %}{% endblock %}</p>
+    </div>
+    {% block body %}{% endblock %}
+{% endblock %}

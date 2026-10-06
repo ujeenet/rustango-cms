@@ -1,0 +1,112 @@
+{# Sidebar preview — shared by every editor with a template to render.
+   Driven entirely by `cms-preview.js`, which reads its configuration off
+   the data attributes below, so an editor adopts live preview by including
+   this partial and setting a handful of variables. Nothing here is
+   page-specific.
+
+   Required:
+     preview_url     endpoint that renders the thing. GET shows the saved
+                     state; POST (form-encoded) renders unsaved values.
+   Optional:
+     preview_label   aria-label for the pane                (default "Preview")
+     preview_mode    "html" | "none"                        (default "html")
+     preview_form    id of the form whose live values are POSTed. Omit for
+                     a preview that only ever shows the saved state.
+     preview_scope   namespaces the remembered width / viewport / surface,
+                     so two editors don't fight over one stored value.
+     preview_variant second key part (page type id, form id, …).
+     preview_json    show the API surface. Pages only, today.
+     preview_site_url a decoupled frontend to frame. Cross-origin, so no
+                     live refresh — see the bar it renders.
+     preview_unavailable_hint  what to say when preview_mode == "none". #}
+<aside class="rcms-preview-pane"
+       data-preview-mode="{{ preview_mode | default(value='html') }}"
+       data-preview-url="{{ preview_url | default(value='') | safe }}"
+       {% if preview_form %}data-preview-form="{{ preview_form }}"{% endif %}
+       data-preview-scope="{{ preview_scope | default(value=tenant_slug | default(value='default')) }}"
+       data-preview-variant="{{ preview_variant | default(value='0') }}"
+       aria-label="{{ preview_label | default(value='Preview') }}">
+    {# Wagtail-style preview scaling. The iframe DOM stays at the SELECTED
+       DEVICE WIDTH so the framed document's media queries fire as on a
+       real device; a CSS transform scales the visual output to fit. The
+       sizer carries the scaled footprint so flex reserves the right space. #}
+    {% if preview_mode | default(value='html') == "none" %}
+        <div class="rcms-preview-stage rcms-preview-unavailable" data-preview-stage data-surface="html" hidden>
+            <div class="rcms-empty">
+                <p><strong>{{ "Preview is not available" | translate(locale=LANG) }}</strong></p>
+                <p class="rcms-hint">{{ preview_unavailable_hint | default(value="There is no template to render.") }}</p>
+            </div>
+        </div>
+    {% else %}
+    <div class="rcms-preview-stage" data-preview-stage data-surface="html"
+         {% if preview_mode | default(value='html') != "html" %}hidden{% endif %}>
+        <div class="rcms-preview-frame-sizer" data-preview-frame-sizer>
+            {# Lazy: `data-src`, not `src`. An eager src rendered the whole
+               document server-side AND pulled axe-core into the frame on
+               every editor open, even with the pane toggled shut. #}
+            <iframe class="rcms-preview-frame" name="cms-preview-frame"
+                    data-src="{{ preview_url | default(value='') }}"
+                    title="{{ preview_label | default(value='Preview') }}"></iframe>
+        </div>
+    </div>
+    {% endif %}
+
+    {# A decoupled frontend rendering this content from the API.
+       Cross-origin by definition, so it behaves differently from the HTML
+       pane and the difference is real, not a limitation to hide: the CMS
+       cannot script into the frame, so there is no refresh-as-you-type.
+       Save, then reload. The bar says so, and offers a new tab for a
+       frontend that refuses to be framed — `X-Frame-Options` is not
+       detectable from here, and a blank pane with no explanation would be
+       the worst outcome. #}
+    {% if preview_site_url %}
+    <div class="rcms-preview-stage" data-preview-stage data-surface="site" hidden>
+        <div class="rcms-preview-json-bar" role="status">
+            <span class="rcms-tag draft">{{ "Your frontend" | translate(locale=LANG) }}</span>
+            <span class="rcms-preview-json-meta rcms-text-2xs rcms-text-muted">
+                {{ "Rendered by your site from the API. Save, then reload — this pane cannot live-update across origins." | translate(locale=LANG) }}
+            </span>
+            <a class="rcms-btn rcms-btn-outlined rcms-btn-small" target="_blank" rel="noopener"
+               href="{{ preview_site_url }}"
+               title="{{ "Open in a new tab" | translate(locale=LANG) }}">
+                <span class="material-symbols-rounded sm">open_in_new</span>
+            </a>
+        </div>
+        {# The bar sits above the frame, so this surface stacks rather than
+           centring one child. The frame *area* is its own box with the same
+           padding as an ordinary stage, because that is what the viewport
+           maths measures — measuring the whole stage would count the bar's
+           height as frame space and overflow the pane. #}
+        <div class="rcms-preview-frame-area" data-preview-frame-area>
+            <div class="rcms-preview-frame-sizer" data-preview-frame-sizer>
+                <iframe class="rcms-preview-frame" name="cms-site-preview-frame"
+                        data-src="{{ preview_site_url }}"
+                        title="{{ "Your frontend" | translate(locale=LANG) }}"></iframe>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# The API surface. Fetched on demand (the same POST the HTML preview
+       uses, with `?format=json`), so opening an HTML editor costs nothing. #}
+    {% if preview_json %}
+    <div class="rcms-preview-json" data-preview-json data-surface="json"
+         {% if preview_mode | default(value='html') == "html" %}hidden{% endif %}>
+        <div class="rcms-preview-json-bar" role="status" aria-live="polite">
+            <span class="rcms-tag draft" data-json-status>{{ "Loading…" | translate(locale=LANG) }}</span>
+            <span class="rcms-preview-json-meta rcms-text-2xs rcms-text-muted" data-json-meta></span>
+            <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small" data-json-copy
+                    title="{{ "Copy the JSON response" | translate(locale=LANG) }}">
+                <span class="material-symbols-rounded sm">content_copy</span>
+            </button>
+        </div>
+        {# `tabindex` because this is the scroll surface in JSON mode — it
+           has to be keyboard reachable. No `aria-live` on the body: it is
+           rewritten on every debounce, and a live region would read the
+           whole payload aloud each time. #}
+        <pre class="rcms-preview-json-body rcms-font-mono rcms-text-sm rcms-pre-wrap"
+             data-json-body tabindex="0" role="region"
+             aria-label="{{ "API response body" | translate(locale=LANG) }}"></pre>
+    </div>
+    {% endif %}
+</aside>

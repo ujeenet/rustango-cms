@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page.seo_title | default(value=page.title) }}</title>
+    <meta name="description" content="{{ page.seo_description }}">
+    {% if not page.robots_index %}<meta name="robots" content="noindex">{% endif %}
+    {% include "_site.css.html" %}
+</head>
+<body>
+    <nav class="breadcrumb">
+        {% for ancestor in ancestors %}
+            <a href="{{ ancestor | page_href }}">{{ ancestor.title }}</a> /
+        {% endfor %}
+        <span>{{ page.title }}</span>
+    </nav>
+    <article>
+        <h1>{{ page.title }}</h1>
+        {% if extension.hero_media_id %}
+            <img src="{{ rcms_image_url(media_id=extension.hero_media_id, filter='fill-1200x600') }}"
+                 alt="{{ page.title }}">
+        {% endif %}
+        {# `| safe` is required: the markdown filter returns trusted HTML that
+           it has already sanitized against an allowlist, and without `safe`
+           Tera re-escapes the angle brackets so readers see the tags (#621). #}
+        {{ extension.body_markdown | markdown | safe }}
+
+        {# #559/#565 — page-builder body (renders when the type has a
+           published schema; harmless when it doesn't). Beyond what the
+           getting-started guide covers. #}
+        {% if builder %}
+        <section class="builder-body">
+            {% if builder.subtitle %}<p class="lede">{{ builder.subtitle }}</p>{% endif %}
+            {% if builder.author_box %}
+                <aside class="author-box">
+                    <strong>{{ builder.author_box.name }}</strong>
+                    <span>{{ builder.author_box.bio }}</span>
+                </aside>
+            {% endif %}
+            <div class="features">{{ stream_render(name="features") | safe }}</div>
+            <div class="sections">{{ stream_render(name="sections") | safe }}</div>
+        </section>
+        {% endif %}
+    </article>
+    <footer>
+        <small>Powered by <a href="https://github.com/ujeenet/rustango-cms">rustango-cms</a></small>
+    </footer>
+</body>
+</html>

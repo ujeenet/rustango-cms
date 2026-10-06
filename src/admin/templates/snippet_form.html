@@ -1,0 +1,219 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{% if mode == "new" %}{{ "New Snippet" | translate(locale=LANG) }}{% else %}{{ "Edit Snippet" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% block heading %}
+{% if mode == "new" and preselect_type | default(value="") == "form" %}{{ "New form" | translate(locale=LANG) }}{% elif mode == "new" %}{{ "New library snippet" | translate(locale=LANG) }}{% else %}{{ "Edit snippet:" | translate(locale=LANG) }} {{ snippet.title }}{% endif %}
+{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:library:list') }}" class="rcms-btn rcms-btn-text rcms-btn-small">{{ "Cancel" | translate(locale=LANG) }}</a>
+    {# #409 — locale picker. Switches the edit page into per-locale
+       translation mode (canonical default locale shows the plain form). #}
+    {% if mode == "edit" and locales and locales | length > 1 %}
+        {% for l in locales %}
+            {% if l.is_default %}
+                <a href="{{ url(name='rcms-admin:library:edit', id=snippet.id) }}"
+                   class="rcms-btn rcms-btn-small{% if not translation_mode %} rcms-btn-outlined{% else %} rcms-btn-text{% endif %}"
+                   title="{{ "Canonical" | translate(locale=LANG) }} ({{ l.name }})">{{ l.code }}</a>
+            {% else %}
+                <a href="{{ url(name='rcms-admin:library:edit', id=snippet.id) }}?locale={{ l.code }}"
+                   class="rcms-btn rcms-btn-small{% if editing_locale and editing_locale.code == l.code %} rcms-btn-outlined{% else %} rcms-btn-text{% endif %}"
+                   title="{{ "Translate to" | translate(locale=LANG) }} {{ l.name }}">{{ l.code }}</a>
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="rcms-breadcrumbs">
+    <a href="{{ url(name='rcms-admin:library:list') }}">{{ "Library" | translate(locale=LANG) }}</a>
+    <span class="rcms-sep">›</span>
+    <span>{% if mode == "new" %}{{ "New snippet" | translate(locale=LANG) }}{% else %}{{ snippet.title }}{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+{% if not translation_mode %}
+<form method="post" action="{% if mode == "new" %}{{ url(name='rcms-admin:library:new') }}{% else %}{{ url(name='rcms-admin:library:edit', id=snippet.id) }}{% endif %}" class="rcms-card rcms-maxw-760" data-primary-save>
+    {{ csrf_token | csrf_input | safe }}
+    <div class="rcms-field-row">
+        <div class="rcms-field">
+            <label>{{ "Type" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+            <select name="type_name" required>
+                <option value="">{{ "— pick a library type —" | translate(locale=LANG) }}</option>
+                {% for t in types %}
+                    {% set sel_existing = mode == "edit" and snippet.type_name == t.type_name %}
+                    {% set sel_preselect = mode == "new" and preselect_type == t.type_name %}
+                    <option value="{{ t.type_name }}"{% if sel_existing or sel_preselect %} selected{% endif %}>
+                        {{ t.verbose_name }} ({{ t.type_name }})
+                    </option>
+                {% endfor %}
+            </select>
+            <div class="rcms-hint">{{ "Pick the kind of library item to create." | translate(locale=LANG) }}</div>
+        </div>
+        <div class="rcms-field">
+            <label>{{ "Slug" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+            <input type="text" name="slug" id="snippet-slug"
+                   data-slug-source="#snippet-title"
+                   {% if snippet.id %}data-slug-locked="1"{% endif %}
+                   required value="{{ snippet.slug | default(value="") }}"
+                   pattern="[a-z0-9\-]+" maxlength="128">
+            <div class="rcms-hint">{{ "Lowercase, hyphens only. Used to reference this snippet from templates." | translate(locale=LANG) }}</div>
+        </div>
+    </div>
+
+    <div class="rcms-field-row">
+        <div class="rcms-field">
+            <label>{{ "Title" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+            <input type="text" name="title" id="snippet-title" required value="{{ snippet.title | default(value="") }}" maxlength="200">
+            <div class="rcms-hint">{{ "Display name for the admin list. Authors see this; visitors don't." | translate(locale=LANG) }}</div>
+        </div>
+        <div class="rcms-field">
+            <label>{{ "Folder" | translate(locale=LANG) }}</label>
+            <input type="text" name="folder_path" value="{{ snippet.folder_path | default(value="") }}" placeholder="marketing/cta" maxlength="255">
+            <div class="rcms-hint">{{ "Slash-separated path. Empty = root." | translate(locale=LANG) }}</div>
+        </div>
+    </div>
+
+    {#- A form's content is built in the Form Builder, which opens after
+        "Create"; the Markdown body means nothing for it. -#}
+    {% if mode != "new" or preselect_type | default(value="") != "form" %}
+    <div class="rcms-field">
+        <label>{{ "Body (markdown)" | translate(locale=LANG) }}</label>
+        <textarea name="body_markdown" rows="14" class="rcms-text-sm rcms-font-mono">{{ snippet.body_markdown | default(value="") }}</textarea>
+        <div class="rcms-hint">
+            Rendered server-side; sanitized. Reference this snippet from any template:
+            <code>{{"{{"}} cms_snippet(slug="{{ snippet.slug | default(value="my-slug") }}") {{"}}"}}</code>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if allows_element_template %}
+    <div class="rcms-field">
+        <label>{{ "Template" | translate(locale=LANG) }}</label>
+        <input type="text" name="data__template" value="{{ snippet.data.template | default(value="") }}" placeholder="{{ snippet.type_name | lower }}/{{ snippet.slug | default(value="this-element") }}.html" maxlength="255">
+        <div class="rcms-hint">{{ "Renders this element on its own, instead of the one its type uses. Leave empty to use the type's template." | translate(locale=LANG) }}</div>
+    </div>
+    {% endif %}
+
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:library:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">
+            <span class="material-symbols-rounded">save</span>
+            {% if mode == "new" %}{{ "Create snippet" | translate(locale=LANG) }}{% else %}{{ "Save changes" | translate(locale=LANG) }}{% endif %}
+        </button>
+    </div>
+</form>
+
+{% else %}
+{#- #409 — translation mode: the same side-by-side rows as the page
+    editor (original left, this language right). Saves overrides into
+    cms_snippet_translation; an empty box shows the original. -#}
+<form method="post" action="/cms-admin/library/{{ snippet.id }}/translate?locale={{ editing_locale.code }}"
+      class="rcms-card rcms-maxw-760">
+    {{ csrf_token | csrf_input | safe }}
+    <div class="rcms-page-form-notice rcms-page-form-notice--translation">
+        <strong><span class="material-symbols-rounded sm">info</span> {{ "Translation mode." | translate(locale=LANG) }}</strong>
+        {% set locname = editing_locale.name | escape %}
+        {{ "The left column is the original text; the right column is the <strong>{name}</strong> text. Leave a box empty to show the original." | translate(locale=LANG, name=locname) | safe }}
+    </div>
+
+    <div class="rcms-tr-row">
+        <div class="rcms-canonical">
+            <div class="rcms-lbl"><span class="material-symbols-rounded sm">edit_note</span> {{ "Title (canonical)" | translate(locale=LANG) }}</div>
+            <div class="rcms-canonical-text">{{ snippet.title }}</div>
+        </div>
+        <div>
+            <label class="rcms-tr-lbl"><span class="material-symbols-rounded sm">translate</span> {{ "Title" | translate(locale=LANG) }} ({{ editing_locale.code }})</label>
+            <input type="text" name="tr__title" value="{{ core_translations.title | default(value='') }}" placeholder="{{ snippet.title }}" maxlength="200">
+        </div>
+    </div>
+    {% if snippet.type_name != "form" %}
+    <div class="rcms-tr-row">
+        <div class="rcms-canonical">
+            <div class="rcms-lbl"><span class="material-symbols-rounded sm">subject</span> {{ "Body (markdown)" | translate(locale=LANG) }} {{ "(canonical)" | translate(locale=LANG) }}</div>
+            <div class="rcms-canonical-text">{%- if snippet.body_markdown %}{{ snippet.body_markdown }}{% else %}<span class="rcms-placeholder">{{ "(empty)" | translate(locale=LANG) }}</span>{% endif -%}</div>
+        </div>
+        <div>
+            <label class="rcms-tr-lbl"><span class="material-symbols-rounded sm">translate</span> {{ "Body (markdown)" | translate(locale=LANG) }} ({{ editing_locale.code }})</label>
+            <textarea name="tr__body_markdown" rows="8" class="rcms-text-sm rcms-font-mono">{{ core_translations.body_markdown | default(value='') }}</textarea>
+        </div>
+    </div>
+    {% endif %}
+
+    {% for pair in extra_translations %}
+    <div class="rcms-field">
+        <label>{{ pair.0 }} ({{ editing_locale.code }})</label>
+        <textarea name="tr__{{ pair.0 }}" rows="3">{{ pair.1 }}</textarea>
+    </div>
+    {% endfor %}
+
+    <div class="rcms-field-row">
+        <div class="rcms-field">
+            <label>{{ "Add field" | translate(locale=LANG) }}</label>
+            <input type="text" name="new_field_path" placeholder="data.cta_label" maxlength="64">
+            <div class="rcms-hint">A snippet field or dotted <code>data.&lt;key&gt;</code> path.</div>
+        </div>
+        <div class="rcms-field">
+            <label>{{ "Value" | translate(locale=LANG) }}</label>
+            <input type="text" name="new_field_value">
+        </div>
+    </div>
+
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:library:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">
+            <span class="material-symbols-rounded">save</span>
+            {{ "Save translations" | translate(locale=LANG) }}
+        </button>
+    </div>
+</form>
+{% endif %}
+
+{# #123 — opt-in History card. Renders only when the snippet's
+   library type set `revisions_enabled() = true` AND at least one
+   revision has been captured. Revert via POST per row. #}
+{% if mode == "edit" and revisions_enabled and snippet_revisions and snippet_revisions | length > 0 %}
+<details class="rcms-card rcms-snippet-history-card rcms-mt-4 rcms-py-3 rcms-px-4">
+    <summary class="rcms-cursor-pointer rcms-fw-medium">
+        <span class="material-symbols-rounded sm">history</span>
+        {{ "Revision history" | translate(locale=LANG) }}
+        <span class="rcms-tag draft rcms-text-3xs rcms-ml-1">{{ snippet_revisions | length }}</span>
+    </summary>
+    <div class="rcms-table-wrap rcms-mt-3">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Revision" | translate(locale=LANG) }}</th>
+                <th>{{ "When" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for rev in snippet_revisions %}
+            <tr>
+                <td><strong>#{{ rev.sequence }}</strong></td>
+                <td>
+                    {% if rev.captured_at %}
+                        <time data-utc="{{ rev.captured_at | date(format='%+') }}">{{ rev.captured_at | naturaltime }}</time>
+                    {% else %}
+                        <span class="rcms-hint">—</span>
+                    {% endif %}
+                </td>
+                <td class="rcms-actions">
+                    <form method="post" action="{{ url(name='rcms-admin:library:revert', id=snippet.id, seq=rev.sequence) }}"
+                          data-confirm="{{ "Revert this snippet to revision #" | translate(locale=LANG) }}{{ rev.sequence }}{{ "? Current content is captured as a fresh revision so nothing is lost." | translate(locale=LANG) }}"
+                          data-confirm-style="danger">
+                        {{ csrf_token | csrf_input | safe }}
+                        <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+                            <span class="material-symbols-rounded sm">undo</span> {{ "Revert" | translate(locale=LANG) }}
+                        </button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</details>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,66 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ taxonomy_name }} — CMS Admin{% endblock %}
+{% block heading %}{{ taxonomy_name }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:taxonomies:list') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "Taxonomies" | translate(locale=LANG) }}
+    </a>
+    <a href="{{ url(name='rcms-admin:taxonomies:categories:new', slug=taxonomy_slug) }}" class="rcms-btn rcms-btn-small">
+        {{ "+ Add category" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="rcms-breadcrumbs">
+    <a href="{{ url(name='rcms-admin:taxonomies:list') }}">{{ "Taxonomies" | translate(locale=LANG) }}</a>
+    <span class="rcms-sep">›</span>
+    <span>{{ taxonomy_name }}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+{% if categories | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "No categories yet." | translate(locale=LANG) }}</p>
+        <a href="{{ url(name='rcms-admin:taxonomies:categories:new', slug=taxonomy_slug) }}" class="rcms-btn">{{ "Add the first category" | translate(locale=LANG) }}</a>
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Name" | translate(locale=LANG) }}</th>
+                <th>{{ "Slug" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for c in categories %}
+            <tr>
+                <td>
+                    {% for _ in range(end=c.depth - 1) %}<span class="rcms-text-muted-2">↳&nbsp;</span>{% endfor %}
+                    {% if c.thumbnail_id %}
+                        <img src="{{ rcms_image_url(media_id=c.thumbnail_id, filter='fill-28x28') }}" alt="" width="28" height="28" class="rcms-rounded rcms-align-middle rcms-mr-1" style="object-fit: cover;">
+                    {% elif c.featured_image_id %}
+                        <img src="{{ rcms_image_url(media_id=c.featured_image_id, filter='fill-28x28') }}" alt="" width="28" height="28" class="rcms-rounded rcms-align-middle rcms-mr-1" style="object-fit: cover;">
+                    {% endif %}
+                    <strong>{{ c.name }}</strong>
+                    {% if c.description %}<div class="rcms-text-xs rcms-text-muted">{{ c.description }}</div>{% endif %}
+                </td>
+                <td><code>{{ c.slug }}</code></td>
+                <td class="rcms-actions">
+                    <a href="{{ url(name='rcms-admin:taxonomies:categories:edit', slug=taxonomy_slug, id=c.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit" | translate(locale=LANG) }}</a>
+                    <form method="post" action="{{ url(name='rcms-admin:taxonomies:categories:delete', slug=taxonomy_slug, id=c.id) }}"
+                          data-confirm="{{ "Delete “{name}”?" | translate(locale=LANG, name=c.name) }}" data-confirm-style="danger">
+                        {{ csrf_token | csrf_input | safe }}
+                        <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">{{ "Delete" | translate(locale=LANG) }}</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+{% endblock %}

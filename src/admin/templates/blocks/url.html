@@ -1,0 +1,5 @@
+{%- set label = value.label | default(value="") | trim -%}
+{#- safe_href is the URL with a script scheme dropped (#724). -#}
+{%- if safe_href -%}
+<a class="rcms-block-url" href="{{ safe_href }}">{{ label | default(value=safe_href) }}</a>
+{%- endif -%}

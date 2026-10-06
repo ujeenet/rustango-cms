@@ -1,0 +1,17 @@
+{#- PageChooserBlock — public render. The framework's
+    `prerender_extension_streams_async` enrichment pass resolves
+    `value.page_id` against `cms_page` and stamps `_url` / `_title` /
+    `_slug` onto the value. Host templates can override this file to
+    customise markup; the default emits a usable anchor without any
+    extra Tera wiring on the host side. -#}
+{%- set pid = value.page_id | default(value="") -%}
+{%- if pid -%}
+    {%- set href = value._url | default(value="#") -%}
+    {%- set label_fallback = value._title | default(value="") -%}
+    {%- set label = value.label | default(value="") -%}
+    {%- if not label or label == "" -%}{%- set label = label_fallback -%}{%- endif -%}
+    {%- if not label or label == "" -%}{%- set label = "Page #" ~ pid -%}{%- endif -%}
+    <a class="rcms-block-page-chooser" href="{{ href }}" data-page-id="{{ pid }}">
+        {{- label -}}
+    </a>
+{%- endif -%}

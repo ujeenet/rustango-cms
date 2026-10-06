@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Content the editors write (blocks, rich text, markdown, the order form)
+   has no Tailwind classes of its own, so it gets a readable look here. */
+@layer components {
+  .prose-shop { @apply text-ink/85 leading-relaxed; }
+  .prose-shop h2 { @apply font-display text-3xl text-ink mt-10 mb-4; }
+  .prose-shop h3 { @apply font-display text-2xl text-ink mt-8 mb-3; }
+  .prose-shop p { @apply my-4; }
+  .prose-shop a { @apply text-clay-600 underline underline-offset-4 hover:text-clay-800; }
+  .prose-shop ul { @apply list-disc pl-6 my-4; }
+  .prose-shop ol { @apply list-decimal pl-6 my-4; }
+  .prose-shop blockquote { @apply border-l-4 border-clay-300 pl-5 italic font-display text-xl text-ink/80 my-8; }
+  .prose-shop img { @apply rounded-2xl my-6 w-full h-auto; }
+  .prose-shop figure { @apply m-0; }
+  /* A Library element (the Snippet block): shared text, shown as a box. */
+  .prose-shop .rcms-block-snippet-chooser { @apply my-8 rounded-2xl border border-clay-100 border-l-4 border-l-clay-400 bg-white px-6 py-5 text-base; }
+  .prose-shop .rcms-block-snippet-chooser > :first-child { @apply mt-0; }
+  .prose-shop .rcms-block-snippet-chooser > :last-child { @apply mb-0; }
+
+}
+
+/* The Form Builder's form (the order form), styled by the shop — the form's
+   built-in styles are turned off in its settings. These rules sit outside
+   `@layer`, because Tailwind drops component rules for classes it never sees
+   in the shop's templates, and the CMS writes this markup, not a template. */
+.rcms-form { @apply space-y-5; }
+.rcms-form [hidden], .rcms-form-thanks[hidden] { display: none !important; }
+.rcms-form-page { @apply m-0 border-0 p-0; }
+.rcms-form-section { @apply space-y-5; }
+.rcms-form-section-title { @apply font-display text-xl text-ink; }
+.rcms-form-row { @apply flex flex-wrap gap-5; }
+.rcms-form-col { @apply min-w-[14rem] space-y-5; }
+.rcms-form .rcms-field > label { @apply mb-1.5 block text-sm font-medium text-ink; }
+.rcms-form .rcms-req { @apply text-clay-600; }
+.rcms-form .rcms-help { @apply mt-1.5 block text-xs text-ink/70; }
+.rcms-form input[type=text], .rcms-form input[type=email], .rcms-form input[type=tel],
+.rcms-form input[type=url], .rcms-form input[type=number], .rcms-form input[type=date],
+.rcms-form select, .rcms-form textarea {
+  @apply w-full rounded-xl border border-clay-200 bg-white px-4 py-3 text-ink transition focus:border-clay-500 focus:outline-none focus:ring-2 focus:ring-clay-200;
+}
+.rcms-form input:user-invalid, .rcms-form textarea:user-invalid { @apply border-red-400; }
+.rcms-form-nav { @apply flex flex-wrap items-center gap-3 pt-2; }
+.rcms-form-nav button {
+  @apply inline-flex items-center justify-center rounded-full bg-clay-600 px-7 py-3 font-medium text-white transition hover:bg-clay-700;
+}
+.rcms-form-nav .rcms-form-prev { @apply bg-white text-ink ring-1 ring-clay-200 hover:bg-clay-50; }
+.rcms-form-thanks { @apply rounded-2xl bg-clay-50 px-5 py-4 text-ink ring-1 ring-clay-200; }
+.rcms-form-error { @apply rounded-2xl bg-red-50 px-5 py-4 text-red-800 ring-1 ring-red-200; }

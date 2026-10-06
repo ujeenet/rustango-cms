@@ -1,0 +1,41 @@
+{% extends "_base.html" %}
+{% block content %}
+<header class="mb-10 max-w-2xl">
+    <h1 class="font-display text-5xl text-ink">{{ page.title }}</h1>
+    {% if extension.intro %}<div class="prose-shop mt-4 text-lg">{{ extension.intro | markdown | safe }}</div>{% endif %}
+</header>
+{% set shown = children | visible %}
+{% if shown | length == 0 %}
+<p class="rounded-3xl bg-white p-10 text-center text-ink/70 ring-1 ring-clay-100">No products yet. Add a product under this page in the admin.</p>
+{% else %}
+{#- The categories in the order they first appear, one entry per slug.
+    Anchors use the slug, so menu links like /shop#cat-tea-bowls work in
+    every language; the heading shows the (translated) name. -#}
+{% set_global cats = [] %}{% set_global slugs = [] %}
+{% for child in shown %}{% for c in child.categories %}{% if c.slug not in slugs %}{% set_global slugs = slugs | concat(with=c.slug) %}{% set_global cats = cats | concat(with=c) %}{% endif %}{% endfor %}{% endfor %}
+{% if cats | length > 0 %}
+<div class="mb-8 flex flex-wrap gap-2" aria-label="Categories">
+    {% for cat in cats %}<a href="#cat-{{ cat.slug }}" class="rounded-full border border-clay-200 bg-white px-4 py-1.5 text-sm text-ink/75 transition hover:border-[color:var(--accent)] hover:text-[color:var(--accent)]">{{ cat.name }}</a>{% endfor %}
+</div>
+{% endif %}
+{#- One section per category, then the products with no category. Each
+    section is a menu-linkable anchor. -#}
+{% for cat in cats %}
+<section id="cat-{{ cat.slug }}" class="scroll-mt-28 pt-4">
+    <h2 class="mb-6 font-display text-3xl text-ink">{{ cat.name }}</h2>
+    <div class="mb-14 grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+        {% for child in shown %}{% if child.categories | length > 0 and child.categories[0].slug == cat.slug %}
+            {% include "_product_card.html" %}
+        {% endif %}{% endfor %}
+    </div>
+</section>
+{% endfor %}
+{% set_global loose = false %}
+{% for child in shown %}{% if child.categories | length == 0 %}{% set_global loose = true %}{% endif %}{% endfor %}
+{% if loose %}
+<div class="grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+    {% for child in shown %}{% if child.categories | length == 0 %}{% include "_product_card.html" %}{% endif %}{% endfor %}
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

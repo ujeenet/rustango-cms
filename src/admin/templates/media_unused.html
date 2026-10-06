@@ -1,0 +1,75 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Unused media — CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Unused media" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:media:list') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "Media" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block description %}
+    {% set unused_count = unused | length %}
+        {{ "Reverse index over every page's extension JSON — rows below are <strong>not referenced</strong> by any page (no <code>media_id</code>, <code>hero_media_id</code>, or stream-block image references)." | translate(locale=LANG) | safe }}
+        {{ "Tenant total: <strong>{total}</strong> media · <strong>{used}</strong> in use · <strong>{unused}</strong> unused." | translate(locale=LANG, total=total_media, used=used_count, unused=unused_count) | safe }}
+{% endblock %}
+
+{% block body %}
+
+    {% if unused | length == 0 %}
+        <div class="rcms-empty">
+            <p>{{ "Every uploaded media row is referenced by at least one page. Nothing to clean up." | translate(locale=LANG) }}</p>
+        </div>
+    {% else %}
+        <form method="post" action="{{ url(name='rcms-admin:media:unused:delete') }}" class="rcms-table-panel"
+              data-confirm="{{ "Delete every selected media row? Files cannot be recovered." | translate(locale=LANG) }}" data-confirm-style="danger">
+            {{ csrf_token | csrf_input | safe }}
+            <div class="rcms-table-toolbar">
+                <label class="rcms-text-xs rcms-text-muted rcms-inline-flex rcms-items-center rcms-gap-2">
+                    <input type="checkbox" id="select-all" data-select-all="#unused-media-table input[name=id]">
+                    {{ "Select all" | translate(locale=LANG) }}
+                </label>
+                <span class="rcms-toolbar-spacer"></span>
+                <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small" id="bulk-delete-btn">
+                    <span class="material-symbols-rounded sm">delete</span>
+                    {{ "Delete selected" | translate(locale=LANG) }}
+                </button>
+            </div>
+            <div class="rcms-table-wrap">
+            <table class="rcms-data" id="unused-media-table">
+                <thead>
+                    <tr>
+                        <th class="rcms-w-32"></th>
+                        <th>{{ "Title" | translate(locale=LANG) }}</th>
+                        <th>{{ "Filename" | translate(locale=LANG) }}</th>
+                        <th>{{ "Kind" | translate(locale=LANG) }}</th>
+                        <th>{{ "Size" | translate(locale=LANG) }}</th>
+                        <th>{{ "Uploaded" | translate(locale=LANG) }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in unused %}
+                        <tr>
+                            <td><input type="checkbox" name="id" value="{{ m.id }}"></td>
+                            <td>{{ m.title }}</td>
+                            <td><code class="rcms-text-xs">{{ m.filename }}</code></td>
+                            <td><span class="rcms-tag">{{ m.kind }}</span></td>
+                            <td title="{{ m.size }} bytes">{{ m.size | naturalsize }}</td>
+                            <td class="rcms-text-muted rcms-text-xs">
+                                {% if m.uploaded_at %}
+                                    {{ m.uploaded_at | naturaltime }}
+                                    <br>
+                                    <time class="rcms-hint rcms-text-2xs" data-utc="{{ m.uploaded_at | date(format='%+') }}">{{ m.uploaded_at }}</time>
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </form>
+    {% endif %}
+
+{% endblock %}

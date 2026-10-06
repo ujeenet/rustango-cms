@@ -1,0 +1,74 @@
+{# Default template for the built-in Error page type (404/500/…).
+
+   Self-contained on purpose — it can't `{% extends %}` a host base
+   template it doesn't know about. It still renders through the full
+   public pipeline, so the tenant theme (`theme_css`), the published
+   page tree (`auto_menu`) and the pre-rendered block stream
+   (`_stream_html`) are all available; the header/footer nav is built
+   from the same `auto_menu` data the host's own chrome uses.
+
+   Hosts get their real navbar/footer by shipping their own
+   `error_page.html` (e.g. `{% extends "_base.html" %}`) — the CMS
+   only registers this bundled copy when the host's Tera instance
+   doesn't already have one (see `register_templates`). #}
+<!doctype html>
+<html lang="{{ LANG | default(value='en') }}" dir="{{ DIR | default(value='ltr') }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>{{ extension.status_code | default(value='') }} — {{ page.title }}</title>
+    {% if theme_font_url %}<link rel="stylesheet" href="{{ theme_font_url }}">{% endif %}
+    {% if theme_css %}<style>{{ theme_css | safe }}</style>{% endif %}
+    <style>
+        body { margin: 0; font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; color: #1a1a2e; background: #f6f7fb; display: flex; flex-direction: column; min-height: 100vh; }
+        .rcms-err-nav, .rcms-err-footer { padding: 14px 24px; display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+        .rcms-err-nav { border-bottom: 1px solid #e3e5f0; background: #fff; }
+        .rcms-err-footer { border-top: 1px solid #e3e5f0; background: #fff; margin-top: auto; font-size: 14px; }
+        .rcms-err-nav a, .rcms-err-footer a { color: inherit; text-decoration: none; font-weight: 500; }
+        .rcms-err-nav a:hover, .rcms-err-footer a:hover { text-decoration: underline; }
+        .rcms-err-nav .rcms-home { font-weight: 700; }
+        main { max-width: 640px; margin: 0 auto; padding: 56px 24px; text-align: center; }
+        .rcms-code { font-size: 64px; font-weight: 800; letter-spacing: -2px; color: #6366f1; margin: 0; }
+        h1 { font-size: 28px; margin: 8px 0 16px; }
+        .stream { text-align: left; margin: 24px 0; }
+        .rcms-actions { margin-top: 32px; }
+        .rcms-actions a { color: #6366f1; text-decoration: none; font-weight: 600; }
+        .rcms-actions a:hover { text-decoration: underline; }
+        .rcms-actions a + a { margin-left: 24px; }
+        @media (prefers-color-scheme: dark) {
+            body { color: #e8e9f3; background: #12141f; }
+            .rcms-err-nav, .rcms-err-footer { background: #181b2b; border-color: #262a40; }
+        }
+    </style>
+</head>
+<body>
+{% set pfx = url_prefix | default(value='') %}
+{% set roots = auto_menu(parent_id=0, depth=2) %}
+<nav class="rcms-err-nav">
+    {% for root in roots %}
+        <a class="rcms-home" href="{{ pfx }}{{ root.url_path }}">{{ root.title }}</a>
+        {% for item in root.children %}
+            <a href="{{ pfx }}{{ item.url_path }}">{{ item.title }}</a>
+        {% endfor %}
+    {% endfor %}
+</nav>
+<main>
+    <p class="rcms-code">{{ extension.status_code | default(value='') }}</p>
+    <h1>{{ page.title }}</h1>
+    <div class="stream">{{ _stream_html['body'] | default(value='') | safe }}</div>
+    <p class="rcms-actions">
+        <a href="javascript:history.back()">&larr; {{ "Go back" | translate(locale=LANG) }}</a>
+        <a href="{{ pfx }}/">{{ "Go to homepage" | translate(locale=LANG) }}</a>
+    </p>
+</main>
+<footer class="rcms-err-footer">
+    {% for root in roots %}
+        <a href="{{ pfx }}{{ root.url_path }}">{{ root.title }}</a>
+        {% for item in root.children %}
+            <a href="{{ pfx }}{{ item.url_path }}">{{ item.title }}</a>
+        {% endfor %}
+    {% endfor %}
+</footer>
+</body>
+</html>

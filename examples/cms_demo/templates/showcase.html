@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ page.seo_title | default(value=page.title) }}</title>
+  <meta name="description" content="{{ page.seo_description }}">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0,0">
+  <style>
+    :root{
+      --bg:#0b1020; --panel:#131a30; --panel2:#0f152a; --ink:#e8ecf7; --muted:#9aa6c4;
+      --accent:#6c7bff; --accent2:#41d1c7; --line:rgba(255,255,255,.09);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      color:var(--ink);background:radial-gradient(1200px 600px at 70% -10%,#1b2550 0%,var(--bg) 55%);min-height:100vh}
+    .wrap{max-width:1040px;margin:0 auto;padding:0 24px}
+    .material-symbols-rounded{font-family:'Material Symbols Rounded';font-weight:400;font-style:normal;line-height:1;letter-spacing:normal;text-transform:none;display:inline-block}
+    /* hero */
+    header.hero{padding:88px 0 40px;text-align:center}
+    .eyebrow{display:inline-flex;align-items:center;gap:10px;color:var(--accent2);font-weight:700;
+      letter-spacing:.14em;font-size:12px;text-transform:uppercase}
+    .badge{background:rgba(108,123,255,.18);color:#c7cdff;border:1px solid var(--line);
+      padding:2px 9px;border-radius:999px;letter-spacing:.02em}
+    h1{font-size:clamp(34px,6vw,60px);line-height:1.05;margin:18px auto 10px;max-width:16ch;
+      background:linear-gradient(180deg,#fff,#b9c2e6);-webkit-background-clip:text;background-clip:text;color:transparent}
+    .intro{color:var(--muted);font-size:19px;max-width:60ch;margin:0 auto}
+    /* hero band */
+    .band{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:28px 30px;margin:36px 0}
+    .band h2{margin:.1em 0 .3em;font-size:24px}
+    .band p{color:var(--muted);margin:.2em 0}
+    .note{margin-top:14px !important;display:inline-flex;gap:8px;align-items:center;color:#ffd9a0;
+      background:rgba(255,180,80,.1);border:1px solid rgba(255,180,80,.25);padding:8px 12px;border-radius:10px;font-size:14px}
+    /* features grid */
+    .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin:28px 0}
+    .feature{background:var(--panel2);border:1px solid var(--line);border-radius:16px;padding:22px}
+    .feature .ic{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b1020;margin-bottom:12px}
+    .feature .ic .material-symbols-rounded{font-size:26px}
+    .feature h3{margin:0 0 6px;font-size:17px}
+    .feature p{margin:0;color:var(--muted);font-size:14.5px}
+    /* CTA */
+    .cta{background:linear-gradient(120deg,rgba(108,123,255,.16),rgba(65,209,199,.14));
+      border:1px solid var(--line);border-radius:18px;padding:34px;text-align:center;margin:28px 0}
+    .cta h2{margin:0 0 8px;font-size:26px}
+    .cta p{color:var(--muted);margin:0 auto 18px;max-width:52ch}
+    .btn{display:inline-block;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#0b1020;
+      font-weight:700;text-decoration:none;padding:12px 22px;border-radius:12px}
+    /* sections */
+    .testimonial{border-left:3px solid var(--accent2);background:var(--panel2);margin:24px 0;
+      padding:22px 26px;border-radius:0 14px 14px 0;font-size:20px}
+    .testimonial cite{display:block;margin-top:10px;color:var(--muted);font-size:15px;font-style:normal}
+    .gallery{color:var(--muted);text-align:center;border:1px dashed var(--line);border-radius:14px;
+      padding:18px;margin:24px 0;font-size:14px}
+    .sec-label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700;margin:40px 0 4px}
+    footer{color:var(--muted);text-align:center;padding:48px 0 60px;font-size:13px}
+    footer a{color:var(--accent2)}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  {# nav bar — `auto_menu()` returns published pages flagged Show-in-menus,
+     of ANY type (code-defined or UI-created); links use each page's url_path. #}
+  {% set nav = auto_menu() %}
+  {% if nav %}
+  <nav style="display:flex;gap:18px;justify-content:center;padding:22px 0 0;font-size:14px">
+    {% for it in nav %}
+      <a href="{{ it.url_path }}" style="color:var(--muted);text-decoration:none">{{ it.title }}</a>
+    {% endfor %}
+  </nav>
+  {% endif %}
+
+
+  {# ---- fixed fields + a row (eyebrow + badge) ---- #}
+  <header class="hero">
+    <div class="eyebrow">{{ builder.eyebrow }}{% if builder.badge %}<span class="badge">{{ builder.badge }}</span>{% endif %}</div>
+    <h1>{{ builder.headline }}</h1>
+    {% if builder.intro %}<p class="intro">{{ builder.intro }}</p>{% endif %}
+  </header>
+
+  {# ---- group (hero) + conditional field (cta_note, shown only when show_cta) ---- #}
+  {% if builder.hero %}
+  <div class="band">
+    <h2>{{ builder.hero.heading }}</h2>
+    <p>{{ builder.hero.description }}</p>
+    {% if builder.cta_note %}<p class="note"><span class="material-symbols-rounded">bolt</span>{{ builder.cta_note }}</p>{% endif %}
+  </div>
+  {% endif %}
+
+  {# ---- repeater (features) ---- #}
+  {% if builder.features %}
+  <section class="features">
+    {% for f in builder.features %}
+    <div class="feature">
+      <div class="ic"><span class="material-symbols-rounded">{{ f.value.icon }}</span></div>
+      <h3>{{ f.value.title }}</h3>
+      <p>{{ f.value.description }}</p>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {# ---- reusable component (cta_banner) ---- #}
+  {% if builder.cta_banner %}
+  <section class="cta">
+    <h2>{{ builder.cta_banner.heading }}</h2>
+    <p>{{ builder.cta_banner.body }}</p>
+    {% if builder.cta_banner.button_url %}<a class="btn" href="{{ builder.cta_banner.button_url }}">{{ builder.cta_banner.button_label }}</a>{% endif %}
+  </section>
+  {% endif %}
+
+  {# ---- flexible zone (sections): editor composed these blocks in any order ---- #}
+  {% if builder.sections %}
+  <div class="sec-label">Flexible zone · editor-composed</div>
+  {% for s in builder.sections %}
+    {% if s.type == "testimonial" %}
+      <blockquote class="testimonial">“{{ s.value.quote }}”<cite>— {{ s.value.author }}</cite></blockquote>
+    {% elif s.type == "c_cta_banner" %}
+      <section class="cta">
+        <h2>{{ s.value.heading }}</h2>
+        <p>{{ s.value.body }}</p>
+        {% if s.value.button_url %}<a class="btn" href="{{ s.value.button_url }}">{{ s.value.button_label }}</a>{% endif %}
+      </section>
+    {% elif s.type == "gallery" %}
+      <div class="gallery">🖼 {{ s.value.caption }}</div>
+    {% endif %}
+  {% endfor %}
+  {% endif %}
+
+  <footer>Built with the <a href="https://github.com/ujeenet/rustango-cms">rustango-cms</a> page-builder — fields, rows, groups, repeaters, a component &amp; a flexible zone, all on one page type.</footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,24 @@
+[package]
+name = "rustango-cms-macros"
+version = "0.1.0"
+description = "Proc-macro derive crate for rustango-cms (#[derive(PageType)], #[field(...)])."
+readme = "README.md"
+keywords = ["cms", "rustango", "derive", "proc-macro"]
+categories = ["web-programming", "development-tools::procedural-macro-helpers"]
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2", features = ["full", "extra-traits"] }
+quote = "1"
+proc-macro2 = "1"
+
+[lints]
+workspace = true

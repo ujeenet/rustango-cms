@@ -1,0 +1,62 @@
+{
+  "Archived {count} page(s).": {
+    "other": "{count} 件のページをアーカイブしました。"
+  },
+  "Can't delete “{title}” — it has {count} child page(s). Delete or move them first.": {
+    "other": "「{title}」を削除できません — {count} 件の子ページがあります。先にそれらを削除または移動してください。"
+  },
+  "Can't delete “{title}” — {count} page(s) have history under it. Toggle Active off instead.": {
+    "other": "「{title}」を削除できません — 配下に {count} 件のページの履歴があります。代わりにアクティブをオフに切り替えてください。"
+  },
+  "Deleted {count} page(s).": {
+    "other": "{count} 件のページを削除しました。"
+  },
+  "Deleted {count} unused media item(s).": {
+    "other": "未使用のメディアアイテムを {count} 件削除しました。"
+  },
+  "Deleted “{title}”. Promoted {count} alias(es) to standalone page(s) with the source's last content.": {
+    "other": "「{title}」を削除しました。{count} 件のエイリアスを、ソースの最後のコンテンツを持つ独立したページに昇格しました。"
+  },
+  "Moved {count} item(s) {dest}.": {
+    "other": "{count} 件のアイテムを{dest}移動しました。"
+  },
+  "Moved {count} page(s) under “{parent}”.": {
+    "other": "{count} 件のページを「{parent}」の下に移動しました。"
+  },
+  "Published {count} page(s) ({already} already in the target state).": {
+    "other": "{count} 件のページを公開しました（{already} 件は既に対象の状態でした）。"
+  },
+  "Saved {count} pinned result(s).": {
+    "other": "{count} 件のピン留め結果を保存しました。"
+  },
+  "Saved “{title}”. Auto-created {count} redirect(s) from the old URL(s).": {
+    "other": "「{title}」を保存しました。古い URL から {count} 件のリダイレクトを自動作成しました。"
+  },
+  "Seeded “{name}” with {count} item(s) from pages marked Show in menus.": {
+    "other": "「メニューに表示」が設定されたページから {count} 件の項目で「{name}」を生成しました。"
+  },
+  "Unarchived {count} page(s).": {
+    "other": "{count} 件のページをアーカイブ解除しました。"
+  },
+  "Unpublished {count} page(s) ({already} already in the target state).": {
+    "other": "{count} 件のページを非公開にしました（{already} 件は既に対象の状態でした）。"
+  },
+  "{action}: touched {count} row(s) in `{type_name}`.": {
+    "other": "{action}: `{type_name}` の {count} 行に変更を加えました。"
+  },
+  "{count} extra permission(s) preserved on save": {
+    "other": "{count} 件の追加権限が保存時に保持されました"
+  },
+  "{count} field(s)": {
+    "other": "{count} 件のフィールド"
+  },
+  "{count} page(s)": {
+    "other": "{count} 件のページ"
+  },
+  "{count} revision(s)": {
+    "other": "{count} 件のリビジョン"
+  },
+  "{count} row(s).": {
+    "other": "{count} 行"
+  }
+}

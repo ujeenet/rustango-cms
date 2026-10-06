@@ -1,0 +1,18 @@
+{#- A product card for the shop listing. `child` is the product page;
+    `child.builder` holds the fields made in the admin, and
+    `child.builder_labels` the choice labels in the visitor's language. -#}
+{% set d = child.builder | default(value=false) %}
+<a href="{{ child | page_href }}" class="group block">
+    <div class="overflow-hidden rounded-3xl bg-clay-100">
+        {% if d and d.photo %}
+        <img src="{{ rcms_image_url(media_id=d.photo, filter="fill-800x800") }}" alt="{{ child.title }}" loading="lazy" class="aspect-square w-full object-cover transition duration-500 group-hover:scale-105">
+        {% else %}<div class="aspect-square w-full"></div>{% endif %}
+    </div>
+    <div class="mt-4 flex items-start justify-between gap-4">
+        <div>
+            <h3 class="font-display text-xl text-ink">{{ child.title }}</h3>
+            {% if d and d.glaze %}<p class="mt-1 text-sm text-ink/70">{{ child.builder_labels.glaze | default(value=d.glaze) }}</p>{% endif %}
+        </div>
+        {% if d and d.price %}<p class="shrink-0 font-medium text-[color:var(--accent)]">€{% if d.price | round == d.price %}{{ d.price | int }}{% else %}{{ d.price | round(precision=2) }}{% endif %}</p>{% endif %}
+    </div>
+</a>

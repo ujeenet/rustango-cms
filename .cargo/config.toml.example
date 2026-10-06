@@ -1,0 +1,8 @@
+# Develop rustango-cms against a local rustango checkout instead of the
+# crates.io release. Copy this file to .cargo/config.toml (gitignored);
+# the checkout is expected beside this repo:
+#   projects/rustango        <- the framework
+#   projects/rustango-cms    <- this repo
+[patch.crates-io]
+rustango        = { path = "../rustango/crates/rustango" }
+rustango-macros = { path = "../rustango/crates/rustango-macros" }

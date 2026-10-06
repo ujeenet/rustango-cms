@@ -1,0 +1,133 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{% if mode == "new" %}{{ "New user" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} {{ user.username }}{% endif %} — CMS Admin{% endblock %}
+{% block heading %}{% if mode == "new" %}{{ "New user" | translate(locale=LANG) }}{% else %}{{ "Edit user" | translate(locale=LANG) }}{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:users') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "All users" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block content %}
+<form method="post" class="rcms-card rcms-page-form-section" data-primary-save
+      action="{% if mode == 'new' %}{{ url(name='rcms-admin:users:new') }}{% else %}{{ url(name='rcms-admin:users:edit', id=user.id) }}{% endif %}">
+    {{ csrf_token | csrf_input | safe }}
+
+    <div class="rcms-field">
+        <label>{{ "Username" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+        <input type="text" name="username" value="{{ user.username }}" required maxlength="64" autocomplete="off">
+    </div>
+
+    <div class="rcms-field">
+        <label>{{ "Email" | translate(locale=LANG) }}</label>
+        <input type="email" name="email" value="{{ user.email | default(value='') }}" maxlength="254" autocomplete="off">
+        <div class="rcms-hint">{{ "Used to sign in, to reset the password and for notifications." | translate(locale=LANG) }}</div>
+    </div>
+
+    <div class="rcms-field">
+        <label>{% if mode == "new" %}{{ "Initial password" | translate(locale=LANG) }} <span class="rcms-req">*</span>{% else %}{{ "Reset password" | translate(locale=LANG) }}{% endif %}</label>
+        <input type="password" name="password" autocomplete="new-password"
+               {% if mode == 'new' %}required minlength="8"{% endif %}>
+        <div class="rcms-hint">
+            {% if mode == "new" %}
+                {{ "Give it to the user yourself. The CMS never shows or logs it." | translate(locale=LANG) }}
+            {% else %}
+                {{ "Leave empty to keep the current password. A new password here replaces it right away; give it to the user yourself." | translate(locale=LANG) }}
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="rcms-field-row">
+        <div class="rcms-field rcms-checkbox-field">
+            <input type="checkbox" id="active" name="active" {% if user.active %}checked{% endif %}>
+            <label for="active">{{ "Active" | translate(locale=LANG) }}</label>
+        </div>
+        <div class="rcms-field rcms-checkbox-field">
+            <input type="checkbox" id="is_superuser" name="is_superuser" {% if user.is_superuser %}checked{% endif %}>
+            <label for="is_superuser">{{ "Tenant superuser" | translate(locale=LANG) }} <span class="rcms-hint">{{ "(can do everything)" | translate(locale=LANG) }}</span></label>
+        </div>
+    </div>
+
+    {% if mode == "edit" %}
+        <div class="rcms-field">
+            <label>{{ "Timezone" | translate(locale=LANG) }}</label>
+            {# Display labels drop the IANA underscores ("America/New
+               York") while the `value` attribute keeps the canonical
+               IANA form ("America/New_York") that `Intl` + chrono-tz
+               accept. The current stored value renders as a
+               separate <option selected> at the top when it's not in
+               the suggested set, so unusual zones don't get lost. #}
+            <select name="timezone">
+                <option value="">{{ "— browser default —" | translate(locale=LANG) }}</option>
+                {% set current = user.timezone | default(value='') %}
+                {% set common = ["UTC", "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles", "America/Halifax", "America/Toronto", "America/Vancouver", "Europe/London", "Europe/Paris", "Europe/Berlin", "Europe/Madrid", "Europe/Stockholm", "Asia/Tokyo", "Asia/Shanghai", "Asia/Hong_Kong", "Asia/Singapore", "Asia/Kolkata", "Asia/Dubai", "Australia/Sydney", "Australia/Melbourne", "Pacific/Auckland"] %}
+                {% if current and current not in common %}
+                    <option value="{{ current }}" selected>{{ current | replace(from='_', to=' ') }}</option>
+                {% endif %}
+                {% for tz in common %}
+                    <option value="{{ tz }}"{% if tz == current %} selected{% endif %}>
+                        {{ tz | replace(from='_', to=' ') }}
+                    </option>
+                {% endfor %}
+            </select>
+            <div class="rcms-hint">{{ "Dates and times in the admin use this time zone. Empty: the browser's time zone." | translate(locale=LANG) }}</div>
+        </div>
+    {% endif %}
+
+    {% if role_choices and role_choices | length > 0 %}
+        <div class="rcms-field">
+            <label>{{ "Roles" | translate(locale=LANG) }}</label>
+            <div class="rcms-hint rcms-mb-2">
+                {{ "Tick the roles this person has. Unticking a role takes it away when you save." | translate(locale=LANG) }}
+            </div>
+            <div class="rcms-grid rcms-gap-2 rcms-autogrid-220">
+                {% for r in role_choices %}
+                    <label class="rcms-choice-card rcms-flex rcms-items-start rcms-gap-2 rcms-border rcms-rounded rcms-cursor-pointer" style="padding: 8px 12px;">
+                        <input type="checkbox" name="role_id" value="{{ r.id }}" {% if r.assigned %}checked{% endif %} style="margin-top: 2px;">
+                        <span>
+                            <strong class="rcms-text-sm">{{ r.name }}</strong>
+                            {% if r.description %}
+                                <br><span class="rcms-hint rcms-text-2xs">{{ r.description }}</span>
+                            {% endif %}
+                        </span>
+                    </label>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
+
+    {% if mode == "edit" %}
+        <p class="rcms-hint rcms-mt-2 rcms-text-xs">
+            {{ "Created" | translate(locale=LANG) }} {{ user.created_at | naturaltime }}
+            {% if user.password_changed_at %}· {{ "last password change" | translate(locale=LANG) }} {{ user.password_changed_at | naturaltime }}{% endif %}
+        </p>
+    {% endif %}
+
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:users') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        {% if mode == "edit" %}
+            {#- Submits the separate form below: a <form> can't sit inside
+                this one (the browser would drop it and save instead). -#}
+            <button type="submit" form="user-deactivate-form" class="rcms-btn rcms-btn-danger"
+                    data-confirm="{{ "Deactivate" | translate(locale=LANG) }} {{ user.username }}? {{ "They lose admin access immediately but the row is preserved." | translate(locale=LANG) }}"
+                    data-confirm-style="danger">{{ "Deactivate" | translate(locale=LANG) }}</button>
+        {% endif %}
+        <button type="submit" class="rcms-btn">{% if mode == 'new' %}{{ "Create user" | translate(locale=LANG) }}{% else %}{{ "Save" | translate(locale=LANG) }}{% endif %}</button>
+    </div>
+</form>
+{% if mode == "edit" %}
+<form method="post" id="user-deactivate-form" action="{{ url(name='rcms-admin:users:deactivate', id=user.id) }}" hidden>
+    {{ csrf_token | csrf_input | safe }}
+</form>
+{% endif %}
+
+{# #587 — MCP keys managed for this user (an admin can register a
+   dedicated agent user — e.g. "claude" — and mint its keys here). #}
+{% if mode == "edit" %}
+    {% set mcp_create_url = url(name='rcms-admin:users:mcp-key-create', id=user.id) %}
+    {% set mcp_revoke_base = "/cms-admin/users/" ~ user.id ~ "/mcp-keys" %}
+    {# Match the user form card's own width (.rcms-page-form-section = 760). #}
+    {% set mcp_card_class = "rcms-page-form-section" %}
+    {% include "rcms_admin/_mcp_keys_card.html" %}
+{% endif %}
+{% endblock %}

@@ -1,0 +1,102 @@
+{
+  "Archived {count} page(s).": {
+    "one": "Zarchiwizowano {count} stronę.",
+    "few": "Zarchiwizowano {count} strony.",
+    "many": "Zarchiwizowano {count} stron."
+  },
+  "Can't delete “{title}” — it has {count} child page(s). Delete or move them first.": {
+    "one": "Nie można usunąć „{title}” — ma {count} stronę podrzędną. Najpierw usuń ją lub przenieś.",
+    "few": "Nie można usunąć „{title}” — ma {count} strony podrzędne. Najpierw usuń je lub przenieś.",
+    "many": "Nie można usunąć „{title}” — ma {count} stron podrzędnych. Najpierw usuń je lub przenieś."
+  },
+  "Can't delete “{title}” — {count} page(s) have history under it. Toggle Active off instead.": {
+    "one": "Nie można usunąć „{title}” — {count} strona ma historię pod nią. Zamiast tego wyłącz opcję Aktywne.",
+    "few": "Nie można usunąć „{title}” — {count} strony mają historię pod nią. Zamiast tego wyłącz opcję Aktywne.",
+    "many": "Nie można usunąć „{title}” — {count} stron ma historię pod nią. Zamiast tego wyłącz opcję Aktywne."
+  },
+  "Deleted {count} page(s).": {
+    "few": "Usunięto {count} strony.",
+    "many": "Usunięto {count} stron.",
+    "one": "Usunięto {count} stronę."
+  },
+  "Deleted {count} unused media item(s).": {
+    "few": "Usunięto {count} nieużywane elementy multimedialne.",
+    "many": "Usunięto {count} nieużywanych elementów multimedialnych.",
+    "one": "Usunięto {count} nieużywany element multimedialny."
+  },
+  "Deleted “{title}”. Promoted {count} alias(es) to standalone page(s) with the source's last content.": {
+    "few": "Usunięto „{title}”. Awansowano {count} aliasy do samodzielnych stron z ostatnią treścią źródła.",
+    "many": "Usunięto „{title}”. Awansowano {count} aliasów do samodzielnych stron z ostatnią treścią źródła.",
+    "one": "Usunięto „{title}”. Awansowano {count} alias do samodzielnej strony z ostatnią treścią źródła."
+  },
+  "Moved {count} item(s) {dest}.": {
+    "few": "Przeniesiono {count} elementy {dest}.",
+    "many": "Przeniesiono {count} elementów {dest}.",
+    "one": "Przeniesiono {count} element {dest}."
+  },
+  "Moved {count} page(s) under “{parent}”.": {
+    "few": "Przeniesiono {count} strony pod „{parent}”.",
+    "many": "Przeniesiono {count} stron pod „{parent}”.",
+    "one": "Przeniesiono {count} stronę pod „{parent}”."
+  },
+  "Published {count} page(s) ({already} already in the target state).": {
+    "few": "Opublikowano {count} strony ({already} już w stanie docelowym).",
+    "many": "Opublikowano {count} stron ({already} już w stanie docelowym).",
+    "one": "Opublikowano {count} stronę ({already} już w stanie docelowym)."
+  },
+  "Saved {count} pinned result(s).": {
+    "few": "Zapisano {count} przypięte wyniki.",
+    "many": "Zapisano {count} przypiętych wyników.",
+    "one": "Zapisano {count} przypięty wynik."
+  },
+  "Saved “{title}”. Auto-created {count} redirect(s) from the old URL(s).": {
+    "one": "Zapisano „{title}”. Automatycznie utworzono {count} przekierowanie ze starego adresu URL.",
+    "few": "Zapisano „{title}”. Automatycznie utworzono {count} przekierowania ze starych adresów URL.",
+    "many": "Zapisano „{title}”. Automatycznie utworzono {count} przekierowań ze starych adresów URL."
+  },
+  "Seeded “{name}” with {count} item(s) from pages marked Show in menus.": {
+    "few": "Wypełniono „{name}” {count} elementami ze stron oznaczonych Pokaż w menu.",
+    "many": "Wypełniono „{name}” {count} elementami ze stron oznaczonych Pokaż w menu.",
+    "one": "Wypełniono „{name}” {count} elementem ze stron oznaczonych Pokaż w menu."
+  },
+  "Unarchived {count} page(s).": {
+    "one": "Przywrócono {count} stronę.",
+    "few": "Przywrócono {count} strony.",
+    "many": "Przywrócono {count} stron."
+  },
+  "Unpublished {count} page(s) ({already} already in the target state).": {
+    "few": "Cofnięto publikację {count} stron ({already} już w stanie docelowym).",
+    "many": "Cofnięto publikację {count} stron ({already} już w stanie docelowym).",
+    "one": "Cofnięto publikację {count} strony ({already} już w stanie docelowym)."
+  },
+  "{action}: touched {count} row(s) in `{type_name}`.": {
+    "one": "{action}: zmodyfikowano {count} wiersz w `{type_name}`.",
+    "few": "{action}: zmodyfikowano {count} wiersze w `{type_name}`.",
+    "many": "{action}: zmodyfikowano {count} wierszy w `{type_name}`."
+  },
+  "{count} extra permission(s) preserved on save": {
+    "one": "{count} dodatkowe uprawnienie zachowane przy zapisie",
+    "few": "{count} dodatkowe uprawnienia zachowane przy zapisie",
+    "many": "{count} dodatkowych uprawnień zachowanych przy zapisie"
+  },
+  "{count} field(s)": {
+    "few": "{count} pola",
+    "many": "{count} pól",
+    "one": "{count} pole"
+  },
+  "{count} page(s)": {
+    "few": "{count} strony",
+    "many": "{count} stron",
+    "one": "{count} strona"
+  },
+  "{count} revision(s)": {
+    "few": "{count} wersje",
+    "many": "{count} wersji",
+    "one": "{count} wersja"
+  },
+  "{count} row(s).": {
+    "one": "{count} wiersz.",
+    "few": "{count} wiersze.",
+    "many": "{count} wierszy."
+  }
+}

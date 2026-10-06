@@ -1,0 +1,12 @@
+{#- Default: comma-separated list inside a <ul>. Hosts override
+    per-site for chip / tag / pill output. `value.values` is
+    pre-parsed by MultipleChoiceBlock::render — already a real
+    array, not a JSON string. -#}
+{%- set picks = value.values | default(value=[]) -%}
+{%- if picks | length > 0 -%}
+<ul class="rcms-block-multiple-choice">
+    {%- for v in picks -%}
+        <li>{{ v }}</li>
+    {%- endfor -%}
+</ul>
+{%- endif -%}

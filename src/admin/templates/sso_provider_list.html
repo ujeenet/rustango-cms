@@ -1,0 +1,56 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "SSO Providers" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "SSO Providers" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:sso-providers:new') }}" class="rcms-btn">{{ "+ Add provider" | translate(locale=LANG) }}</a>
+{% endblock %}
+
+{% block description %}
+    {{ "Add an OpenID Connect or social provider (Google, GitHub, Microsoft, …). Each enabled provider becomes a “Sign in with …” button on the login page. You enter the client secret once; it is stored <strong>encrypted at rest</strong> and never shown again." | translate(locale=LANG) | safe }}
+{% endblock %}
+
+{% block body %}
+{% if items | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "No SSO providers yet." | translate(locale=LANG) }}</p>
+        <a href="{{ url(name='rcms-admin:sso-providers:new') }}" class="rcms-btn">{{ "Add the first provider" | translate(locale=LANG) }}</a>
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Label" | translate(locale=LANG) }}</th>
+                <th>{{ "Slug" | translate(locale=LANG) }}</th>
+                <th>{{ "Type" | translate(locale=LANG) }}</th>
+                <th>{{ "Enabled" | translate(locale=LANG) }}</th>
+                <th>{{ "Sort" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for p in items %}
+            <tr>
+                <td>{{ p.label }}</td>
+                <td><code>{{ p.slug }}</code></td>
+                <td>{{ p.kind }}</td>
+                <td>{% if p.enabled %}<span class="rcms-tag published">{{ "enabled" | translate(locale=LANG) }}</span>{% else %}<span class="rcms-text-muted">{{ "disabled" | translate(locale=LANG) }}</span>{% endif %}</td>
+                <td>{{ p.sort_order }}</td>
+                <td class="rcms-actions">
+                    <a href="{{ url(name='rcms-admin:sso-providers:edit', id=p.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit" | translate(locale=LANG) }}</a>
+                    <form method="post" action="{{ url(name='rcms-admin:sso-providers:delete', id=p.id) }}" data-confirm="{{ "Delete provider {label}? Its button disappears from the login page. Users linked via it can still sign in with a password." | translate(locale=LANG, label=p.label) }}" data-confirm-style="danger">
+                        {{ csrf_token | csrf_input | safe }}
+                        <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">{{ "Delete" | translate(locale=LANG) }}</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    <p class="rcms-text-sm rcms-text-muted-2" style="margin-top:1rem">
+        {{ "Register each provider’s callback URL as <code>{scheme}://{host}/login/sso/{slug}/callback</code>. SSO links to an existing user by verified email — set the user’s email to match." | translate(locale=LANG) | safe }}
+    </p>
+{% endif %}
+{% endblock %}

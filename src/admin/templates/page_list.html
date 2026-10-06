@@ -1,0 +1,615 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Pages — CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}
+    {% if parent_title %}
+        {{ "Pages in" | translate(locale=LANG) }} <span class="rcms-text-primary">{{ parent_title }}</span>
+    {% else %}
+        {{ "Pages" | translate(locale=LANG) }}
+    {% endif %}
+{% endblock %}
+
+{% block topbar_actions %}
+    {% if parent_id %}
+        <a href="{{ url(name='rcms-admin:pages:new') }}?parent={{ parent_id }}" class="rcms-btn">{{ "+ New child" | translate(locale=LANG) }}</a>
+    {% else %}
+        <a href="{{ url(name='rcms-admin:pages:new') }}" class="rcms-btn">{{ "+ New root page" | translate(locale=LANG) }}</a>
+    {% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Flat list — no indentation. Sibling reorder uses the bulk-move
+       bar at the top + the per-row "Move under…" kebab item. Native
+       drag-and-drop was removed in #276 — it shipped half-working
+       (no descendant filter, no type-aware drop, no before/after
+       affordance) and was a worse experience than just having no drag.
+       #266 — `overflow: visible` so the row kebab dropdown can escape
+       the container. Rounded corners come from the visual first
+       (`.rcms-list-toolbar`) + last (`.rcms-page-row:last-child`) child
+       rules below instead of the container's own clip. */
+    .rcms-page-list { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--md-sys-radius-lg); }
+    .rcms-page-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--md-sys-color-outline-variant);
+        transition: background 0.1s;
+    }
+    .rcms-page-row:last-child {
+        border-bottom: none;
+        border-bottom-left-radius: var(--md-sys-radius-lg);
+        border-bottom-right-radius: var(--md-sys-radius-lg);
+    }
+    .rcms-page-row:hover { background: var(--md-sys-color-surface-container-low); }
+    /* #276 — per-row Move kebab item is a small form (icon + label +
+       destination select + Go) instead of the usual menuitem button.
+       Match the kebab's row padding/typography so it sits inline with
+       the other actions, and let the select stretch to fill the row. */
+    .rcms-kebab-move-form { margin: 0; }
+    .rcms-kebab-move-label {
+        display: flex; align-items: center; gap: 8px;
+        padding: 6px 12px; cursor: default;
+        font-size: 13px; color: var(--fg);
+    }
+    .rcms-kebab-move-label .rcms-kebab-move-text { flex: 1; min-width: 0; }
+    /* #324 — chrome (border / radius / background / font / padding) comes
+       from the canonical `select:not(.rcms-field select)` in cms.css; keep only
+       the width cap so the dropdown fits the kebab panel. */
+    .rcms-kebab-move-label select { max-width: 180px; }
+    .rcms-kebab-move-label .rcms-btn { padding: 2px 10px; font-size: 12px; }
+    .rcms-page-row .rcms-title { flex: 1; font-weight: 500; color: var(--fg); text-decoration: none; min-width: 0; }
+    .rcms-page-row .rcms-title:hover { color: var(--md-sys-color-primary); }
+    .rcms-page-row .rcms-slug { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
+    .rcms-page-row .rcms-tag-cell { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+    .rcms-page-row .rcms-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+    .rcms-page-row form { display: inline; margin: 0; }
+    /* The list toolbar holds the "select all" checkbox + a header
+       label above the row stack. Was `.reorder-status` (drag-feedback
+       banner) — renamed in #276 with the drag affordance removed. */
+    .rcms-list-toolbar {
+        font-size: 12px; color: var(--muted); padding: 8px 14px;
+        background: var(--md-sys-color-surface-container-low);
+        border-bottom: 1px solid var(--md-sys-color-outline-variant);
+        /* #266 — pick up the container's top corners since
+           `.rcms-page-list` no longer clips. */
+        border-top-left-radius: var(--md-sys-radius-lg);
+        border-top-right-radius: var(--md-sys-radius-lg);
+    }
+    .rcms-page-list-breadcrumbs {
+        display: flex; align-items: center; gap: 8px;
+        font-size: 13px; color: var(--muted);
+        margin-bottom: 12px; flex-wrap: wrap;
+    }
+    .rcms-page-list-breadcrumbs a {
+        color: var(--md-sys-color-primary);
+        text-decoration: none;
+        font-weight: 500;
+    }
+    .rcms-page-list-breadcrumbs a:hover { text-decoration: underline; }
+    .rcms-page-list-breadcrumbs .rcms-sep { color: var(--muted-2); }
+
+    /* Search bar (#3). */
+    /* Row layout + search-capsule chrome are shared across listings
+       (`.rcms-list-filter-row` / `.rcms-search-input` in cms.css, #159). */
+    .rcms-page-list-search { margin-bottom: 12px; }
+
+    /* Per-row ancestor breadcrumb (search mode). */
+    .rcms-row-ancestors {
+        font-size: 11px;
+        color: var(--md-sys-color-on-surface-variant);
+        display: block;
+        margin-top: 2px;
+    }
+    .rcms-row-ancestors .rcms-sep { color: var(--muted-2); margin: 0 4px; }
+
+    /* Multi-select + bulk action bar (#65 / #277). */
+    .rcms-row-select { cursor: pointer; }
+    .rcms-bulk-bar {
+        position: sticky; top: 0; z-index: 5;
+        display: none;
+        /* #277 — `flex-wrap: wrap` so the bar reflows to a second row
+           on narrow viewports instead of clipping Delete off the right
+           edge. `row-gap` adds vertical breathing room when wrapping
+           kicks in; `gap` already covers the column case. */
+        align-items: center; flex-wrap: wrap;
+        gap: 12px; row-gap: 8px;
+        padding: 10px 14px;
+        margin-bottom: 12px;
+        background: var(--md-sys-color-primary-container);
+        color: var(--md-sys-color-on-primary-container);
+        border-radius: var(--md-sys-radius-lg);
+        box-shadow: var(--md-sys-elevation-2);
+    }
+    .rcms-bulk-bar.is-active { display: flex; }
+    .rcms-bulk-bar .rcms-count {
+        font-weight: 600;
+        padding: 2px 10px;
+        background: var(--md-sys-color-primary);
+        color: var(--md-sys-color-on-primary);
+        border-radius: var(--md-sys-radius-full);
+    }
+    /* #277 — when the bar wraps the spacer would consume a whole second
+       row by itself, so cap its grow at zero past the natural-fit width.
+       The spacer still pushes actions right on a single-row layout where
+       there's slack; once we wrap, it collapses out of the way. */
+    .rcms-bulk-bar .rcms-spacer { flex: 1 1 auto; min-width: 0; }
+    .rcms-bulk-bar form { display: inline; margin: 0; }
+    .rcms-bulk-bar select {
+        /* #324 — chrome comes from canonical `select:not(.rcms-field select)`;
+           keep only the layout caps (#277 — bound the width so the move-to
+           dropdown can't single-handedly push Delete past the edge). */
+        height: 36px;
+        max-width: 200px; min-width: 0;
+    }
+    /* #277 — at medium-narrow widths (≤ 1100 px effective container,
+       which the .rcms-page-list parent dictates) collapse button text
+       labels to icon-only so the bar stays on a single row through
+       1024 px viewports. Buttons keep their accessible label via
+       title + the visually-hidden span (icon still announces via
+       material-symbols' aria text). The Clear text button has no
+       icon so it stays as text. The select keeps its placeholder
+       so editors can see what it controls. */
+    @media (max-width: 1100px) {
+        .rcms-bulk-bar .rcms-btn-icon-only-mobile .rcms-bulk-label {
+            position: absolute;
+            width: 1px; height: 1px;
+            padding: 0; margin: -1px; overflow: hidden;
+            clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+        }
+    }
+
+    /* Mobile — the row is a single nowrap flex line (checkbox · title ·
+       slug · badges · actions) that collides on a narrow viewport (the
+       title block shrinks to 0 and everything overlaps). Below 640 px,
+       let the row wrap and reflow into three stacked lines:
+         1. checkbox + title   2. slug + badges   3. action buttons
+       Wrapped lines indent ~30 px so they align under the title, past
+       the checkbox column. */
+    @media (max-width: 640px) {
+        .rcms-page-row {
+            flex-wrap: wrap;
+            align-items: center;
+            row-gap: 8px;
+            padding: 12px 14px;
+        }
+        /* Line 1: title grows to fill the row after the checkbox, which
+           pushes the slug + badges onto their own line. */
+        .rcms-page-row > .rcms-flex-1 { flex: 1 1 auto; }
+        /* Line 2: type/status badges + child count, indented to align
+           under the title (past the checkbox column). The slug rides the
+           tail of line 1 next to the title. */
+        .rcms-page-row .rcms-slug { margin-left: 8px; }
+        .rcms-page-row .rcms-tag-cell { flex: 1 1 100%; margin-left: 30px; }
+        /* Line 3: action buttons, full width and left-aligned under the
+           title (overriding the desktop flex-end). */
+        .rcms-page-row .rcms-actions {
+            flex: 1 1 100%;
+            justify-content: flex-start;
+            margin-left: 30px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+    {# Search + filter bar — full-tree search across title / slug /
+       url_path (#3). When `q` (or any filter) is set, the page list
+       switches from "direct children of parent" to "matching results
+       anywhere in the tree". Each result row shows its ancestor
+       breadcrumb path so editors can locate deep matches in context. #}
+    <form method="get" action="{{ url(name='rcms-admin:pages:list') }}" class="rcms-page-list-search">
+        <div class="rcms-list-filter-row">
+            <label class="rcms-search-input">
+                <span class="material-symbols-rounded">search</span>
+                <input type="search" name="q" placeholder="{{ "Search pages by title, slug, or path…" | translate(locale=LANG) }}"
+                       value="{{ search_query | default(value='') }}" autocomplete="off">
+            </label>
+            <select name="type" aria-label="{{ "Filter by page type" | translate(locale=LANG) }}">
+                <option value="">{{ "All types" | translate(locale=LANG) }}</option>
+                {% for choice in type_choices %}
+                    <option value="{{ choice.0 }}"{% if type_filter == choice.0 %} selected{% endif %}>
+                        {{ choice.1 }}
+                    </option>
+                {% endfor %}
+            </select>
+            <select name="status" aria-label="{{ "Filter by status" | translate(locale=LANG) }}">
+                <option value="">{{ "All statuses" | translate(locale=LANG) }}</option>
+                {% for s in ["draft", "scheduled", "published", "archived", "expired"] %}
+                    <option value="{{ s }}"{% if status_filter == s %} selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="rcms-btn rcms-btn-small">{{ "Search" | translate(locale=LANG) }}</button>
+            {% if is_search_mode %}
+                <a href="{{ url(name='rcms-admin:pages:list') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Clear" | translate(locale=LANG) }}</a>
+            {% endif %}
+        </div>
+    </form>
+
+    {# Breadcrumb trail — only when browsing a subtree (not in search
+       mode). Each segment links back to that level; the last is the
+       current parent rendered as plain text. #}
+    {% if not is_search_mode and breadcrumbs and breadcrumbs | length > 0 %}
+        <div class="rcms-page-list-breadcrumbs">
+            <a href="{{ url(name='rcms-admin:pages:list') }}">
+                <span class="material-symbols-rounded sm">home</span> {{ "Root" | translate(locale=LANG) }}
+            </a>
+            {% for crumb in breadcrumbs %}
+                <span class="rcms-sep">›</span>
+                {% if loop.last %}
+                    <span>{{ crumb.title }}</span>
+                {% else %}
+                    <a href="{{ url(name='rcms-admin:pages:list') }}?parent={{ crumb.id }}">{{ crumb.title }}</a>
+                {% endif %}
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    {% if is_search_mode %}
+        <div class="rcms-page-list-breadcrumbs">
+            <span><strong>{{ rows | length }}</strong> result{% if rows | length != 1 %}s{% endif %}
+                {% if search_query %} for "<strong>{{ search_query }}</strong>"{% endif %}
+                {% if type_filter %} · type {{ type_filter }}{% endif %}
+                {% if status_filter %} · status {{ status_filter }}{% endif %}
+            </span>
+        </div>
+    {% endif %}
+
+    {% if rows | length == 0 %}
+        <div class="rcms-empty">
+            {% if empty_filtered %}
+                {# #70 — search / filter dropped every row. Surface a
+                   Clear-filters affordance instead of a Create CTA. #}
+                <p>{{ "No pages match the current filters." | translate(locale=LANG) }}</p>
+                <a href="{{ url(name='rcms-admin:pages:list') }}{% if parent_id %}?parent={{ parent_id }}{% endif %}" class="rcms-btn rcms-btn-outlined">{{ "Clear filters" | translate(locale=LANG) }}</a>
+            {% elif empty_hidden_by_perms %}
+                {# #70 — per-page permissions (#18) dropped every row
+                   the editor would otherwise see. Don't dangle a
+                   Create CTA when they probably can't create either. #}
+                <p>{{ "No pages you can view in this section." | translate(locale=LANG) }}</p>
+                <p class="rcms-hint">{{ "Ask an admin to grant you View / Edit access on the pages you need to work with." | translate(locale=LANG) }}</p>
+            {% elif parent_id %}
+                <p>No child pages yet under <strong>{{ parent_title }}</strong>.</p>
+                <a href="{{ url(name='rcms-admin:pages:new') }}?parent={{ parent_id }}" class="rcms-btn">{{ "+ Add the first child" | translate(locale=LANG) }}</a>
+            {% else %}
+                <p>{{ "No pages yet." | translate(locale=LANG) }}</p>
+                <a href="{{ url(name='rcms-admin:pages:new') }}" class="rcms-btn">{{ "Create the first page" | translate(locale=LANG) }}</a>
+            {% endif %}
+        </div>
+    {% else %}
+        {# #65 — Bulk action bar. Hidden until at least one row is
+           ticked. Submits to /cms-admin/pages/bulk with checkbox
+           values as repeated `ids=…` fields plus the chosen `action`.
+        #}
+        <form method="post" action="{{ url(name='rcms-admin:pages:bulk') }}" id="bulk-form" class="rcms-bulk-bar" data-bulk-bar>
+            {{ csrf_token | csrf_input | safe }}
+            <span class="rcms-count" data-bulk-count>0</span>
+            <span>{{ "selected" | translate(locale=LANG) }}</span>
+            <span class="rcms-spacer"></span>
+            <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-bulk-clear>{{ "Clear" | translate(locale=LANG) }}</button>
+            <button type="submit" name="action" value="publish" class="rcms-btn rcms-btn-tonal rcms-btn-small rcms-btn-icon-only-mobile"
+                    title="{{ "Publish the selected pages" | translate(locale=LANG) }}"
+                    data-confirm="{{ "Publish the selected pages?" | translate(locale=LANG) }}">
+                <span class="material-symbols-rounded sm">publish</span><span class="rcms-bulk-label"> {{ "Publish" | translate(locale=LANG) }}</span>
+            </button>
+            <button type="submit" name="action" value="unpublish" class="rcms-btn rcms-btn-tonal rcms-btn-small rcms-btn-icon-only-mobile"
+                    title="{{ "Move the selected pages back to Draft" | translate(locale=LANG) }}"
+                    data-confirm="{{ "Move the selected pages back to Draft?" | translate(locale=LANG) }}">
+                <span class="material-symbols-rounded sm">unpublished</span><span class="rcms-bulk-label"> {{ "Unpublish" | translate(locale=LANG) }}</span>
+            </button>
+            {# #556 — archive/unarchive. The cascade checkbox marks every
+               descendant's own row (else descendants inherit the archived
+               state at render time). Archived pages serve 200, stay
+               searchable + in the sitemap, and are frozen against delete. #}
+            <label class="rcms-bulk-cascade rcms-inline-flex rcms-items-center rcms-gap-1 rcms-text-xs rcms-text-muted"
+                   title="{{ "Also mark every descendant page (keeps them archived even if later moved out from under this page)" | translate(locale=LANG) }}">
+                <input type="checkbox" name="archive_cascade" value="1">
+                {{ "incl. descendants" | translate(locale=LANG) }}
+            </label>
+            <button type="submit" name="action" value="archive" class="rcms-btn rcms-btn-tonal rcms-btn-small rcms-btn-icon-only-mobile"
+                    title="{{ "Archive the selected pages (kept online + searchable, frozen against deletion)" | translate(locale=LANG) }}"
+                    data-confirm="{{ "Archive the selected pages? They stay online and searchable but are frozen against deletion." | translate(locale=LANG) }}">
+                <span class="material-symbols-rounded sm">inventory_2</span><span class="rcms-bulk-label"> {{ "Archive" | translate(locale=LANG) }}</span>
+            </button>
+            <button type="submit" name="action" value="unarchive" class="rcms-btn rcms-btn-tonal rcms-btn-small rcms-btn-icon-only-mobile"
+                    title="{{ "Unarchive the selected pages (revive to Published)" | translate(locale=LANG) }}"
+                    data-confirm="{{ "Unarchive the selected pages back to Published?" | translate(locale=LANG) }}">
+                <span class="material-symbols-rounded sm">unarchive</span><span class="rcms-bulk-label"> {{ "Unarchive" | translate(locale=LANG) }}</span>
+            </button>
+            <select name="new_parent" data-bulk-parent aria-label="{{ "Move destination" | translate(locale=LANG) }}">
+                <option value="">{{ "— move to… —" | translate(locale=LANG) }}</option>
+                <option value="0">{{ "Root (top of tree)" | translate(locale=LANG) }}</option>
+                {% for c in move_choices %}
+                    <option value="{{ c.id }}">{{ c.label }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" name="action" value="move" class="rcms-btn rcms-btn-small rcms-btn-icon-only-mobile" data-bulk-move
+                    title="{{ "Move the selected pages under the chosen parent" | translate(locale=LANG) }}"
+                    data-confirm="{{ "Move the selected pages under the chosen parent? Descendants' URLs cascade." | translate(locale=LANG) }}">
+                <span class="material-symbols-rounded sm">drive_file_move</span><span class="rcms-bulk-label"> {{ "Move" | translate(locale=LANG) }}</span>
+            </button>
+            <button type="submit" name="action" value="delete" class="rcms-btn rcms-btn-danger rcms-btn-small rcms-btn-icon-only-mobile"
+                    title="{{ "Delete the selected pages" | translate(locale=LANG) }}"
+                    data-confirm="{{ "Delete the selected pages? Pages with external children are rejected." | translate(locale=LANG) }}"
+                    data-confirm-style="danger">
+                <span class="material-symbols-rounded sm">delete</span><span class="rcms-bulk-label"> {{ "Delete" | translate(locale=LANG) }}</span>
+            </button>
+            {# #438 — copy-to-locale (simple_translation): seed cms_translation
+               rows for the selected pages from their canonical text. #}
+            {% if copy_locales and copy_locales | length > 0 %}
+                <select name="locale" data-bulk-locale aria-label="{{ "Copy-to-locale target" | translate(locale=LANG) }}">
+                    <option value="">{{ "— copy to… —" | translate(locale=LANG) }}</option>
+                    {% for loc in copy_locales %}
+                        <option value="{{ loc.code }}">{{ loc.name }}</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" name="action" value="copy-to-locale" class="rcms-btn rcms-btn-small rcms-btn-icon-only-mobile"
+                        title="{{ "Seed translations for the selected pages in the chosen locale (existing translations are kept)" | translate(locale=LANG) }}">
+                    <span class="material-symbols-rounded sm">translate</span><span class="rcms-bulk-label"> {{ "Copy to locale" | translate(locale=LANG) }}</span>
+                </button>
+            {% endif %}
+            {# #134 — plugin-contributed bulk actions
+               (`register_bulk_action!` with `resource = "cms_page"`).
+               Each renders as a submit button targeting the plugin's
+               own `action_url`. Selected ids are smuggled via the
+               wrapping form's `ids` checkboxes (already posted by the
+               bulk-bar JS for every checked row). #}
+            {% if plugin_bulk_actions and plugin_bulk_actions | length > 0 %}
+                {% for pa in plugin_bulk_actions %}
+                    <button type="submit"
+                            class="rcms-btn {% if pa.danger %}rcms-btn-danger {% endif %}rcms-btn-small rcms-btn-icon-only-mobile"
+                            formaction="{{ pa.action_url }}"
+                            name="action"
+                            value="{{ pa.key }}"
+                            title="{{ pa.label }}"
+                            {% if pa.confirm_message %}data-confirm="{{ pa.confirm_message }}"{% endif %}
+                            {% if pa.danger %}data-confirm-style="danger"{% endif %}>
+                        <span class="material-symbols-rounded sm">{{ pa.icon | default(value="bolt") }}</span><span class="rcms-bulk-label"> {{ pa.label }}</span>
+                    </button>
+                {% endfor %}
+            {% endif %}
+        </form>
+        <div class="rcms-page-list" id="page-tree">
+            <div class="rcms-list-toolbar rcms-flex rcms-items-center rcms-gap-2">
+                <input type="checkbox" id="bulk-select-all" class="rcms-row-select" title="{{ "Select / deselect every visible row" | translate(locale=LANG) }}">
+                <em>{{ "Tick rows to act on multiple at once. Use the per-row kebab for single-page actions (move, clone, alias, delete)." | translate(locale=LANG) }}</em>
+            </div>
+            {% for row in rows %}
+                <div class="rcms-page-row"
+                     data-page-id="{{ row.id }}"
+                     data-page-path="{{ row.path | default(value='') }}">
+                    <input type="checkbox" name="ids" value="{{ row.id }}" form="bulk-form"
+                           class="rcms-row-select" data-row-checkbox
+                           aria-label="{{ "Select page" | translate(locale=LANG) }} “{{ row.title }}”">
+                    <div class="rcms-flex-1 rcms-minw-0">
+                        <a class="rcms-title" href="{{ url(name='rcms-admin:pages:edit', id=row.id) }}">{{ row.title }}</a>
+                        {% if is_search_mode and row.ancestors and row.ancestors | length > 0 %}
+                            <span class="rcms-row-ancestors">
+                                <span class="material-symbols-rounded sm">home</span>
+                                {% for a in row.ancestors %}
+                                    <a href="{{ url(name='rcms-admin:pages:list') }}?parent={{ a.id }}">{{ a.title }}</a>
+                                    {% if not loop.last %}<span class="rcms-sep">›</span>{% endif %}
+                                {% endfor %}
+                            </span>
+                        {% endif %}
+                    </div>
+                    <span class="rcms-slug">{% if row.slug == "" %}{{ "(root)" | translate(locale=LANG) }}{% else %}/{{ row.slug }}{% endif %}</span>
+                    <span class="rcms-tag-cell">
+                        <span class="rcms-tag">{{ type_map[row.page_type_id] | default(value="?") }}</span>
+                        <span class="rcms-tag {{ row.status }}">{{ row.status }}</span>
+                        {% if row.status == "scheduled" and row.go_live_at %}
+                            <span class="rcms-hint rcms-text-2xs">
+                                <span class="material-symbols-rounded sm">schedule</span>
+                                {{ row.go_live_at | naturaltime }}
+                                · <time data-utc="{{ row.go_live_at | date(format='%+') }}">{{ row.go_live_at }}</time>
+                            </span>
+                        {% endif %}
+                        {% if row.status == "published" and row.expire_at %}
+                            <span class="rcms-hint rcms-text-2xs">
+                                <span class="material-symbols-rounded sm">timer_off</span>
+                                {{ "expires" | translate(locale=LANG) }} {{ row.expire_at | naturaltime }}
+                                · <time data-utc="{{ row.expire_at | date(format='%+') }}">{{ row.expire_at }}</time>
+                            </span>
+                        {% endif %}
+                        {% if row.alias_of %}
+                            <span class="rcms-tag" title="Alias of page #{{ row.alias_of }} — edits proxy to the source.">
+                                <span class="material-symbols-rounded sm">link</span> {{ "alias" | translate(locale=LANG) }}
+                            </span>
+                        {% endif %}
+                    </span>
+                    <div class="rcms-actions rcms-row-actions">
+                        {# Primary always-visible actions: Edit + View
+                           live (when published) + drill-down chip when
+                           the row has children. Everything else goes
+                           into the kebab dropdown to keep the row
+                           layout calm at every viewport width. #}
+                        {% if row.child_count > 0 %}
+                            <a href="{{ url(name='rcms-admin:pages:list') }}?parent={{ row.id }}" class="rcms-btn rcms-btn-tonal rcms-btn-small rcms-row-actions-children" title="View {{ row.child_count }} child page{% if row.child_count != 1 %}s{% endif %}">
+                                <span class="material-symbols-rounded sm">subdirectory_arrow_right</span> {{ row.child_count }}
+                            </a>
+                        {% endif %}
+                        {% if row.status == "published" %}
+                            <a href="{{ live_urls[row.id] | default(value="/") }}" target="_blank" rel="noopener" class="rcms-btn rcms-btn-outlined rcms-btn-small" title="{{ "Open the live page in a new tab" | translate(locale=LANG) }}">
+                                <span class="material-symbols-rounded sm">open_in_new</span>
+                            </a>
+                        {% endif %}
+                        <a href="{{ url(name='rcms-admin:pages:edit', id=row.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit" | translate(locale=LANG) }}</a>
+                        <details class="rcms-kebab-menu rcms-row-kebab">
+                            <summary class="rcms-btn rcms-btn-outlined rcms-btn-small" aria-label="{{ "More actions" | translate(locale=LANG) }}">
+                                <span class="material-symbols-rounded">more_vert</span>
+                            </summary>
+                            <div class="rcms-kebab-panel" role="menu">
+                                <a role="menuitem" href="{{ url(name='rcms-admin:pages:new') }}?parent={{ row.id }}">
+                                    <span class="material-symbols-rounded sm">add</span> {{ "+ Child page" | translate(locale=LANG) }}
+                                </a>
+                                <form method="post" action="{{ url(name='rcms-admin:pages:clone', id=row.id) }}" data-confirm="Duplicate “{{ row.title }}” as a draft? The copy lands as a sibling.">
+                                    {{ csrf_token | csrf_input | safe }}
+                                    <button type="submit" role="menuitem">
+                                        <span class="material-symbols-rounded sm">content_copy</span> {{ "Clone" | translate(locale=LANG) }}
+                                    </button>
+                                </form>
+                                {# #276 — per-row Move action. Replaces the removed
+                                   drag-and-drop affordance with an explicit destination
+                                   picker. Posts to the same `/move` endpoint the bulk
+                                   bar uses; the server-side `move_to` enforces type +
+                                   cycle rules, surfacing 400s as flash messages. #}
+                                <form method="post" action="{{ url(name='rcms-admin:pages:move', id=row.id) }}" class="rcms-kebab-move-form">
+                                    {{ csrf_token | csrf_input | safe }}
+                                    <label class="rcms-kebab-move-label">
+                                        <span class="material-symbols-rounded sm">drive_file_move</span>
+                                        <span class="rcms-kebab-move-text">{{ "Move under…" | translate(locale=LANG) }}</span>
+                                        <select name="new_parent" required aria-label="{{ "Move destination" | translate(locale=LANG) }}">
+                                            <option value="">{{ "— choose —" | translate(locale=LANG) }}</option>
+                                            <option value="0">{{ "Root (top of tree)" | translate(locale=LANG) }}</option>
+                                            {% for c in move_choices %}
+                                                {% if c.id != row.id %}<option value="{{ c.id }}">{{ c.label }}</option>{% endif %}
+                                            {% endfor %}
+                                        </select>
+                                        <button type="submit" class="rcms-btn rcms-btn-small">{{ "Go" | translate(locale=LANG) }}</button>
+                                    </label>
+                                </form>
+                                {% if not row.alias_of %}
+                                    <form method="post" action="{{ url(name='rcms-admin:pages:alias', id=row.id) }}" data-confirm="Create a live alias of “{{ row.title }}” as a sibling? Content stays in sync with this source.">
+                                        {{ csrf_token | csrf_input | safe }}
+                                        <button type="submit" role="menuitem">
+                                            <span class="material-symbols-rounded sm">link</span> {{ "+ Alias" | translate(locale=LANG) }}
+                                        </button>
+                                    </form>
+                                {% endif %}
+                                {# #107 — plugin-contributed per-row buttons. #}
+                                {% if plugin_page_listing_buttons and plugin_page_listing_buttons | length > 0 %}
+                                    {% for b in plugin_page_listing_buttons %}
+                                        <a role="menuitem" href="{{ b.href_template | replace(from='{page_id}', to=row.id) }}">
+                                            <span class="material-symbols-rounded sm">{{ b.icon | default(value='extension') }}</span> {{ b.label }}
+                                        </a>
+                                    {% endfor %}
+                                {% endif %}
+                                {# #556 — archive / unarchive. Posts to the bulk
+                                   endpoint with a single `id`. Archived pages are
+                                   frozen against deletion, so Delete is hidden for
+                                   them (unarchive first). #}
+                                {% if row.status == "archived" %}
+                                    <form method="post" action="{{ url(name='rcms-admin:pages:bulk') }}" class="rcms-kebab-divider" data-confirm="{{ "Unarchive “{title}” back to Published?" | translate(locale=LANG, title=row.title) }}">
+                                        {{ csrf_token | csrf_input | safe }}
+                                        <input type="hidden" name="id" value="{{ row.id }}">
+                                        <input type="hidden" name="action" value="unarchive">
+                                        <button type="submit" role="menuitem">
+                                            <span class="material-symbols-rounded sm">unarchive</span> {{ "Unarchive" | translate(locale=LANG) }}
+                                        </button>
+                                    </form>
+                                    {% if row.child_count and row.child_count > 0 %}
+                                        <form method="post" action="{{ url(name='rcms-admin:pages:bulk') }}" data-confirm="{{ "Unarchive “{title}” and all archived descendants back to Published?" | translate(locale=LANG, title=row.title) }}">
+                                            {{ csrf_token | csrf_input | safe }}
+                                            <input type="hidden" name="id" value="{{ row.id }}">
+                                            <input type="hidden" name="action" value="unarchive">
+                                            <input type="hidden" name="archive_cascade" value="1">
+                                            <button type="submit" role="menuitem">
+                                                <span class="material-symbols-rounded sm">unarchive</span> {{ "Unarchive incl. descendants" | translate(locale=LANG) }}
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                {% else %}
+                                    <form method="post" action="{{ url(name='rcms-admin:pages:bulk') }}" class="rcms-kebab-divider" data-confirm="{{ "Archive “{title}”? It stays online + searchable but is frozen against deletion." | translate(locale=LANG, title=row.title) }}">
+                                        {{ csrf_token | csrf_input | safe }}
+                                        <input type="hidden" name="id" value="{{ row.id }}">
+                                        <input type="hidden" name="action" value="archive">
+                                        <button type="submit" role="menuitem">
+                                            <span class="material-symbols-rounded sm">inventory_2</span> {{ "Archive" | translate(locale=LANG) }}
+                                        </button>
+                                    </form>
+                                    {% if row.child_count and row.child_count > 0 %}
+                                        <form method="post" action="{{ url(name='rcms-admin:pages:bulk') }}" data-confirm="{{ "Archive “{title}” and mark all descendants? The whole subtree stays online + searchable, frozen against deletion." | translate(locale=LANG, title=row.title) }}">
+                                            {{ csrf_token | csrf_input | safe }}
+                                            <input type="hidden" name="id" value="{{ row.id }}">
+                                            <input type="hidden" name="action" value="archive">
+                                            <input type="hidden" name="archive_cascade" value="1">
+                                            <button type="submit" role="menuitem">
+                                                <span class="material-symbols-rounded sm">inventory_2</span> {{ "Archive incl. descendants" | translate(locale=LANG) }}
+                                            </button>
+                                        </form>
+                                    {% endif %}
+                                {% endif %}
+                                {% if row.status != "archived" %}
+                                    <form method="post" action="{{ url(name='rcms-admin:pages:delete', id=row.id) }}" data-confirm="{{ "Delete this page? Pages with children can't be deleted." | translate(locale=LANG) }}" data-confirm-style="danger" class="rcms-kebab-divider">
+                                        {{ csrf_token | csrf_input | safe }}
+                                        <button type="submit" role="menuitem" class="rcms-kebab-danger">
+                                            <span class="material-symbols-rounded sm">delete</span> {{ "Delete" | translate(locale=LANG) }}
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            </div>
+                        </details>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+// #65 — multi-select + bulk action bar.
+(function () {
+    const bar = document.querySelector('[data-bulk-bar]');
+    if (!bar) return;
+    const boxes = Array.from(document.querySelectorAll('[data-row-checkbox]'));
+    if (boxes.length === 0) return;
+    const countEl = bar.querySelector('[data-bulk-count]');
+    const selectAll = document.getElementById('bulk-select-all');
+    const moveSelect = bar.querySelector('[data-bulk-parent]');
+    const moveButton = bar.querySelector('[data-bulk-move]');
+    const clearButton = bar.querySelector('[data-bulk-clear]');
+
+    const selectedIds = () => boxes.filter((b) => b.checked).map((b) => b.value);
+    const selectedPaths = () =>
+        boxes
+            .filter((b) => b.checked)
+            .map((b) => b.closest('.rcms-page-row')?.dataset.pagePath || '');
+
+    function refresh() {
+        const selected = selectedIds();
+        const count = selected.length;
+        if (countEl) countEl.textContent = String(count);
+        bar.classList.toggle('is-active', count > 0);
+        if (selectAll) {
+            const total = boxes.length;
+            selectAll.checked = count === total;
+            selectAll.indeterminate = count > 0 && count < total;
+        }
+        // Filter the move-destination dropdown so editors can't pick
+        // a selected page (or any of its descendants) as the target.
+        if (moveSelect) {
+            const paths = selectedPaths().filter((p) => p);
+            Array.from(moveSelect.options).forEach((opt) => {
+                if (!opt.value || opt.value === '0') {
+                    opt.disabled = false;
+                    return;
+                }
+                const row = boxes.find((b) => b.value === opt.value)?.closest('.rcms-page-row');
+                const optPath = row?.dataset.pagePath || '';
+                opt.disabled = paths.some((p) => optPath === p || optPath.startsWith(p));
+            });
+        }
+        if (moveButton) {
+            moveButton.disabled = !moveSelect || moveSelect.value === '';
+        }
+    }
+
+    boxes.forEach((b) => b.addEventListener('change', refresh));
+    if (selectAll) {
+        selectAll.addEventListener('change', () => {
+            boxes.forEach((b) => (b.checked = selectAll.checked));
+            refresh();
+        });
+    }
+    if (clearButton) {
+        clearButton.addEventListener('click', () => {
+            boxes.forEach((b) => (b.checked = false));
+            refresh();
+        });
+    }
+    if (moveSelect) moveSelect.addEventListener('change', refresh);
+    refresh();
+})();
+</script>
+{% endblock %}

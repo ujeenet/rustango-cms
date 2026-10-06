@@ -1,0 +1,268 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Edit menu" | translate(locale=LANG) }} — {{ menu_name }}{% endblock %}
+{% block heading %}{{ menu_name }}{% endblock %}
+
+{% block topbar_actions %}
+    <button type="button" class="rcms-btn rcms-btn-small" id="menu-builder-save" data-menu-id="{{ menu_id }}">
+        <span class="material-symbols-rounded sm">save</span> {{ "Save menu" | translate(locale=LANG) }}
+    </button>
+    {# #257 — wagtailmenus parity Option B: rebuild the menu from
+       every published page with `show_in_menus = true`. Drops the
+       current items first (the form confirm message makes that
+       clear) — useful for cold-start on a freshly-created menu, or
+       to re-sync after the page tree changes. #}
+    <form method="post"
+          action="{{ url(name='rcms-admin:navigation:seed-from-pages', id=menu_id) }}"
+          class="rcms-inline rcms-m-0"
+          data-confirm="{{ "Replace this menu's items with a tree seeded from every page marked Show in menus? The current items will be discarded." | translate(locale=LANG) }}">
+        {{ csrf_token | csrf_input | safe }}
+        <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small" title="{{ "Replace items with the page tree from Show in menus pages" | translate(locale=LANG) }}">
+            <span class="material-symbols-rounded sm">auto_awesome</span>
+            {{ "Generate from menu pages" | translate(locale=LANG) }}
+        </button>
+    </form>
+    {# Locale switcher — same control the page and snippet editors use, so
+       an editor meets one shape everywhere. The default locale links back
+       to the plain builder; the rest enter translation mode. #}
+    {% if locales and locales | length > 1 %}
+        {% for l in locales %}
+            {% if l.is_default %}
+                <a href="{{ url(name='rcms-admin:navigation:edit', id=menu_id) }}"
+                   class="rcms-btn rcms-btn-small{% if not translation_mode %} rcms-btn-outlined{% else %} rcms-btn-text{% endif %}"
+                   title="{{ "Canonical" | translate(locale=LANG) }} ({{ l.name }})">{{ l.code }}</a>
+            {% else %}
+                <a href="{{ url(name='rcms-admin:navigation:edit', id=menu_id) }}?locale={{ l.code }}"
+                   class="rcms-btn rcms-btn-small{% if editing_locale and editing_locale.code == l.code %} rcms-btn-outlined{% else %} rcms-btn-text{% endif %}"
+                   title="{{ "Translate to" | translate(locale=LANG) }} {{ l.name }}">{{ l.code }}</a>
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+    <a href="{{ url(name='rcms-admin:navigation:list') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "All menus" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block content %}
+<div class="rcms-menu-builder" data-menu-id="{{ menu_id }}" data-tag-page="{{ "page" | translate(locale=LANG) }}" data-tag-link="{{ "link" | translate(locale=LANG) }}">
+    {# --- Left column: picker --- #}
+    <aside class="rcms-menu-builder-picker rcms-card">
+        <h2 class="rcms-m-0 rcms-mb-3 rcms-text-lg">{{ "Add items" | translate(locale=LANG) }}</h2>
+
+        <div class="rcms-menu-builder-tabs" role="tablist">
+            <button type="button" class="rcms-menu-builder-tab active" data-tab="pages" role="tab" aria-selected="true">{{ "Pages" | translate(locale=LANG) }}</button>
+            <button type="button" class="rcms-menu-builder-tab" data-tab="recent" role="tab" aria-selected="false">{{ "Recent" | translate(locale=LANG) }}</button>
+            {% if has_library_picker %}
+                <button type="button" class="rcms-menu-builder-tab" data-tab="library" role="tab" aria-selected="false">{{ "Library" | translate(locale=LANG) }}</button>
+            {% endif %}
+            <button type="button" class="rcms-menu-builder-tab" data-tab="custom" role="tab" aria-selected="false">{{ "Custom link" | translate(locale=LANG) }}</button>
+        </div>
+
+        <div class="rcms-menu-builder-tab-panel" data-panel="pages">
+            <input type="search" placeholder="{{ "Search pages…" | translate(locale=LANG) }}" class="rcms-menu-builder-page-search" aria-label="{{ "Search pages" | translate(locale=LANG) }}">
+            <div class="rcms-menu-builder-page-list" role="list">
+                {% for p in picker_pages %}
+                    <button type="button"
+                            class="rcms-menu-builder-picker-item"
+                            data-page-id="{{ p.id }}"
+                            data-label="{{ p.title }}"
+                            data-url-path="{{ p.url_path }}"
+                            draggable="true"
+                            title="{{ p.url_path }}">
+                        <span class="material-symbols-rounded sm">article</span>
+                        <span class="rcms-menu-builder-picker-label">{{ p.title }}</span>
+                        <span class="rcms-menu-builder-picker-add" aria-hidden="true">+</span>
+                    </button>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="rcms-menu-builder-tab-panel" data-panel="recent" hidden>
+            <p class="rcms-hint rcms-mt-0">{{ "The 20 most-recently-edited pages — handy for adding a just-published page without scrolling the full list." | translate(locale=LANG) }}</p>
+            <div class="rcms-menu-builder-page-list" role="list">
+                {% for p in picker_recent %}
+                    <button type="button"
+                            class="rcms-menu-builder-picker-item"
+                            data-page-id="{{ p.id }}"
+                            data-label="{{ p.title }}"
+                            data-url-path="{{ p.url_path }}"
+                            draggable="true"
+                            title="{{ p.url_path }}">
+                        <span class="material-symbols-rounded sm">schedule</span>
+                        <span class="rcms-menu-builder-picker-label">{{ p.title }}</span>
+                        <time class="rcms-menu-builder-picker-meta" data-utc="{{ p.updated_at | date(format='%+') }}">{{ p.updated_at | naturaltime }}</time>
+                        <span class="rcms-menu-builder-picker-add" aria-hidden="true">+</span>
+                    </button>
+                {% endfor %}
+                {% if picker_recent | length == 0 %}
+                    <p class="rcms-hint">{{ "No pages have been edited yet." | translate(locale=LANG) }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if has_library_picker %}
+            <div class="rcms-menu-builder-tab-panel" data-panel="library" hidden>
+                <p class="rcms-hint rcms-mt-0">{{ "Linkable resources contributed by registered library types — drop one to add it as an external link." | translate(locale=LANG) }}</p>
+                <div class="rcms-menu-builder-page-list" role="list">
+                    {% for e in picker_library %}
+                        <button type="button"
+                                class="rcms-menu-builder-picker-item"
+                                data-external-url="{{ e.url }}"
+                                data-label="{{ e.label }}"
+                                data-url-path="{{ e.url }}"
+                                draggable="true"
+                                title="{{ e.url }}">
+                            <span class="material-symbols-rounded sm">library_books</span>
+                            <span class="rcms-menu-builder-picker-label">{{ e.label }}</span>
+                            <span class="rcms-menu-builder-picker-meta">{{ e.kind_hint | default(value=e.library_type) }}</span>
+                            <span class="rcms-menu-builder-picker-add" aria-hidden="true">+</span>
+                        </button>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="rcms-menu-builder-tab-panel" data-panel="custom" hidden>
+            <div class="rcms-field">
+                <label>{{ "URL" | translate(locale=LANG) }}</label>
+                <input type="url" id="menu-builder-custom-url" placeholder="https://example.com">
+            </div>
+            <div class="rcms-field">
+                <label>{{ "Label" | translate(locale=LANG) }}</label>
+                <input type="text" id="menu-builder-custom-label" placeholder="{{ "Link text" | translate(locale=LANG) }}">
+            </div>
+            <button type="button" class="rcms-btn" id="menu-builder-custom-add">{{ "Add to menu" | translate(locale=LANG) }}</button>
+        </div>
+    </aside>
+
+    {# --- Right column: live tree --- #}
+    <section class="rcms-menu-builder-tree-wrap rcms-card">
+        <div class="rcms-menu-builder-tree-head">
+            <h2 class="rcms-m-0 rcms-text-lg">{{ "Menu structure" | translate(locale=LANG) }}</h2>
+            <span class="rcms-menu-builder-dirty" hidden>{{ "Unsaved changes" | translate(locale=LANG) }}</span>
+        </div>
+        <p class="rcms-hint rcms-m-0 rcms-mb-4">
+            {{ "Drag items to reorder. Drag right to nest under the previous sibling; drag left to outdent. Keyboard fallback: use the arrow buttons on each card." | translate(locale=LANG) }}
+        </p>
+
+        <ol class="rcms-menu-builder-tree" id="menu-builder-tree" aria-live="polite">
+            {% for it in items %}
+                <li class="rcms-menu-builder-card"
+                    data-item-id="{{ it.id }}"
+                    data-parent-id="{{ it.parent_id | default(value='') }}"
+                    data-label="{{ it.label }}"
+                    data-page-title="{% if it.page_id %}{{ it.resolved_label }}{% endif %}"
+                    data-page-id="{{ it.page_id | default(value='') }}"
+                    data-external-url="{{ it.external_url | default(value='') }}"
+                    data-open-new-tab="{{ it.open_in_new_tab }}"
+                    draggable="true">
+                    <span class="rcms-menu-builder-handle material-symbols-rounded">drag_indicator</span>
+                    <div class="rcms-menu-builder-card-body">
+                        <div class="rcms-menu-builder-card-label">{{ it.resolved_label }}</div>
+                        <div class="rcms-menu-builder-card-target">
+                            {% if it.page_id %}
+                                <span class="rcms-tag rcms-text-2xs">{{ "page" | translate(locale=LANG) }}</span>
+                                <code>{{ it.resolved_url }}</code>
+                            {% elif it.external_url %}
+                                <span class="rcms-tag scheduled rcms-text-2xs">{{ "link" | translate(locale=LANG) }}</span>
+                                <code>{{ it.external_url }}</code>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="rcms-menu-builder-card-actions">
+                        <button type="button" class="rcms-btn-icon rcms-btn rcms-btn-small" data-action="up" title="{{ "Move up" | translate(locale=LANG) }}" aria-label="{{ "Move up" | translate(locale=LANG) }}"><span class="material-symbols-rounded sm">keyboard_arrow_up</span></button>
+                        <button type="button" class="rcms-btn-icon rcms-btn rcms-btn-small" data-action="down" title="{{ "Move down" | translate(locale=LANG) }}" aria-label="{{ "Move down" | translate(locale=LANG) }}"><span class="material-symbols-rounded sm">keyboard_arrow_down</span></button>
+                        <button type="button" class="rcms-btn-icon rcms-btn rcms-btn-small" data-action="outdent" title="{{ "Outdent" | translate(locale=LANG) }}" aria-label="{{ "Outdent" | translate(locale=LANG) }}"><span class="material-symbols-rounded sm">format_indent_decrease</span></button>
+                        <button type="button" class="rcms-btn-icon rcms-btn rcms-btn-small" data-action="indent" title="{{ "Indent" | translate(locale=LANG) }}" aria-label="{{ "Indent" | translate(locale=LANG) }}"><span class="material-symbols-rounded sm">format_indent_increase</span></button>
+                        <button type="button" class="rcms-btn-icon rcms-btn-danger rcms-btn-small" data-action="remove" title="{{ "Remove" | translate(locale=LANG) }}" aria-label="{{ "Remove" | translate(locale=LANG) }}"><span class="material-symbols-rounded sm">close</span></button>
+                    </div>
+                </li>
+            {% endfor %}
+        </ol>
+
+        {% if items | length == 0 %}
+            <div class="rcms-empty rcms-menu-builder-empty">
+                <p>{{ "Empty menu. Drag pages from the left, or add a custom link." | translate(locale=LANG) }}</p>
+            </div>
+        {% endif %}
+    </section>
+</div>
+
+{# Translation panel — only in ?locale=<non-default>. Posts separately
+   from the builder above: that one owns structure, this one owns text.
+   An empty field deletes the override, so the canonical label shows
+   through again. #}
+{% if translation_mode and editing_locale %}
+<form method="post"
+      action="{{ url(name='rcms-admin:navigation:translate', id=menu_id) }}?locale={{ editing_locale.code }}"
+      class="rcms-card rcms-mt-4">
+    {{ csrf_token | csrf_input | safe }}
+    <h2 class="rcms-text-base rcms-mt-0">
+        <span class="material-symbols-rounded sm">translate</span>
+        {{ "Translate to" | translate(locale=LANG) }} {{ editing_locale.name }} ({{ editing_locale.code }})
+    </h2>
+    {% set locname = editing_locale.name | escape %}
+    <p class="rcms-hint rcms-mt-0">{{ "The left column is the original text; the right column is the <strong>{name}</strong> text. Leave a box empty to show the original." | translate(locale=LANG, name=locname) | safe }}</p>
+
+    {% if items | length == 0 %}
+        <div class="rcms-empty">
+            <p>{{ "Add items to the menu first, then translate their labels here." | translate(locale=LANG) }}</p>
+        </div>
+    {% else %}
+        <table class="rcms-data">
+            <thead>
+                <tr>
+                    <th scope="col">{{ "Canonical" | translate(locale=LANG) }}</th>
+                    <th scope="col">{{ "Label" | translate(locale=LANG) }} ({{ editing_locale.code }})</th>
+                    <th scope="col">{{ "External URL" | translate(locale=LANG) }} ({{ editing_locale.code }})</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for it in items %}
+                    <tr>
+                        <td>
+                            <div>{{ it.resolved_label }}</div>
+                            {% if it.label | trim == "" and it.page_id %}
+                                <div class="rcms-hint rcms-text-2xs">{{ "from the page title" | translate(locale=LANG) }}</div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {# `.rcms-field` gives the input the admin's standard look. #}
+                            <div class="rcms-field rcms-m-0">
+                                <input type="text"
+                                       name="tr__{{ it.id }}__label"
+                                       value="{{ it.tr_label }}"
+                                       maxlength="200"
+                                       placeholder="{{ it.resolved_label }}"
+                                       aria-label="{{ it.resolved_label }} ({{ editing_locale.code }})">
+                            </div>
+                        </td>
+                        <td>
+                            {% if it.external_url %}
+                                <div class="rcms-field rcms-m-0">
+                                    <input type="text"
+                                           name="tr__{{ it.id }}__external_url"
+                                           value="{{ it.tr_external_url }}"
+                                           maxlength="500"
+                                           placeholder="{{ it.external_url }}">
+                                </div>
+                            {% else %}
+                                <span class="rcms-hint rcms-text-2xs">{{ "—" }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="rcms-form-actions">
+            <button type="submit" class="rcms-btn rcms-btn-small">
+                <span class="material-symbols-rounded sm">save</span>
+                {{ "Save translations" | translate(locale=LANG) }}
+            </button>
+        </div>
+    {% endif %}
+</form>
+{% endif %}
+
+<script src="/cms-admin/static/menu-builder.js?v={{ cms_asset_version() }}" defer></script>
+{% endblock %}

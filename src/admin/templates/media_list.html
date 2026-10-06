@@ -1,0 +1,331 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ kind_label }} — CMS Admin{% endblock %}
+{% block heading %}{{ kind_label }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:media:upload') }}?kind={{ upload_kind }}{% if collection_filter %}&collection={{ collection_filter }}{% endif %}" class="rcms-btn">+ {{ "Upload" | translate(locale=LANG) }}</a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* Media library 2-pane layout — collection sidebar on the left,
+       filtered grid/table on the right (#5). */
+    .rcms-media-library { display: grid; grid-template-columns: 240px 1fr; gap: 20px; }
+    /* One control row: filter form on the left, bulk actions on the
+       right. Two separate <form>s side by side, so this wrapper does the
+       aligning they cannot do themselves. */
+    .rcms-media-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 16px;
+    }
+    .rcms-media-toolbar > .rcms-media-search { flex: 1 1 420px; min-width: 0; }
+    .rcms-media-toolbar > #media-bulk-form { flex: 0 0 auto; }
+    /* Was `flex: 1 1 220px`, which let the box swell to 416px and eat
+       the row. Fixed-ish now so the date filters and bulk actions fit
+       beside it. */
+    .rcms-media-search-box { flex: 0 1 260px; }
+    .rcms-collection-rail {
+        background: var(--md-sys-color-surface-container-lowest);
+        border: 1px solid var(--md-sys-color-outline-variant);
+        border-radius: var(--md-sys-radius-xl);
+        padding: 12px;
+        align-self: start;
+        position: sticky;
+        /* Must not exceed the rail's natural offset from the viewport
+           top (~77px here), or sticky clamps it DOWN and the rail starts
+           lower than the toolbar beside it. 64px = the 48px sticky
+           topbar plus breathing room once scrolled. */
+        top: 64px;
+    }
+    .rcms-collection-rail h3 {
+        font: var(--md-sys-typescale-ui-label);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted);
+        margin: 6px 12px 8px;
+    }
+    .rcms-collection-link {
+        display: flex; align-items: center; gap: 10px;
+        padding: 8px 12px;
+        border-radius: var(--md-sys-radius-full);
+        text-decoration: none;
+        color: var(--md-sys-color-on-surface-variant);
+        font-size: 13px;
+        margin-bottom: 2px;
+    }
+    .rcms-collection-link:hover { background: var(--md-sys-color-surface-container); color: var(--fg); }
+    .rcms-collection-link.active {
+        background: var(--md-sys-color-primary-fixed);
+        color: var(--md-sys-color-on-primary-fixed);
+        font-weight: 600;
+    }
+    .rcms-collection-link .rcms-count {
+        margin-left: auto;
+        font-size: 11px; font-weight: 600;
+        padding: 1px 8px; border-radius: var(--md-sys-radius-full);
+        background: var(--md-sys-color-surface-container-high);
+        color: var(--md-sys-color-on-surface-variant);
+    }
+    .rcms-collection-link.active .rcms-count {
+        background: rgba(255, 255, 255, 0.4);
+        color: var(--md-sys-color-on-primary-fixed);
+    }
+    @media (max-width: 900px) {
+        .rcms-media-library { grid-template-columns: 1fr; }
+        .rcms-collection-rail { position: static; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="rcms-media-library">
+    {# #316 — collection-rail links use the `querystring` filter: it
+       preserves the current q / from / to filters and just sets or
+       clears `collection`, so search + date selections survive a
+       collection switch (media has no page param to reset). #}
+    <aside class="rcms-collection-rail" aria-label="{{ "Media collections" | translate(locale=LANG) }}">
+        <h3 class="rcms-flex rcms-items-center rcms-justify-between">
+            <span>{{ "Collections" | translate(locale=LANG) }}</span>
+            <a href="{{ url(name='rcms-admin:media:collections') }}" title="{{ "Manage collections" | translate(locale=LANG) }}" class="rcms-text-primary">
+                <span class="material-symbols-rounded sm">tune</span>
+            </a>
+        </h3>
+        <a href="{{ self_url }}{{ query_string | querystring(collection=qs_none) | safe }}" class="rcms-collection-link{% if not collection_filter %} active{% endif %}">
+            <span class="material-symbols-rounded">folder_open</span>
+            <span>{{ "All" | translate(locale=LANG) }}</span>
+        </a>
+        {% for c in collections %}
+            <div class="rcms-flex rcms-items-center rcms-gap-1">
+                <a href="{{ self_url }}{{ query_string | querystring(collection=c.id) | safe }}"
+                   class="rcms-collection-link rcms-flex-1{% if collection_filter == c.id %} active{% endif %}">
+                    <span class="material-symbols-rounded">folder</span>
+                    <span>{{ c.name }}</span>
+                    <span class="rcms-count">{{ c.count }}</span>
+                </a>
+                <a href="{{ url(name='rcms-admin:media:collection-permissions', id=c.id) }}"
+                   class="rcms-collection-link"
+                   style="flex: 0 0 auto; padding: 8px;"
+                   title="Permissions for {{ c.name }}">
+                    <span class="material-symbols-rounded">admin_panel_settings</span>
+                </a>
+            </div>
+        {% endfor %}
+        {% if uncategorized_count > 0 %}
+            <a href="{{ self_url }}{{ query_string | querystring(collection=qs_none) | safe }}" class="rcms-collection-link" title="{{ "Items not yet attached to any collection — listed under All until they're moved." | translate(locale=LANG) }}">
+                <span class="material-symbols-rounded">help_outline</span>
+                <span class="rcms-italic">{{ "Uncategorized" | translate(locale=LANG) }}</span>
+                <span class="rcms-count">{{ uncategorized_count }}</span>
+            </a>
+        {% endif %}
+        <p class="rcms-hint rcms-text-2xs" style="margin: 12px;">
+            {{ "Manage collections in a follow-up PR (#5 ships the schema + filter; create / rename / delete + drag-to-collection bulk actions come next)." | translate(locale=LANG) }}
+        </p>
+    </aside>
+
+    <div>
+        {# Search + date filter — preserves the active collection
+           via the hidden `collection` field so editors can stack
+           filters (#7). URL state persists for bookmarkable views. #}
+        {# Search, bulk-select and move-to-collection share one row. The
+           two are separate <form>s (GET filter vs POST bulk move) and
+           cannot nest, so a flex wrapper puts them side by side; the
+           card checkboxes bind to the bulk form by `form="..."`, so it
+           does not need to sit next to the grid. #}
+        <div class="rcms-media-toolbar">
+        <form method="get" action="{{ self_url }}" class="rcms-media-search">
+            {% if collection_filter %}
+                <input type="hidden" name="collection" value="{{ collection_filter }}">
+            {% endif %}
+            <div class="rcms-flex rcms-gap-2 rcms-flex-wrap rcms-items-center">
+                <label class="rcms-search-input rcms-media-search-box">
+                    <span class="material-symbols-rounded">search</span>
+                    <input type="search" name="q" placeholder="{{ "Search by title, filename, alt text…" | translate(locale=LANG) }}"
+                           value="{{ search_q | default(value='') }}" autocomplete="off">
+                </label>
+                <label class="rcms-inline-flex rcms-items-center rcms-gap-2 rcms-text-xs rcms-text-muted">
+                    {{ "from" | translate(locale=LANG) }}
+                    <input type="date" name="from" value="{{ date_from | default(value='') }}">
+                </label>
+                <label class="rcms-inline-flex rcms-items-center rcms-gap-2 rcms-text-xs rcms-text-muted">
+                    {{ "to" | translate(locale=LANG) }}
+                    <input type="date" name="to" value="{{ date_to | default(value='') }}">
+                </label>
+                <button type="submit" class="rcms-btn rcms-btn-small">{{ "Apply" | translate(locale=LANG) }}</button>
+                {% if is_filtered %}
+                    <a href="{{ self_url }}{{ query_string | querystring(q=qs_none, from=qs_none, to=qs_none) | safe }}"
+                       class="rcms-btn rcms-btn-outlined rcms-btn-small" title="{{ "Clear search + date filters (keeps the current collection)." | translate(locale=LANG) }}">
+                        {{ "Clear" | translate(locale=LANG) }}
+                    </a>
+                {% endif %}
+            </div>
+        </form>
+            {# Bulk move-to-collection bar (#5 V2). Sits above the
+               grid; the form lives OUTSIDE the per-card delete forms
+               via HTML5 `form="..."` so checkboxes submit with the
+               bulk form without nested-form pain. #}
+            {% if items | length > 0 and collections | length > 0 %}
+                <form method="post"
+                      action="{{ url(name='rcms-admin:media:bulk-move-collection') }}"
+                      id="media-bulk-form"
+                      class="rcms-flex rcms-items-center rcms-gap-2 rcms-flex-wrap">
+                    {{ csrf_token | csrf_input | safe }}
+                    <input type="hidden" name="kind" value="{{ upload_kind }}">
+                    <label class="rcms-inline-flex rcms-items-center rcms-gap-2 rcms-text-xs rcms-text-muted">
+                        <input type="checkbox" id="media-select-all"
+                               data-select-all="input[name=ids][form=media-bulk-form]">
+                        {{ "Select all" | translate(locale=LANG) }}
+                    </label>
+                    <span class="rcms-flex-1"></span>
+                    <label class="rcms-inline-flex rcms-items-center rcms-gap-2 rcms-text-xs rcms-text-muted">
+                        {{ "Move to" | translate(locale=LANG) }}
+                        <select name="collection_id">
+                            <option value="0">{{ "Uncategorized" | translate(locale=LANG) }}</option>
+                            {% for c in collections %}
+                                <option value="{{ c.id }}">{{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <button type="submit" class="rcms-btn rcms-btn-small">
+                        <span class="material-symbols-rounded sm">drive_file_move</span> {{ "Move" | translate(locale=LANG) }}
+                    </button>
+                </form>
+            {% endif %}
+        </div>
+            {% if is_filtered %}
+                <p class="rcms-hint rcms-mt-2 rcms-mb-0 rcms-mx-0 rcms-text-xs">
+                    <strong>{{ filtered_count }}</strong> match{% if filtered_count != 1 %}es{% endif %}
+                    {% if search_q %} for "<strong>{{ search_q }}</strong>"{% endif %}
+                    {% if date_from %} · from {{ date_from }}{% endif %}
+                    {% if date_to %} · to {{ date_to }}{% endif %}
+                </p>
+            {% endif %}
+
+        {% if items | length == 0 %}
+            <div class="rcms-empty">
+                {% if collection_filter %}
+                    <p>No {{ kind_label | lower }} in this collection.</p>
+                {% else %}
+                    <p>{{ "No items yet." | translate(locale=LANG) }}</p>
+                {% endif %}
+                <p class="rcms-text-sm rcms-text-muted-2">
+                    {% if upload_kind == "image" %}
+                        {{ "Upload images here — they'll be available to embed in pages." | translate(locale=LANG) }}
+                    {% else %}
+                        {{ "Upload documents for download links inside pages." | translate(locale=LANG) }}
+                    {% endif %}
+                </p>
+                <a href="{{ url(name='rcms-admin:media:upload') }}?kind={{ upload_kind }}{% if collection_filter %}&collection={{ collection_filter }}{% endif %}" class="rcms-btn">
+                    {{ "Upload" | translate(locale=LANG) }} {% if collection_filter %}{{ "to this collection" | translate(locale=LANG) }}{% else %}{{ "the first item" | translate(locale=LANG) }}{% endif %}
+                </a>
+            </div>
+        {% else %}
+            {% if upload_kind == "image" %}
+                {# #290 — grid uses `overflow: visible` on every level above
+                   the kebab so the row-action popover never clips on
+                   right-edge cards. The card itself stays `position:
+                   relative` so the absolute panel anchors to it. #}
+                <div class="rcms-grid rcms-gap-4 rcms-autogrid-180 rcms-overflow-visible">
+                {% for m in items %}
+                    <div class="rcms-card rcms-relative rcms-p-3 rcms-overflow-visible">
+                        {% if collections | length > 0 %}
+                            <label class="rcms-absolute rcms-rounded rcms-media-card-select">
+                                <input type="checkbox" name="ids" value="{{ m.id }}" form="media-bulk-form">
+                            </label>
+                        {% endif %}
+                        {# #290 — single per-card kebab (Edit / Delete / etc.).
+                           Reuses the global `details.kebab-menu` machinery
+                           in cms-ux.js: single-active toggling, outside-
+                           click close, Escape close. Sits top-right of
+                           every card. #}
+                        <details class="rcms-kebab-menu rcms-row-kebab rcms-absolute rcms-media-card-kebab">
+                            <summary class="rcms-btn rcms-btn-outlined rcms-btn-small" aria-label="{{ "Media actions" | translate(locale=LANG) }}" title="{{ "Actions" | translate(locale=LANG) }}">
+                                <span class="material-symbols-rounded">more_vert</span>
+                            </summary>
+                            <div class="rcms-kebab-panel" role="menu">
+                                <a role="menuitem" href="{{ url(name='rcms-admin:media:edit', id=m.id) }}">
+                                    <span class="material-symbols-rounded sm">edit</span> {{ "Edit metadata + focal point" | translate(locale=LANG) }}
+                                </a>
+                                <a role="menuitem" href="/__media__/raw/{{ m.id }}" target="_blank" rel="noopener">
+                                    <span class="material-symbols-rounded sm">open_in_new</span> {{ "Open original" | translate(locale=LANG) }}
+                                </a>
+                                <form method="post" action="{{ url(name='rcms-admin:media:delete', id=m.id) }}" data-confirm="Delete {{ m.filename }}? Pages that reference it will break." data-confirm-style="danger" class="rcms-kebab-divider">
+                                    {{ csrf_token | csrf_input | safe }}
+                                    <button type="submit" role="menuitem" class="rcms-kebab-danger">
+                                        <span class="material-symbols-rounded sm">delete</span> {{ "Delete" | translate(locale=LANG) }}
+                                    </button>
+                                </form>
+                            </div>
+                        </details>
+                        <div class="rcms-media-card-thumb"{% if m.width and m.height and m.width >= 340 and m.height >= 340 %} data-fit="cover"{% endif %}>
+                            <img src="{{ rcms_image_url(media_id=m.id, filter='max-340x340', v=m.content_hash) }}"
+                                 alt="{{ m.alt_text | default(value=m.title) }}"
+                                 loading="lazy">
+                            {# Shown by cms-ux.js when the thumbnail 404s —
+                               a missing file should read as "missing", not
+                               as a broken-image glyph in the corner. #}
+                            <span class="rcms-media-card-missing material-symbols-rounded" aria-hidden="true"
+                                  title="{{ "Image file is missing from storage" | translate(locale=LANG) }}">broken_image</span>
+                        </div>
+                        <div title="{{ m.title }}" class="rcms-text-sm rcms-fw-medium rcms-truncate">{{ m.title }}</div>
+                        <div title="{{ m.filename }}" class="rcms-text-2xs rcms-text-muted rcms-mb-2 rcms-truncate">
+                            {{ m.filename }} · {% if m.width %}{{ m.width }}×{{ m.height }} · {% endif %}{{ m.size | naturalsize }}
+                            {% if m.focal_point_x %}
+                                <span class="material-symbols-rounded sm rcms-ml-1" title="Focal point ({{ m.focal_point_x }}, {{ m.focal_point_y }}) — fill renditions crop around this point." style="vertical-align: -3px;">center_focus_strong</span>
+                            {% endif %}
+                        </div>
+                        <div class="rcms-flex rcms-gap-1">
+                            {# Primary action stays visible as a button so
+                               editors don't need to click the kebab for
+                               the common case. Delete moved into the
+                               kebab to declutter the card footer + match
+                               the page-list kebab pattern. #}
+                            <a href="{{ url(name='rcms-admin:media:edit', id=m.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit" | translate(locale=LANG) }}</a>
+                        </div>
+                    </div>
+                {% endfor %}
+                </div>
+            {% else %}
+                <div class="rcms-table-wrap">
+                <table class="rcms-data">
+                    <thead>
+                        <tr>
+                            <th>{{ "Title" | translate(locale=LANG) }}</th>
+                            <th>{{ "Filename" | translate(locale=LANG) }}</th>
+                            <th>{{ "Type" | translate(locale=LANG) }}</th>
+                            <th>{{ "Size" | translate(locale=LANG) }}</th>
+                            <th>{{ "Uploaded" | translate(locale=LANG) }}</th>
+                            <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    {% for m in items %}
+                        <tr>
+                            <td>{{ m.title }}</td>
+                            <td><code>{{ m.filename }}</code></td>
+                            <td><span class="rcms-tag">{{ m.mime }}</span></td>
+                            <td title="{{ m.size }} bytes">{{ m.size | naturalsize }}</td>
+                            <td class="rcms-text-muted rcms-text-xs">
+                                {{ m.uploaded_at | naturaltime }}
+                                <br>
+                                <time class="rcms-hint rcms-text-2xs" data-utc="{{ m.uploaded_at | date(format='%+') }}">{{ m.uploaded_at }}</time>
+                            </td>
+                            <td class="rcms-actions">
+                                <form method="post" action="{{ url(name='rcms-admin:media:delete', id=m.id) }}" onsubmit="return confirm('Delete {{ m.filename }}?');">
+                                    {{ csrf_token | csrf_input | safe }}
+                                    <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">{{ "Delete" | translate(locale=LANG) }}</button>
+                                </form>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+            {% endif %}
+        {% endif %}
+        {% include "rcms_admin/_pagination.html" %}
+    </div>
+</div>
+{% endblock %}

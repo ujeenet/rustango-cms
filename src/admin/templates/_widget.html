@@ -1,0 +1,544 @@
+{# =====================================================================
+   `_widget.html` — single source of truth for rendering a `Widget` as
+   an HTML form input. Both the flat extension-field surface
+   (`page_form.html`) and (in a later slice) the stream-block editor
+   call into this macro so widget output is consistent everywhere.
+
+   Multi-value contract: `Checkboxes` / `MultiSelect` widgets expect
+   the CLIENT to JSON-encode the selected values into a single form
+   field before POST (`<input name="opts" value='["a","b"]'>`). The
+   server-side `axum::Form<HashMap<String,String>>` extractor would
+   otherwise drop duplicate keys. The bundled JS module
+   (Phase 4, lands later) handles this transparently.
+
+   Macro: `render(w)` — `w` is a `Widget`-shaped struct/JSON value:
+     { name, kind, label, value, options, help, placeholder,
+       required, min, max, step, max_length, read_only }
+   ===================================================================== #}
+
+{% macro render(w) -%}
+<div class="rcms-field" data-widget="{{ w.kind }}">
+    {% if w.kind != "hidden" %}
+        <label for="w_{{ w.name }}">
+            {{ w.label }}
+            {% if w.required %}<span class="rcms-req">*</span>{% endif %}
+        </label>
+    {% endif %}
+
+    {# ---- text-shaped ------------------------------------------------ #}
+    {% if w.kind == "text" %}
+        <input type="text" id="w_{{ w.name }}" name="{{ w.name }}"
+               value="{{ w.value | default(value='') }}"
+               {% if w.placeholder %}placeholder="{{ w.placeholder }}"{% endif %}
+               {% if w.max_length %}maxlength="{{ w.max_length }}"{% endif %}
+               {% if w.min_length %}minlength="{{ w.min_length }}"{% endif %}
+               {% if w.pattern %}pattern="{{ w.pattern }}"{% endif %}
+               {% if w.required %}required{% endif %}
+               {% if w.read_only %}readonly{% endif %}>
+
+    {% elif w.kind == "textarea" %}
+        <textarea id="w_{{ w.name }}" name="{{ w.name }}" rows="6"
+                  {% if w.placeholder %}placeholder="{{ w.placeholder }}"{% endif %}
+                  {% if w.max_length %}maxlength="{{ w.max_length }}"{% endif %}
+                  {% if w.min_length %}minlength="{{ w.min_length }}"{% endif %}
+                  {% if w.required %}required{% endif %}
+                  {% if w.read_only %}readonly{% endif %}>{{ w.value | default(value='') }}</textarea>
+
+    {% elif w.kind == "markdown" %}
+        {# #205 — markdown toolbar. Buttons insert markdown syntax
+           at the cursor via cms-ux.js (progressive enhancement;
+           plain textarea fallback works without JS). #}
+        <div class="rcms-md-toolbar" data-md-toolbar-for="w_{{ w.name }}" hidden>
+            <button type="button" class="rcms-md-btn" data-md-action="bold" title="{{ "Bold (Cmd+B)" | translate(locale=LANG) }}"><strong>B</strong></button>
+            <button type="button" class="rcms-md-btn" data-md-action="italic" title="{{ "Italic (Cmd+I)" | translate(locale=LANG) }}"><em>I</em></button>
+            <span class="rcms-md-sep"></span>
+            <button type="button" class="rcms-md-btn" data-md-action="h2" title="{{ "Heading 2" | translate(locale=LANG) }}">H2</button>
+            <button type="button" class="rcms-md-btn" data-md-action="h3" title="{{ "Heading 3" | translate(locale=LANG) }}">H3</button>
+            <span class="rcms-md-sep"></span>
+            <button type="button" class="rcms-md-btn" data-md-action="link" title="{{ "Link (Cmd+K)" | translate(locale=LANG) }}">🔗</button>
+            <button type="button" class="rcms-md-btn" data-md-action="ul" title="{{ "Bulleted list" | translate(locale=LANG) }}">• {{ "List" | translate(locale=LANG) }}</button>
+            <button type="button" class="rcms-md-btn" data-md-action="ol" title="{{ "Numbered list" | translate(locale=LANG) }}">1. {{ "List" | translate(locale=LANG) }}</button>
+            <span class="rcms-md-sep"></span>
+            <button type="button" class="rcms-md-btn" data-md-action="quote" title="{{ "Quote" | translate(locale=LANG) }}">❝</button>
+            <button type="button" class="rcms-md-btn" data-md-action="code" title="{{ "Inline code" | translate(locale=LANG) }}">&lt;/&gt;</button>
+            <button type="button" class="rcms-md-btn" data-md-action="codeblock" title="{{ "Code block" | translate(locale=LANG) }}">{ }</button>
+        </div>
+        <textarea id="w_{{ w.name }}" name="{{ w.name }}" rows="14"
+                  class="rcms-text-sm rcms-font-mono"
+                  data-widget-mode="markdown"
+                  {% if w.required %}required{% endif %}
+                  {% if w.read_only %}readonly{% endif %}>{{ w.value | default(value='') }}</textarea>
+
+    {% elif w.kind == "richtext" %}
+        {# #205 — rich-text widget. Same markdown toolbar as the
+           plain-markdown widget; ships a `data-widget="richtext"`
+           hook so host apps can swap in EasyMDE / TipTap / Draftail
+           when they want a full WYSIWYG. #}
+        <div class="rcms-md-toolbar" data-md-toolbar-for="w_{{ w.name }}" hidden>
+            <button type="button" class="rcms-md-btn" data-md-action="bold" title="{{ "Bold (Cmd+B)" | translate(locale=LANG) }}"><strong>B</strong></button>
+            <button type="button" class="rcms-md-btn" data-md-action="italic" title="{{ "Italic (Cmd+I)" | translate(locale=LANG) }}"><em>I</em></button>
+            <span class="rcms-md-sep"></span>
+            <button type="button" class="rcms-md-btn" data-md-action="h2" title="{{ "Heading 2" | translate(locale=LANG) }}">H2</button>
+            <button type="button" class="rcms-md-btn" data-md-action="h3" title="{{ "Heading 3" | translate(locale=LANG) }}">H3</button>
+            <span class="rcms-md-sep"></span>
+            <button type="button" class="rcms-md-btn" data-md-action="link" title="{{ "Link (Cmd+K)" | translate(locale=LANG) }}">🔗</button>
+            <button type="button" class="rcms-md-btn" data-md-action="ul" title="{{ "Bulleted list" | translate(locale=LANG) }}">• {{ "List" | translate(locale=LANG) }}</button>
+            <button type="button" class="rcms-md-btn" data-md-action="ol" title="{{ "Numbered list" | translate(locale=LANG) }}">1. {{ "List" | translate(locale=LANG) }}</button>
+            <span class="rcms-md-sep"></span>
+            <button type="button" class="rcms-md-btn" data-md-action="quote" title="{{ "Quote" | translate(locale=LANG) }}">❝</button>
+            <button type="button" class="rcms-md-btn" data-md-action="code" title="{{ "Inline code" | translate(locale=LANG) }}">&lt;/&gt;</button>
+        </div>
+        <textarea id="w_{{ w.name }}" name="{{ w.name }}" rows="10"
+                  data-widget-mode="richtext"
+                  {% if w.required %}required{% endif %}
+                  {% if w.read_only %}readonly{% endif %}>{{ w.value | default(value='') }}</textarea>
+
+    {% elif w.kind == "email" %}
+        <input type="email" id="w_{{ w.name }}" name="{{ w.name }}"
+               value="{{ w.value | default(value='') }}"
+               {% if w.placeholder %}placeholder="{{ w.placeholder }}"{% endif %}
+               {% if w.max_length %}maxlength="{{ w.max_length }}"{% endif %}
+               {% if w.min_length %}minlength="{{ w.min_length }}"{% endif %}
+               {% if w.pattern %}pattern="{{ w.pattern }}"{% endif %}
+               {% if w.required %}required{% endif %}
+               {% if w.read_only %}readonly{% endif %}>
+
+    {% elif w.kind == "url" %}
+        <input type="url" id="w_{{ w.name }}" name="{{ w.name }}"
+               value="{{ w.value | default(value='') }}"
+               {% if w.placeholder %}placeholder="{{ w.placeholder }}"{% endif %}
+               {% if w.max_length %}maxlength="{{ w.max_length }}"{% endif %}
+               {% if w.min_length %}minlength="{{ w.min_length }}"{% endif %}
+               {% if w.pattern %}pattern="{{ w.pattern }}"{% endif %}
+               {% if w.required %}required{% endif %}
+               {% if w.read_only %}readonly{% endif %}>
+
+    {% elif w.kind == "tel" %}
+        <input type="tel" id="w_{{ w.name }}" name="{{ w.name }}"
+               value="{{ w.value | default(value='') }}"
+               {% if w.placeholder %}placeholder="{{ w.placeholder }}"{% endif %}
+               {% if w.max_length %}maxlength="{{ w.max_length }}"{% endif %}
+               {% if w.min_length %}minlength="{{ w.min_length }}"{% endif %}
+               {% if w.pattern %}pattern="{{ w.pattern }}"{% endif %}
+               {% if w.required %}required{% endif %}
+               {% if w.read_only %}readonly{% endif %}>
+
+    {% elif w.kind == "password" %}
+        <input type="password" id="w_{{ w.name }}" name="{{ w.name }}"
+               value="{{ w.value | default(value='') }}"
+               {% if w.max_length %}maxlength="{{ w.max_length }}"{% endif %}
+               {% if w.min_length %}minlength="{{ w.min_length }}"{% endif %}
+               {% if w.pattern %}pattern="{{ w.pattern }}"{% endif %}
+               {% if w.required %}required{% endif %}
+               {% if w.read_only %}readonly{% endif %}>
+
+    {% elif w.kind == "hidden" %}
+        <input type="hidden" id="w_{{ w.name }}" name="{{ w.name }}"
+               value="{{ w.value | default(value='') }}">
+
+    {# ---- numeric --------------------------------------------------- #}
+    {% elif w.kind == "number" or w.kind == "integer" or w.kind == "float" %}
+        <input type="number" id="w_{{ w.name }}" name="{{ w.name }}"
+               value="{{ w.value | default(value='') }}"
+               {% if w.placeholder %}placeholder="{{ w.placeholder }}"{% endif %}
+               {% if w.min is defined and w.min is number %}min="{{ w.min }}"{% endif %}
+               {% if w.max is defined and w.max is number %}max="{{ w.max }}"{% endif %}
+               {% if w.step %}step="{{ w.step }}"{% elif w.kind == "integer" %}step="1"{% elif w.kind == "float" %}step="any"{% endif %}
+               {% if w.required %}required{% endif %}
+               {% if w.read_only %}readonly{% endif %}>
+
+    {% elif w.kind == "range" %}
+        <input type="range" id="w_{{ w.name }}" name="{{ w.name }}"
+               value="{{ w.value | default(value='') }}"
+               {% if w.min is defined and w.min is number %}min="{{ w.min }}"{% endif %}
+               {% if w.max is defined and w.max is number %}max="{{ w.max }}"{% endif %}
+               {% if w.step %}step="{{ w.step }}"{% endif %}
+               {% if w.read_only %}disabled{% endif %}>
+
+    {# ---- boolean (single checkbox) -------------------------------- #}
+    {% elif w.kind == "boolean" %}
+        {# Phase 7 — Wagtail SwitchInput parity. `variant="switch"`
+           flips the checkbox to an iOS-style toggle while keeping
+           the same wire shape (checkbox `on` / absent). #}
+        <div class="rcms-checkbox-field{% if w.variant == "switch" %} checkbox-field--switch{% endif %}">
+            <input type="checkbox" id="w_{{ w.name }}" name="{{ w.name }}"
+                   value="on"
+                   {% if w.value == "on" or w.value == "true" or w.value == "1" %}checked{% endif %}
+                   {% if w.read_only %}disabled{% endif %}>
+            {% if w.variant == "switch" %}
+                <label for="w_{{ w.name }}" class="rcms-switch-track" aria-hidden="true">
+                    <span class="rcms-switch-knob"></span>
+                </label>
+            {% endif %}
+            {% if w.help %}<span class="rcms-hint">{{ w.help }}</span>{% endif %}
+        </div>
+
+    {# ---- date / time ---------------------------------------------- #}
+    {% elif w.kind == "date" %}
+        <input type="date" id="w_{{ w.name }}" name="{{ w.name }}"
+               value="{{ w.value | default(value='') }}"
+               {% if w.required %}required{% endif %}
+               {% if w.read_only %}readonly{% endif %}>
+
+    {% elif w.kind == "time" %}
+        <input type="time" id="w_{{ w.name }}" name="{{ w.name }}"
+               value="{{ w.value | default(value='') }}"
+               {% if w.step %}step="{{ w.step }}"{% endif %}
+               {% if w.required %}required{% endif %}
+               {% if w.read_only %}readonly{% endif %}>
+
+    {% elif w.kind == "datetime" %}
+        <input type="datetime-local" id="w_{{ w.name }}" name="{{ w.name }}"
+               value="{{ w.value | default(value='') }}"
+               {% if w.step %}step="{{ w.step }}"{% endif %}
+               {% if w.required %}required{% endif %}
+               {% if w.read_only %}readonly{% endif %}>
+
+    {% elif w.kind == "datetimetz" %}
+        {# Datetime + timezone pair. Value shape:
+              `YYYY-MM-DDTHH:MM[:SS][Z|+HH:MM]`
+           The client packs the picker's local datetime + the picked
+           IANA zone into an ISO-8601 string before submit. Until JS
+           enhancement lands, both inputs POST under suffixed names
+           the server-side handler reassembles. #}
+        <div class="rcms-datetimetz-pair">
+            <input type="datetime-local" id="w_{{ w.name }}" name="{{ w.name }}__local"
+                   value="{{ w.value | default(value='') | split(pat='@') | nth(n=0) }}"
+                   {% if w.required %}required{% endif %}
+                   {% if w.read_only %}readonly{% endif %}>
+            <select id="w_{{ w.name }}_tz" name="{{ w.name }}__tz"
+                    {% if w.read_only %}disabled{% endif %}>
+                <option value="UTC">UTC</option>
+                <option value="America/New_York">America/New_York</option>
+                <option value="America/Los_Angeles">America/Los_Angeles</option>
+                <option value="Europe/London">Europe/London</option>
+                <option value="Europe/Paris">Europe/Paris</option>
+                <option value="Europe/Berlin">Europe/Berlin</option>
+                <option value="Europe/Kyiv">Europe/Kyiv</option>
+                <option value="Asia/Tokyo">Asia/Tokyo</option>
+                <option value="Asia/Singapore">Asia/Singapore</option>
+                <option value="Australia/Sydney">Australia/Sydney</option>
+            </select>
+        </div>
+
+    {# ---- color ---------------------------------------------------- #}
+    {% elif w.kind == "color" %}
+        <input type="color" id="w_{{ w.name }}" name="{{ w.name }}"
+               value="{{ w.value | default(value='#000000') }}"
+               {% if w.read_only %}disabled{% endif %}>
+
+    {# ---- file ----------------------------------------------------- #}
+    {% elif w.kind == "file" %}
+        <input type="file" id="w_{{ w.name }}" name="{{ w.name }}"
+               {% if w.required %}required{% endif %}
+               {% if w.read_only %}disabled{% endif %}>
+
+    {% elif w.kind == "mediapicker" %}
+        {# Image chooser: the shared overlay (thumbnails + search, backed by the
+           built-in "media" chooser) with a live preview of the selection.
+           cms-ux.js wires the picker + preview via the data-chooser attrs. #}
+        <div class="rcms-chooser rcms-media-chooser"
+             data-chooser
+             data-chooser-kind="media">
+            <input type="hidden"
+                   id="w_{{ w.name }}"
+                   name="{{ w.name }}"
+                   value="{{ w.value | default(value='') }}"
+                   data-chooser-input>
+            <img class="rcms-media-preview" data-chooser-preview alt=""
+                 onerror="this.style.display='none'"
+                 {% if w.value %}src="/__media__/raw/{{ w.value }}"{% else %}hidden{% endif %}>
+            <button type="button"
+                    class="rcms-btn rcms-btn-outlined"
+                    data-chooser-open
+                    {% if w.read_only %}disabled{% endif %}>
+                <span class="material-symbols-rounded sm">image</span>
+                <span data-chooser-label>
+                    {%- if w.value -%}#{{ w.value }}{%- else -%}{{ "Choose an image…" | translate(locale=LANG) }}{%- endif -%}
+                </span>
+            </button>
+            <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-chooser-clear
+                    {% if not w.value %}style="display:none"{% endif %}
+                    {% if w.read_only %}disabled{% endif %}>
+                {{ "Clear" | translate(locale=LANG) }}
+            </button>
+        </div>
+
+    {% elif w.kind == "pagechooser" or w.kind == "snippetchooser" or w.kind == "documentchooser" %}
+        {# Wagtail-parity chooser widgets. Hidden input carries the
+           target row's id as a string (or comma-separated ids in
+           multi mode); visible button opens the shared modal dialog
+           (cms-ux.js wires it via the `data-chooser-kind`
+           attribute). Snippet chooser can narrow to one type via
+           `w.custom_name`. Multi-pick mode opts in via
+           `w.variant = "multi"` (renders checkbox-per-row + a
+           "Pick selected" button — Wagtail's MultipleChooserPanel
+           equivalent). #}
+        {% set chooser_kind = w.kind | replace(from="chooser", to="") %}
+        {% set_global chooser_icon = "article" %}
+        {% if chooser_kind == "snippet" %}{% set_global chooser_icon = "library_books" %}{% endif %}
+        {% if chooser_kind == "document" %}{% set_global chooser_icon = "description" %}{% endif %}
+        {% set multi = w.variant | default(value="") == "multi" %}
+        {% set_global placeholder_single = "Choose a page…" | translate(locale=LANG) %}
+        {% if chooser_kind == "snippet" %}{% set_global placeholder_single = "Choose a snippet…" | translate(locale=LANG) %}{% endif %}
+        {% if chooser_kind == "snippet" and w.custom_name == "form" %}{% set_global placeholder_single = "Choose a form…" | translate(locale=LANG) %}{% endif %}
+        {% if chooser_kind == "document" %}{% set_global placeholder_single = "Choose a document…" | translate(locale=LANG) %}{% endif %}
+        {% set_global placeholder_multi = "Choose pages…" | translate(locale=LANG) %}
+        {% if chooser_kind == "snippet" %}{% set_global placeholder_multi = "Choose snippets…" | translate(locale=LANG) %}{% endif %}
+        {% if chooser_kind == "snippet" and w.custom_name == "form" %}{% set_global placeholder_multi = "Choose forms…" | translate(locale=LANG) %}{% endif %}
+        {% if chooser_kind == "document" %}{% set_global placeholder_multi = "Choose documents…" | translate(locale=LANG) %}{% endif %}
+        {% if multi %}{% set_global placeholder = placeholder_multi %}{% else %}{% set_global placeholder = placeholder_single %}{% endif %}
+        <div class="rcms-chooser"
+             data-chooser
+             data-chooser-kind="{{ chooser_kind }}"
+             {% if multi %}data-chooser-multi="1"{% endif %}
+             {% if w.custom_name %}data-chooser-filter="{{ w.custom_name }}"{% endif %}
+             data-chooser-placeholder="{{ placeholder }}">
+            <input type="hidden"
+                   id="w_{{ w.name }}"
+                   name="{{ w.name }}"
+                   value="{{ w.value | default(value='') }}"
+                   data-chooser-input>
+            <button type="button"
+                    class="rcms-btn rcms-btn-outlined"
+                    data-chooser-open
+                    {% if w.read_only %}disabled{% endif %}>
+                <span class="material-symbols-rounded sm">{{ chooser_icon }}</span>
+                <span data-chooser-label>
+                    {%- if w.value -%}
+                        {%- if multi -%}{{ w.value | split(pat=",") | length }} {{ "selected" | translate(locale=LANG) }}{%- else -%}#{{ w.value }}{%- endif -%}
+                    {%- else -%}{{ placeholder }}{%- endif -%}
+                </span>
+            </button>
+            {% if w.value %}
+                <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-chooser-clear
+                        {% if w.read_only %}disabled{% endif %}>
+                    {{ "Clear" | translate(locale=LANG) }}
+                </button>
+            {% endif %}
+        </div>
+
+    {# #421 — generic model chooser. `w.custom_name` is the registered
+       chooser slug; it becomes `data-chooser-kind`, which cms-ux.js
+       resolves to `/cms-admin/__chooser/<slug>` (an unregistered kind
+       falls back to the generic endpoint). Single-pick id value. #}
+    {% elif w.kind == "modelchooser" %}
+        <div class="rcms-chooser"
+             data-chooser
+             data-chooser-kind="{{ w.custom_name }}">
+            <input type="hidden"
+                   id="w_{{ w.name }}"
+                   name="{{ w.name }}"
+                   value="{{ w.value | default(value='') }}"
+                   data-chooser-input>
+            <button type="button"
+                    class="rcms-btn rcms-btn-outlined"
+                    data-chooser-open
+                    {% if w.read_only %}disabled{% endif %}>
+                <span class="material-symbols-rounded sm">widgets</span>
+                <span data-chooser-label>
+                    {%- if w.value -%}#{{ w.value }}{%- else -%}{{ w.placeholder | default(value="Choose…" | translate(locale=LANG)) }}{%- endif -%}
+                </span>
+            </button>
+            {% if w.value %}
+                <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-chooser-clear
+                        {% if w.read_only %}disabled{% endif %}>
+                    {{ "Clear" | translate(locale=LANG) }}
+                </button>
+            {% endif %}
+        </div>
+
+    {# ---- choice variants ----------------------------------------- #}
+    {% elif w.kind == "radio" %}
+        <div class="rcms-radio-group">
+            {% for opt in w.options %}
+                <label class="rcms-radio-option">
+                    <input type="radio" name="{{ w.name }}" value="{{ opt.0 }}"
+                           {% if w.value == opt.0 %}checked{% endif %}
+                           {% if w.required and loop.first %}required{% endif %}
+                           {% if w.read_only %}disabled{% endif %}>
+                    {{ opt.1 }}
+                </label>
+            {% endfor %}
+        </div>
+
+    {% elif w.kind == "select" %}
+        <select id="w_{{ w.name }}" name="{{ w.name }}"
+                {% if w.required %}required{% endif %}
+                {% if w.read_only %}disabled{% endif %}>
+            {% if not w.required %}<option value="">{{ "— none —" | translate(locale=LANG) }}</option>{% endif %}
+            {% for opt in w.options %}
+                <option value="{{ opt.0 }}"{% if w.value == opt.0 %} selected{% endif %}>{{ opt.1 }}</option>
+            {% endfor %}
+        </select>
+
+    {% elif w.kind == "checkboxes" %}
+        {# Multi-value contract: the form POSTs ONE hidden field per
+           checkbox-group whose `value` is a JSON array string. The
+           visible checkboxes are page-local; a tiny `change` listener
+           on the form repopulates the hidden field. v1 ships the JS
+           handler in the bundled stream-editor module; for v1
+           extension-form-only use, host apps that don't want the
+           full bundle can echo the array in a `<script>` block. #}
+        <div class="rcms-checkbox-group" data-widget-multivalue="checkboxes" data-name="{{ w.name }}">
+            <input type="hidden" name="{{ w.name }}" value="{{ w.value | default(value='[]') }}">
+            {% for opt in w.options %}
+                <label class="rcms-checkbox-option">
+                    <input type="checkbox" value="{{ opt.0 }}"
+                           data-multivalue-option
+                           {% if w.value and (w.value is containing(opt.0)) %}checked{% endif %}
+                           {% if w.read_only %}disabled{% endif %}>
+                    {{ opt.1 }}
+                </label>
+            {% endfor %}
+        </div>
+
+    {% elif w.kind == "multiselect" %}
+        {# Native `<select multiple>` posts each selected `<option>`
+           value as a SEPARATE form key — same multi-value collision
+           issue as `checkboxes`. We emit a hidden JSON-array field
+           the JS shim keeps in sync; the visible `<select multiple>`
+           is for UX only and has `name=""` to suppress its own
+           submission. #}
+        <div class="rcms-multiselect-group" data-widget-multivalue="multiselect" data-name="{{ w.name }}">
+            <input type="hidden" name="{{ w.name }}" value="{{ w.value | default(value='[]') }}">
+            <select multiple size="6" data-multivalue-source
+                    {% if w.read_only %}disabled{% endif %}>
+                {% for opt in w.options %}
+                    <option value="{{ opt.0 }}"
+                            {% if w.value and (w.value is containing(opt.0)) %}selected{% endif %}>
+                        {{ opt.1 }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+
+    {# #243 — Page↔Snippet many-to-many chooser. Renders structurally
+       identical to `multiselect` (hidden JSON-array form value + a
+       visible `<select multiple>` whose change events the JS shim
+       mirrors into the hidden input). The options list is populated
+       server-side by the page-type handler — it queries cms_snippet
+       for `w.custom_name == type_name` and stamps `(id, title)`
+       pairs into `w.options` before rendering. The shim picks this
+       up via `data-widget-multivalue="multiselect"` so no new JS
+       wiring is needed. Hosts call
+       `rustango_cms::page_snippet_m2m::replace_all(pool, page_id,
+       w.name /* relation */, parsed_ids)` from their
+       `save_extension` override; `related_snippets(pool, page_id,
+       relation)` from `load_extension`. #}
+    {% elif w.kind == "snippetm2m" %}
+        <div class="rcms-multiselect-group" data-widget-multivalue="multiselect" data-name="{{ w.name }}">
+            <input type="hidden" name="{{ w.name }}" value="{{ w.value | default(value='[]') }}">
+            <select multiple size="6" data-multivalue-source
+                    {% if w.read_only %}disabled{% endif %}>
+                {% for opt in w.options %}
+                    <option value="{{ opt.0 }}"
+                            {% if w.value and (w.value is containing(opt.0)) %}selected{% endif %}>
+                        {{ opt.1 }}
+                    </option>
+                {% endfor %}
+            </select>
+            {% if w.custom_name %}
+                <p class="rcms-hint rcms-hint--sm">
+                    Snippets of type <code>{{ w.custom_name }}</code>. Hold ⌘ / Ctrl to multi-select.
+                </p>
+            {% endif %}
+        </div>
+
+    {# ---- streamfield --------------------------------------------- #}
+    {% elif w.kind == "stream" %}
+        {# The admin handler pre-renders the entire stream editor
+           (existing blocks + per-allowed-type <template> clones) via
+           `block::admin::render_stream_editor` and stashes the HTML
+           on `w.custom_html`. The hidden input here is the single
+           form field that submits the serialized JSON tree; the JS
+           keeps it in sync on every `input` event. #}
+        <div class="rcms-stream-editor"
+             data-stream-root
+             data-stream-name="{{ w.name }}"
+             data-allowed="{{ w.allowed | join(sep=',') }}">
+            {# Hidden input MUST sit inside `data-stream-root` so the
+               JS `serializeAll()` walker (`:scope > [data-stream-input]`)
+               finds it. #}
+            <input type="hidden" name="{{ w.name }}" value="{{ w.value }}" data-stream-input>
+            {{ w.custom_html | safe }}
+            <div class="rcms-stream-picker">
+                <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small" data-action="open-picker" data-insert-at="end">
+                    <span class="material-symbols-rounded sm">add</span> {{ "Add block" | translate(locale=LANG) }}
+                </button>
+            </div>
+
+            {# Per-stream block picker dialog. Native <dialog> for
+               built-in keyboard nav + a11y. Filtered to data-allowed
+               at open time by the JS. #}
+            {# The picker dialog lives inside the outer `<form id="page-edit-form">`.
+               HTML5 disallows nested forms, so use plain `type="button"`
+               for every action inside this dialog — submit-typed buttons
+               would bubble to the outer form and navigate away. The JS
+               (stream_editor.js) handles close + pick-block as click
+               delegations. #}
+            <dialog class="rcms-block-picker" data-block-picker>
+                <header>
+                    <strong>{{ "Choose a block" | translate(locale=LANG) }}</strong>
+                    <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small" data-action="close-picker" aria-label="{{ "Close" | translate(locale=LANG) }}">
+                        <span class="material-symbols-rounded sm">close</span>
+                    </button>
+                </header>
+                {# #411 — client-side filter. stream_editor.js hides
+                   non-matching tiles + their now-empty group headers. #}
+                <input type="search" class="rcms-block-picker-search" data-block-picker-search
+                       placeholder="{{ "Search blocks…" | translate(locale=LANG) }}" aria-label="{{ "Search blocks" | translate(locale=LANG) }}" autocomplete="off">
+                <ul class="rcms-block-picker-list">
+                    {% for opt in picker_options | default(value=[]) %}
+                        <li class="rcms-block-picker-option"
+                            data-block-option
+                            data-type="{{ opt.type_name }}"
+                            data-label="{{ opt.verbose_name }}"
+                            {% if opt.group %}data-group="{{ opt.group }}"{% endif %}
+                            {% if opt.collapsed %}data-collapsed="1"{% endif %}
+                            {% if opt.default_value %}data-default-value='{{ opt.default_value | json_script }}'{% endif %}>
+                            <button type="button" class="rcms-block-picker-tile" data-action="pick-block" data-type="{{ opt.type_name }}"
+                                    {% if opt.description %}title="{{ opt.description }}"{% endif %}>
+                                {% if opt.icon %}<span class="material-symbols-rounded">{{ opt.icon }}</span>{% endif %}
+                                <span class="rcms-block-picker-tile-label">
+                                    <span class="rcms-block-picker-tile-name">{{ opt.verbose_name }}</span>
+                                    {% if opt.description %}<span class="rcms-block-picker-tile-desc">{{ opt.description }}</span>{% endif %}
+                                    {% if opt.preview_html %}
+                                        <span class="rcms-block-picker-tile-preview">{{ opt.preview_html | safe }}</span>
+                                    {% endif %}
+                                </span>
+                            </button>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </dialog>
+        </div>
+
+    {# ---- custom escape hatch ------------------------------------- #}
+    {% elif w.kind == "custom" %}
+        {# The admin handler pre-renders each custom widget by
+           looking up its template via
+           `widget::registry::find_custom_widget` and stashing the
+           HTML in `w.custom_html`. Empty `custom_html` means the
+           name had no registration — surface visibly so the
+           misconfiguration is debuggable in-editor. (Tera's
+           `{% include %}` requires a string literal, hence the
+           pre-render dance — same shape `cms_snippet` uses.) #}
+        {% if w.custom_html %}
+            {{ w.custom_html | safe }}
+        {% else %}
+            <div class="rcms-hint rcms-hint--error">
+                ⚠ custom widget <code>{{ w.custom_name }}</code> has no registered template.
+                Did you call <code>register_widget!("{{ w.custom_name }}", "templates/widgets/...")</code>?
+            </div>
+        {% endif %}
+
+    {% else %}
+        <div class="rcms-hint rcms-hint--warning">
+            ⚠ unknown widget kind <code>{{ w.kind }}</code> — please report.
+        </div>
+    {% endif %}
+
+    {% if w.help and w.kind != "boolean" %}<div class="rcms-hint">{{ w.help }}</div>{% endif %}
+</div>
+{%- endmacro %}

@@ -1,0 +1,55 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Taxonomies" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Taxonomies" | translate(locale=LANG) }}{% endblock %}
+
+{% block description %}
+    {{ "Vocabularies for categorizing content. The built-in <strong>Categories</strong> ships out of the box; register custom ones in code with <code>register_taxonomy!</code>." | translate(locale=LANG) | safe }}
+{% endblock %}
+
+{% block body %}
+
+{% if taxonomies | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "No taxonomies registered." | translate(locale=LANG) }}</p>
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Name" | translate(locale=LANG) }}</th>
+                <th>{{ "Slug" | translate(locale=LANG) }}</th>
+                <th>{{ "Terms" | translate(locale=LANG) }}</th>
+                <th>{{ "Nesting" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for t in taxonomies %}
+            <tr>
+                <td>
+                    <a href="{{ url(name='rcms-admin:taxonomies:tree', slug=t.slug) }}" class="rcms-inline-flex rcms-items-center rcms-gap-2" style="text-decoration: none;">
+                        <span class="material-symbols-rounded sm rcms-text-accent">{{ t.icon }}</span>
+                        <strong>{{ t.verbose_name }}</strong>
+                    </a>
+                    {% if t.description %}<div class="rcms-text-xs rcms-text-muted">{{ t.description }}</div>{% endif %}
+                </td>
+                <td><code>{{ t.slug }}</code></td>
+                <td>{{ t.count | intcomma }}</td>
+                <td>
+                    {% if t.hierarchical %}
+                        <span class="rcms-tag" title="{{ "Terms can be nested" | translate(locale=LANG) }}">{{ "nested" | translate(locale=LANG) }}</span>
+                    {% else %}
+                        <span class="rcms-tag" title="{{ "Flat vocabulary — no nesting" | translate(locale=LANG) }}">{{ "flat" | translate(locale=LANG) }}</span>
+                    {% endif %}
+                </td>
+                <td class="rcms-actions">
+                    <a href="{{ url(name='rcms-admin:taxonomies:tree', slug=t.slug) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Manage" | translate(locale=LANG) }}</a>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+{% endblock %}

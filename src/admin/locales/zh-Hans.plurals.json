@@ -1,0 +1,62 @@
+{
+  "Archived {count} page(s).": {
+    "other": "已归档 {count} 个页面。"
+  },
+  "Can't delete “{title}” — it has {count} child page(s). Delete or move them first.": {
+    "other": "无法删除“{title}” — 它有 {count} 个子页面。请先删除或移动它们。"
+  },
+  "Can't delete “{title}” — {count} page(s) have history under it. Toggle Active off instead.": {
+    "other": "无法删除“{title}” — 其下有 {count} 个页面存在历史记录。请改为关闭“启用”。"
+  },
+  "Deleted {count} page(s).": {
+    "other": "已删除 {count} 个页面。"
+  },
+  "Deleted {count} unused media item(s).": {
+    "other": "已删除 {count} 个未使用的媒体项目。"
+  },
+  "Deleted “{title}”. Promoted {count} alias(es) to standalone page(s) with the source's last content.": {
+    "other": "已删除“{title}”。已将 {count} 个别名提升为独立页面，并保留源页面的最后内容。"
+  },
+  "Moved {count} item(s) {dest}.": {
+    "other": "已将 {count} 个项目移动{dest}。"
+  },
+  "Moved {count} page(s) under “{parent}”.": {
+    "other": "已将 {count} 个页面移动到“{parent}”下。"
+  },
+  "Published {count} page(s) ({already} already in the target state).": {
+    "other": "已发布 {count} 个页面（{already} 个已处于目标状态）。"
+  },
+  "Saved {count} pinned result(s).": {
+    "other": "已保存 {count} 个置顶结果。"
+  },
+  "Saved “{title}”. Auto-created {count} redirect(s) from the old URL(s).": {
+    "other": "已保存“{title}”。已从旧 URL 自动创建 {count} 个重定向。"
+  },
+  "Seeded “{name}” with {count} item(s) from pages marked Show in menus.": {
+    "other": "已用标记为“在菜单中显示”的页面中的 {count} 个项目填充“{name}”。"
+  },
+  "Unarchived {count} page(s).": {
+    "other": "已取消归档 {count} 个页面。"
+  },
+  "Unpublished {count} page(s) ({already} already in the target state).": {
+    "other": "已取消发布 {count} 个页面（{already} 个已处于目标状态）。"
+  },
+  "{action}: touched {count} row(s) in `{type_name}`.": {
+    "other": "{action}：在 `{type_name}` 中影响了 {count} 行。"
+  },
+  "{count} extra permission(s) preserved on save": {
+    "other": "保存时保留了 {count} 项额外权限"
+  },
+  "{count} field(s)": {
+    "other": "{count} 个字段"
+  },
+  "{count} page(s)": {
+    "other": "{count} 个页面"
+  },
+  "{count} revision(s)": {
+    "other": "{count} 个修订版本"
+  },
+  "{count} row(s).": {
+    "other": "{count} 行。"
+  }
+}

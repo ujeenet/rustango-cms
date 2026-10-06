@@ -1,0 +1,92 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{% if mode == "new" %}{{ "New SSO provider" | translate(locale=LANG) }}{% else %}{{ "Edit SSO provider" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% block heading %}{% if mode == "new" %}{{ "Add SSO provider" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} {{ provider.label }}{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:sso-providers:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="rcms-breadcrumbs">
+    <a href="{{ url(name='rcms-admin:sso-providers:list') }}">{{ "SSO Providers" | translate(locale=LANG) }}</a>
+    <span class="rcms-sep">›</span>
+    <span>{% if mode == "new" %}{{ "New" | translate(locale=LANG) }}{% else %}{{ provider.slug }}{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<form method="post" action="{% if mode == "new" %}{{ url(name='rcms-admin:sso-providers:new') }}{% else %}{{ url(name='rcms-admin:sso-providers:edit', id=provider.id) }}{% endif %}" class="rcms-card rcms-maxw-600" data-primary-save>
+    {{ csrf_token | csrf_input | safe }}
+
+    <div class="rcms-field-row">
+        <div class="rcms-field">
+            <label>{{ "Provider type" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+            <select name="kind" required data-sso-kind>
+                {% for k in kinds %}<option value="{{ k.key }}"{% if provider.kind == k.key %} selected{% endif %}>{{ k.name }}</option>{% endfor %}
+            </select>
+            <div class="rcms-hint">{{ "Presets know their endpoints. Pick “Generic OpenID Connect” for anything else and add an issuer URL." | translate(locale=LANG) }}</div>
+        </div>
+        <div class="rcms-field">
+            <label>{{ "Button label" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+            <input type="text" name="label" required value="{{ provider.label | default(value='') }}" maxlength="150" placeholder="Sign in with Google">
+        </div>
+    </div>
+
+    <div class="rcms-field-row">
+        <div class="rcms-field">
+            <label>{{ "Slug" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+            <input type="text" name="slug" required value="{{ provider.slug | default(value='') }}" maxlength="64" placeholder="google" pattern="[A-Za-z0-9_-]+" autocomplete="off">
+            <div class="rcms-hint">{{ "Route + button id: <code>/login/sso/{slug}</code>. Letters, numbers, - and _." | translate(locale=LANG) | safe }}</div>
+        </div>
+        <div class="rcms-field">
+            <label>{{ "Sort order" | translate(locale=LANG) }}</label>
+            <input type="number" name="sort_order" value="{{ provider.sort_order | default(value=0) }}" min="0" max="9999">
+            <div class="rcms-hint">{{ "Low first." | translate(locale=LANG) }}</div>
+        </div>
+    </div>
+
+    <div class="rcms-field">
+        <label>{{ "Client ID" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+        <input type="text" name="client_id" required value="{{ provider.client_id | default(value='') }}" maxlength="255" autocomplete="off" placeholder="…apps.googleusercontent.com">
+    </div>
+
+    <div class="rcms-field">
+        <label>{{ "Client secret" | translate(locale=LANG) }}{% if mode == "new" %} <span class="rcms-req">*</span>{% endif %}</label>
+        <input type="password" name="client_secret"{% if mode == "new" %} required{% endif %} maxlength="512" autocomplete="new-password" placeholder="{% if provider.has_secret %}••••••••{% else %}the OAuth client secret{% endif %}">
+        <div class="rcms-hint">{{ "Stored <strong>encrypted at rest</strong> (never shown again). Sent to the provider only during the login handshake, over TLS." | translate(locale=LANG) | safe }}{% if mode == "edit" %} {{ "Leave blank to keep the current secret." | translate(locale=LANG) }}{% endif %}</div>
+    </div>
+
+    <div class="rcms-field" data-sso-issuer>
+        <label>{{ "Issuer URL" | translate(locale=LANG) }}</label>
+        <input type="url" name="issuer_url" value="{{ provider.issuer_url | default(value='') }}" maxlength="255" placeholder="https://accounts.example.com">
+        <div class="rcms-hint">{{ "Only for Generic OpenID Connect — endpoints are auto-discovered from <code>{issuer}/.well-known/openid-configuration</code>." | translate(locale=LANG) | safe }}</div>
+    </div>
+
+    <div class="rcms-field">
+        <label>{{ "Scopes" | translate(locale=LANG) }}</label>
+        <input type="text" name="scopes" value="{{ provider.scopes | default(value='') }}" maxlength="255" placeholder="openid email profile">
+        <div class="rcms-hint">{{ "Optional. Leave blank to use the provider’s defaults." | translate(locale=LANG) }}</div>
+    </div>
+
+    <div class="rcms-field rcms-checkbox-field">
+        <input type="checkbox" id="enabled" name="enabled"{% if provider.enabled %} checked{% endif %}>
+        <label for="enabled">{{ "Enabled (show on the login page)" | translate(locale=LANG) }}</label>
+    </div>
+
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:sso-providers:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">{% if mode == "new" %}{{ "Create provider" | translate(locale=LANG) }}{% else %}{{ "Save changes" | translate(locale=LANG) }}{% endif %}</button>
+    </div>
+</form>
+<script>
+    // Show the issuer field only for the generic OIDC kind.
+    (function () {
+        const kind = document.querySelector('[data-sso-kind]');
+        const issuer = document.querySelector('[data-sso-issuer]');
+        if (!kind || !issuer) return;
+        const sync = () => { issuer.style.display = kind.value === 'oidc' ? '' : 'none'; };
+        kind.addEventListener('change', sync);
+        sync();
+    })();
+</script>
+{% endblock %}

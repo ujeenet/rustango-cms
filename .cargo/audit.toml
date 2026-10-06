@@ -1,0 +1,23 @@
+# cargo audit policy. Every ignore names what pulls the crate in and why it
+# does not reach a default build. Re-check each on dependency updates; delete
+# an entry as soon as a fixed version is reachable.
+[advisories]
+ignore = [
+    # h2 0.3.27 (unbounded empty DATA frames) and rustls-webpki 0.101.7 (CRL
+    # panic, two name-constraint bypasses): only via the AWS SDK's legacy
+    # hyper 0.14 / rustls 0.21 client behind the optional `cache_cloudfront`
+    # feature. Tracked: #699.
+    "RUSTSEC-2026-0258",
+    "RUSTSEC-2026-0104",
+    "RUSTSEC-2026-0098",
+    "RUSTSEC-2026-0099",
+    # rsa 0.9.10 (Marvin timing attack): only via sqlx-mysql, i.e. the
+    # optional `mysql` feature. No patched release exists.
+    "RUSTSEC-2023-0071",
+    # rkyv 0.7.46: a lockfile entry for another target; no dependency edge
+    # reaches it on any feature set of this crate.
+    "RUSTSEC-2026-0235",
+    # paste 1.0.15 is unmaintained, not vulnerable: only via rav1e behind
+    # the optional `avif` feature.
+    "RUSTSEC-2024-0436",
+]

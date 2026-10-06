@@ -1,0 +1,76 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{% if edit_id %}{{ "Page type settings" | translate(locale=LANG) }}{% else %}{{ "New page type" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% block heading %}{% if edit_id %}{{ "Page type settings" | translate(locale=LANG) }}{% else %}{{ "New page type" | translate(locale=LANG) }}{% endif %}{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="rcms-breadcrumbs">
+    <a href="{{ list_url }}">{{ "Page types" | translate(locale=LANG) }}</a>
+    <span class="rcms-sep">›</span>
+    <span>{% if edit_id %}{{ "Page type settings" | translate(locale=LANG) }}{% else %}{{ "New page type" | translate(locale=LANG) }}{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+{% if error %}
+<div class="rcms-alert rcms-alert--error rcms-mb-3" role="alert">
+    <span class="material-symbols-rounded">error</span>
+    <div class="rcms-alert-body">{{ error }}</div>
+</div>
+{% endif %}
+
+<div class="rcms-card" style="max-width: 640px;">
+    {% if not edit_id %}
+    <p class="rcms-text-sm rcms-text-muted-2 rcms-mb-3">
+        {{ "Create a page type from the UI — no code needed. After creating it you'll design its body in the field builder, then Publish so editors can add pages of this type." | translate(locale=LANG) }}
+    </p>
+    {% endif %}
+    <form method="post" action="{% if edit_id %}{{ url(name='rcms-admin:page-types:edit', id=edit_id) }}{% else %}{{ url(name='rcms-admin:page-types:new') }}{% endif %}">
+        {{ csrf_token | csrf_input | safe }}
+        <div class="rcms-field">
+            <label for="pt-name">{{ "Name" | translate(locale=LANG) }}</label>
+            <input type="text" id="pt-name" name="verbose_name" value="{{ form_verbose_name | default(value="") }}" required
+                   placeholder="{{ "Landing page" | translate(locale=LANG) }}">
+        </div>
+        <div class="rcms-field">
+            <label for="pt-slug">{{ "Identifier" | translate(locale=LANG) }}</label>
+            <input type="text" id="pt-slug" name="type_name" value="{{ form_type_name | default(value="") }}"
+                   placeholder="landing_page" pattern="[a-zA-Z][a-zA-Z0-9_]*"{% if edit_id %} readonly{% endif %}>
+            <div class="rcms-text-xs rcms-text-muted">{{ "Stable identifier stored on each page. Letters, digits, underscores. Can't change later." | translate(locale=LANG) }}</div>
+        </div>
+        <div class="rcms-field">
+            <label for="pt-parents">{{ "Allowed parent types" | translate(locale=LANG) }}</label>
+            <input type="text" id="pt-parents" name="allowed_parents" value="{{ form_allowed_parents | default(value="") }}"
+                   placeholder="HomePage, SectionPage">
+            <div class="rcms-text-xs rcms-text-muted">{{ "Comma-separated type identifiers. Leave blank for no restriction." | translate(locale=LANG) }}</div>
+        </div>
+        <div class="rcms-field">
+            <label for="pt-children">{{ "Allowed child types" | translate(locale=LANG) }}</label>
+            <input type="text" id="pt-children" name="allowed_children" value="{{ form_allowed_children | default(value="") }}"
+                   placeholder="">
+            <div class="rcms-text-xs rcms-text-muted">{{ "Comma-separated type identifiers. Leave blank for no restriction." | translate(locale=LANG) }}</div>
+        </div>
+        <div class="rcms-field">
+            <label for="pt-workflow">{{ "Workflow" | translate(locale=LANG) }}</label>
+            <select id="pt-workflow" name="workflow">
+                <option value="">{{ "None — publish directly" | translate(locale=LANG) }}</option>
+                {% for w in workflows | default(value=[]) %}
+                    <option value="{{ w }}"{% if form_workflow | default(value="") == w %} selected{% endif %}>{{ w }}</option>
+                {% endfor %}
+            </select>
+            <div class="rcms-text-xs rcms-text-muted">{{ "Pages of this type go through this approval workflow before they are published. Manage workflows under Utilities → Workflows." | translate(locale=LANG) }}</div>
+        </div>
+        <div class="rcms-flex rcms-gap-2 rcms-mt-3">
+            {% if edit_id %}
+            <button type="submit" class="rcms-btn">
+                <span class="material-symbols-rounded sm">save</span> {{ "Save" | translate(locale=LANG) }}
+            </button>
+            {% else %}
+            <button type="submit" class="rcms-btn">
+                <span class="material-symbols-rounded sm">add</span> {{ "Create + design fields" | translate(locale=LANG) }}
+            </button>
+            {% endif %}
+            <a href="{{ list_url }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

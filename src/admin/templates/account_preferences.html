@@ -1,0 +1,361 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Preferences" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Preferences" | translate(locale=LANG) }}{% endblock %}
+
+{% block content %}
+{# #201 — Profile card: avatar + display name. Both are persisted on
+   rustango_users.data; the rest of this page is localStorage-only. #}
+<div class="rcms-card rcms-maxw-720 rcms-mb-4">
+    <h2 class="rcms-m-0 rcms-mb-1 rcms-text-lg">{{ "Profile" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint rcms-m-0 rcms-mb-3">
+        {{ "Your display name shows wherever the admin renders authorship (history rows, page edits, comments). The avatar shows in the sidebar + topbar." | translate(locale=LANG) }}
+    </p>
+    <form method="post"
+          action="{{ url(name='rcms-admin:account:profile') }}"
+          enctype="multipart/form-data">
+        {{ csrf_token | csrf_input | safe }}
+        <div class="rcms-flex rcms-gap-4 rcms-items-start">
+            <div class="rcms-flex-none">
+                {% if user_avatar_url %}
+                    <img src="{{ user_avatar_url }}" alt="{{ "Current avatar" | translate(locale=LANG) }}"
+                         class="rcms-rounded-circle rcms-block rcms-avatar">
+                {% else %}
+                    <div class="rcms-rounded-circle rcms-flex rcms-items-center rcms-text-2xl rcms-text-muted rcms-avatar rcms-avatar-fallback rcms-justify-center">
+                        {{ user_display_name | default(value="?") | truncate(length=1, end="") | upper }}
+                    </div>
+                {% endif %}
+            </div>
+            <div class="rcms-flex-1">
+                <div class="rcms-field rcms-mb-2">
+                    <label>{{ "Display name" | translate(locale=LANG) }}</label>
+                    <input type="text" name="display_name"
+                           value="{{ user_display_name | default(value='') }}"
+                           placeholder="{{ user_username | default(value='') }}">
+                    {% set uname = user_username | default(value='') | escape %}
+                    <div class="rcms-hint rcms-text-2xs">{{ "Leave blank to fall back to your username (<code>{name}</code>)." | translate(locale=LANG, name=uname) | safe }}</div>
+                </div>
+                <div class="rcms-field rcms-mb-2">
+                    <label>{{ "New avatar (PNG / JPEG / SVG)" | translate(locale=LANG) }}</label>
+                    <input type="file" name="avatar" accept="image/png,image/jpeg,image/svg+xml">
+                </div>
+            </div>
+        </div>
+        <div class="rcms-form-actions rcms-mt-3">
+            <button type="submit" class="rcms-btn">{{ "Save profile" | translate(locale=LANG) }}</button>
+        </div>
+    </form>
+
+    {# #202 — Change email. Submits to /cms-admin/me/email; when a
+       mailer is wired the change goes through a confirmation flow,
+       otherwise applies immediately with a banner explaining why. #}
+    <hr class="rcms-border-0 rcms-border-top rcms-mt-4 rcms-mb-4 rcms-mx-0">
+    <h3 class="rcms-m-0 rcms-mb-1 rcms-text-base">{{ "Email" | translate(locale=LANG) }}</h3>
+    <p class="rcms-hint rcms-m-0 rcms-mb-2 rcms-text-2xs">
+        {{ "Used for workflow / publish notifications." | translate(locale=LANG) }}
+        {% if not account_mailer_wired %}
+            <strong>{{ "Heads up:" | translate(locale=LANG) }}</strong> {{ "no mailer is configured, so changes apply immediately." | translate(locale=LANG) }}
+        {% endif %}
+    </p>
+    <form method="post" action="{{ url(name='rcms-admin:account:email') }}">
+        {{ csrf_token | csrf_input | safe }}
+        <div class="rcms-field rcms-mb-2">
+            <label>{{ "Current email" | translate(locale=LANG) }}</label>
+            <input type="email"
+                   value="{{ account_email | default(value='') }}"
+                   readonly
+                   class="rcms-bg-surface-container">
+        </div>
+        {% if account_pending_email %}
+            <p class="rcms-hint rcms-m-0 rcms-mb-2 rcms-text-2xs rcms-text-tertiary">
+                {% set pending_email = account_pending_email | escape %}
+                {{ "Pending confirmation to <code>{email}</code>. Click the link in that email within an hour to finalize." | translate(locale=LANG, email=pending_email) | safe }}
+            </p>
+        {% endif %}
+        <div class="rcms-field rcms-mb-2">
+            <label>{{ "New email" | translate(locale=LANG) }}</label>
+            <input type="email" name="new_email" required>
+        </div>
+        <div class="rcms-form-actions">
+            <button type="submit" class="rcms-btn rcms-btn-outlined">
+                {% if account_mailer_wired %}{{ "Send confirmation link" | translate(locale=LANG) }}{% else %}{{ "Change email" | translate(locale=LANG) }}{% endif %}
+            </button>
+        </div>
+    </form>
+
+    {# #202 — Change password. Verifies current pw, hashes new. #}
+    <hr class="rcms-border-0 rcms-border-top rcms-mt-4 rcms-mb-4 rcms-mx-0">
+    <h3 class="rcms-m-0 rcms-mb-1 rcms-text-base">{{ "Password" | translate(locale=LANG) }}</h3>
+    <p class="rcms-hint rcms-m-0 rcms-mb-2 rcms-text-2xs">
+        {{ "Minimum 12 characters. Old sessions on other devices sign out on next request." | translate(locale=LANG) }}
+    </p>
+    <form method="post" action="{{ url(name='rcms-admin:account:password') }}">
+        {{ csrf_token | csrf_input | safe }}
+        <div class="rcms-field rcms-mb-2">
+            <label>{{ "Current password" | translate(locale=LANG) }}</label>
+            <input type="password" name="current_password" autocomplete="current-password" required>
+        </div>
+        <div class="rcms-field rcms-mb-2">
+            <label>{{ "New password" | translate(locale=LANG) }}</label>
+            <input type="password" name="new_password" autocomplete="new-password" minlength="12" required>
+        </div>
+        <div class="rcms-field rcms-mb-2">
+            <label>{{ "Confirm new password" | translate(locale=LANG) }}</label>
+            <input type="password" name="new_password_confirm" autocomplete="new-password" minlength="12" required>
+        </div>
+        <div class="rcms-form-actions">
+            <button type="submit" class="rcms-btn rcms-btn-outlined">{{ "Change password" | translate(locale=LANG) }}</button>
+        </div>
+    </form>
+</div>
+
+{# #526 — admin UI language. Durable (stored on the user, follows them across
+   devices), distinct from the browser-local appearance prefs below. #}
+{% if ui_locales and ui_locales | length > 1 %}
+<div class="rcms-card rcms-maxw-720 rcms-mb-4">
+    <h2 class="rcms-m-0 rcms-mb-1 rcms-text-lg">{{ "Language" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint rcms-m-0 rcms-mb-3">{{ "The language of the admin interface. Saved to your account, so it follows you to other devices." | translate(locale=LANG) }}</p>
+    <form method="post" action="{{ url(name='rcms-admin:account:language') }}">
+        {{ csrf_token | csrf_input | safe }}
+        <div class="rcms-form-group">
+            <label for="account-language">{{ "Interface language" | translate(locale=LANG) }}</label>
+            <select id="account-language" name="lang">
+                {% for l in ui_locales %}
+                <option value="{{ l.code }}"{% if l.code == LANG %} selected{% endif %}>{{ l.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="rcms-form-actions">
+            <button type="submit" class="rcms-btn rcms-btn-outlined">{{ "Save language" | translate(locale=LANG) }}</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<div class="rcms-card rcms-maxw-720">
+    <p class="rcms-hint rcms-mt-0">
+        {{ "These preferences live in your browser. They follow you across pages on this site but stay on this device — sign in on another machine and you'll set them again there." | translate(locale=LANG) }}
+    </p>
+
+    <h2 class="rcms-mx-0 rcms-mb-1 rcms-text-lg rcms-mt-6">{{ "Appearance" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint rcms-m-0 rcms-mb-3">{{ "Pick light, dark, or follow the system setting." | translate(locale=LANG) }}</p>
+    <div class="rcms-mode-toggle" role="radiogroup" aria-label="{{ "Theme mode" | translate(locale=LANG) }}">
+        <button type="button" class="rcms-mode-toggle-btn" data-mode="light" role="radio" aria-checked="false" title="{{ "Light" | translate(locale=LANG) }}">
+            <span class="material-symbols-rounded">light_mode</span>
+            <span>{{ "Light" | translate(locale=LANG) }}</span>
+        </button>
+        <button type="button" class="rcms-mode-toggle-btn" data-mode="system" role="radio" aria-checked="false" title="{{ "System" | translate(locale=LANG) }}">
+            <span class="material-symbols-rounded">contrast</span>
+            <span>{{ "System" | translate(locale=LANG) }}</span>
+        </button>
+        <button type="button" class="rcms-mode-toggle-btn" data-mode="dark" role="radio" aria-checked="false" title="{{ "Dark" | translate(locale=LANG) }}">
+            <span class="material-symbols-rounded">dark_mode</span>
+            <span>{{ "Dark" | translate(locale=LANG) }}</span>
+        </button>
+    </div>
+
+    <h2 class="rcms-mx-0 rcms-mb-1 rcms-text-lg rcms-mt-6">{{ "Text size" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint rcms-m-0 rcms-mb-3">{{ "Scales every text size across the admin chrome." | translate(locale=LANG) }}</p>
+    <div class="rcms-text-scale-toggle" role="radiogroup" aria-label="{{ "Text size" | translate(locale=LANG) }}">
+        <button type="button" class="rcms-mode-toggle-btn rcms-text-scale-btn" data-text-scale="s" role="radio" aria-checked="false" title="{{ "Small text" | translate(locale=LANG) }}">
+            <span class="rcms-text-2xs rcms-fw-semibold">A</span>
+            <span>{{ "Small" | translate(locale=LANG) }}</span>
+        </button>
+        <button type="button" class="rcms-mode-toggle-btn rcms-text-scale-btn" data-text-scale="m" role="radio" aria-checked="false" title="{{ "Default text size" | translate(locale=LANG) }}">
+            <span class="rcms-text-sm rcms-fw-semibold">A</span>
+            <span>{{ "Default" | translate(locale=LANG) }}</span>
+        </button>
+        <button type="button" class="rcms-mode-toggle-btn rcms-text-scale-btn" data-text-scale="l" role="radio" aria-checked="false" title="{{ "Large text" | translate(locale=LANG) }}">
+            <span class="rcms-fw-semibold" style="font-size: 15px;">A</span>
+            <span>{{ "Large" | translate(locale=LANG) }}</span>
+        </button>
+        <button type="button" class="rcms-mode-toggle-btn rcms-text-scale-btn" data-text-scale="xl" role="radio" aria-checked="false" title="{{ "Extra large text" | translate(locale=LANG) }}">
+            <span class="rcms-fw-semibold" style="font-size: 17px;">A</span>
+            <span>{{ "XL" | translate(locale=LANG) }}</span>
+        </button>
+    </div>
+
+    <h2 class="rcms-mx-0 rcms-mb-1 rcms-text-lg rcms-mt-6">{{ "Accessibility" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint rcms-m-0 rcms-mb-3">{{ "Stronger borders, opaque focus rings, denser surface separation." | translate(locale=LANG) }}</p>
+    <button type="button" class="rcms-btn rcms-btn-outlined" data-high-contrast-toggle>
+        <span class="material-symbols-rounded">contrast</span>
+        <span data-high-contrast-label style="margin-left: 6px;">{{ "High contrast" | translate(locale=LANG) }}</span>
+    </button>
+
+    {# #170 / #174 / #274 — admin theme picker. Lives on Preferences (was
+       split across Settings + page editor; both surfaces were
+       removed in #174). The Public-default picker is gone entirely;
+       host crates that want to theme the public site do so via
+       their own integration. #274 — tiles submit via fetch() so the
+       colour change applies live without a page reload; the form
+       wrapper is still a real <form> so picker degrades to redirect
+       behavior with JS off. #}
+    {% if themes and themes | length > 0 %}
+        <h2 class="rcms-mx-0 rcms-mb-1 rcms-text-lg rcms-mt-6">{{ "This admin" | translate(locale=LANG) }}</h2>
+        <p class="rcms-hint rcms-m-0 rcms-mb-1">
+            {{ "How the CMS admin itself looks — the page you're reading right now." | translate(locale=LANG) }}
+        </p>
+        <p class="rcms-hint rcms-m-0 rcms-mb-3 rcms-text-2xs">
+            {{ "Tenant-wide: every admin user in this tenant sees the picked theme. Most themes share the Material 3 layout so the change is palette-only; the sidebar, links, and accent buttons shift colour the moment you pick a tile." | translate(locale=LANG) }}
+            {% set active_theme_name = "" %}
+            {% for t in themes %}{% if t.is_admin_default %}{% set_global active_theme_name = t.name %}{% endif %}{% endfor %}
+            {% if active_theme_name %}{{ "Currently:" | translate(locale=LANG) }} <strong data-active-theme-name>{{ active_theme_name }}</strong>.{% endif %}
+        </p>
+        <div class="rcms-theme-picker" data-theme-picker>
+            {% for t in themes %}
+                <form method="post" action="{{ url(name='rcms-admin:settings:theme') }}" class="rcms-theme-picker-form" data-theme-form data-theme-id="{{ t.id }}" data-theme-name="{{ t.name }}">
+                    {{ csrf_token | csrf_input | safe }}
+                    <input type="hidden" name="surface" value="admin">
+                    <input type="hidden" name="theme_id" value="{{ t.id }}">
+                    <button type="submit" class="rcms-theme-picker-tile{% if t.is_admin_default %} rcms-theme-picker-tile--active{% endif %}" title="{{ "Switch this admin to" | translate(locale=LANG) }} {{ t.name }}">
+                        <div class="rcms-theme-picker-swatch-grid">
+                            <span style="background: {{ t.color_bg }};"></span>
+                            <span style="background: {{ t.color_surface }};"></span>
+                            <span style="background: {{ t.color_text_primary }};"></span>
+                            <span style="background: {{ t.color_link }};"></span>
+                        </div>
+                        <div class="rcms-theme-picker-name">{{ t.name }}</div>
+                        <div class="rcms-theme-picker-badge"{% if not t.is_admin_default %} hidden{% endif %}>{{ "Active" | translate(locale=LANG) }}</div>
+                    </button>
+                </form>
+            {% endfor %}
+        </div>
+        <script>
+          // #274 — AJAX live-apply for the theme picker. Intercepts the
+          // tile form submit, posts to the same endpoint with an
+          // Accept: application/json header, then swaps the
+          // `<style data-rcms-theme>` block emit_css() rendered into
+          // <head> at first paint. No reload — every `--md-sys-color-*`
+          // re-resolves in place because each component reads through
+          // the CSS variable layer (see emit_css's MD3 bridge).
+          (function () {
+            const picker = document.querySelector("[data-theme-picker]");
+            if (!picker) return;
+            picker.addEventListener("submit", (ev) => {
+              const form = ev.target.closest("[data-theme-form]");
+              if (!form) return;
+              ev.preventDefault();
+              // Use URLSearchParams (not FormData) so the body lands as
+              // `application/x-www-form-urlencoded` — the rustango CSRF
+              // middleware only reads the `_csrf` form field from
+              // urlencoded bodies. FormData would send multipart, the
+              // middleware would see neither header nor urlencoded body,
+              // and reject with 403.
+              const body = new URLSearchParams();
+              [...new FormData(form)].forEach(([k, v]) => body.append(k, v));
+              fetch(form.action, {
+                method: "POST",
+                headers: {
+                  "Accept": "application/json",
+                  "X-Requested-With": "XMLHttpRequest",
+                  "Content-Type": "application/x-www-form-urlencoded",
+                },
+                body,
+                credentials: "same-origin",
+              })
+                .then((r) => r.ok ? r.json() : Promise.reject(new Error("HTTP " + r.status)))
+                .then((data) => {
+                  if (!data || !data.ok) throw new Error("Theme switch rejected");
+                  // Swap the live <style data-rcms-theme> block. The
+                  // server sent the FULL <style…>…</style> wrapper, so
+                  // parse it out of a transient container before mounting.
+                  const existing = document.querySelector("style[data-rcms-theme]");
+                  const holder = document.createElement("div");
+                  holder.innerHTML = data.css;
+                  const fresh = holder.querySelector("style[data-rcms-theme]");
+                  if (existing && fresh) {
+                    existing.replaceWith(fresh);
+                  } else if (fresh) {
+                    document.head.appendChild(fresh);
+                  }
+                  // Reflect the new active theme on <html> so
+                  // `.theme-<slug>` overrides re-target correctly.
+                  if (data.slug) {
+                    const root = document.documentElement;
+                    root.className = root.className
+                      .split(" ")
+                      .filter((c) => !c.startsWith("theme-"))
+                      .concat([`theme-${data.slug}`])
+                      .join(" ")
+                      .trim();
+                    root.setAttribute("data-theme-name", data.slug);
+                  }
+                  // Update picker state: active tile + label.
+                  picker.querySelectorAll("[data-theme-form]").forEach((f) => {
+                    const isActive = String(f.dataset.themeId) === String(data.id);
+                    const tile = f.querySelector(".rcms-theme-picker-tile");
+                    if (tile) tile.classList.toggle("rcms-theme-picker-tile--active", isActive);
+                    const badge = f.querySelector(".rcms-theme-picker-badge");
+                    if (badge) badge.hidden = !isActive;
+                  });
+                  const label = document.querySelector("[data-active-theme-name]");
+                  if (label && data.name) label.textContent = data.name;
+                  if (window.rcmsToast) {
+                    window.rcmsToast({ level: "success", body: data.message || "Theme switched." });
+                  }
+                })
+                .catch((err) => {
+                  // Fall back to the no-JS path — let the form submit
+                  // normally so the user still gets a redirect + flash
+                  // even if our fetch went sideways.
+                  if (window.rcmsToast) {
+                    window.rcmsToast({ level: "error", body: "Couldn't switch live — reloading." });
+                  }
+                  form.submit();
+                });
+            });
+          })();
+        </script>
+    {% endif %}
+
+    {# #197 — per-user notification preferences. One checkbox per
+       category; rows default to checked when no preference row
+       exists (opt-out semantics). Form POSTs to /cms-admin/me/notifications. #}
+    {% if notification_prefs and notification_prefs | length > 0 %}
+        <h2 class="rcms-mx-0 rcms-mb-1 rcms-text-lg rcms-mt-8">{{ "Notifications" | translate(locale=LANG) }}</h2>
+        <p class="rcms-hint rcms-m-0 rcms-mb-3">
+            {{ "Which notifications you receive by email. New users get every category until they un-check them here." | translate(locale=LANG) }}
+        </p>
+        <form method="post" action="{{ url(name='rcms-admin:account:notifications') }}" class="rcms-notification-prefs">
+            {{ csrf_token | csrf_input | safe }}
+            <ul class="rcms-notification-pref-list rcms-list-none rcms-p-0 rcms-m-0">
+                {% for p in notification_prefs %}
+                    <li class="rcms-flex rcms-items-start rcms-gap-3 rcms-py-2 rcms-px-0 rcms-border-bottom">
+                        <input type="checkbox"
+                               id="pref_{{ p.kind }}"
+                               name="kind_{{ p.kind }}"
+                               {% if p.enabled %}checked{% endif %}
+                               class="rcms-mt-1">
+                        <label for="pref_{{ p.kind }}" class="rcms-flex-1 rcms-cursor-pointer">
+                            <strong>{{ p.label }}</strong>
+                            <div class="rcms-hint" style="margin-top: 2px;">{{ p.hint }}</div>
+                        </label>
+                    </li>
+                {% endfor %}
+            </ul>
+            <div class="rcms-form-actions rcms-mt-3">
+                <button type="submit" class="rcms-btn">{{ "Save notification preferences" | translate(locale=LANG) }}</button>
+            </div>
+        </form>
+    {% endif %}
+
+    {# #128 — plugin-contributed account settings panels
+       (`register_account_settings_panel!`). Each panel renders its
+       own pre-rendered HTML fragment below the built-in cards. #}
+    {% if account_panels and account_panels | length > 0 %}
+        {% for p in account_panels %}
+            <section class="rcms-card rcms-account-plugin-panel">
+                <h2 class="rcms-account-plugin-panel-heading">
+                    <span class="material-symbols-rounded sm">{{ p.icon | default(value="extension") }}</span>
+                    {{ p.label }}
+                </h2>
+                {{ p.html | safe }}
+            </section>
+        {% endfor %}
+    {% endif %}
+</div>
+
+{# #587 — MCP keys: self-service create / list / revoke. #}
+{% set mcp_create_url = url(name='rcms-admin:account:mcp-key-create') %}
+{% set mcp_revoke_base = "/cms-admin/me/mcp-keys" %}
+{% include "rcms_admin/_mcp_keys_card.html" %}
+{% endblock %}

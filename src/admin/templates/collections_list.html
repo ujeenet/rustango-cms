@@ -1,0 +1,132 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Collections — CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Media collections" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:media:list') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "Media" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block content %}
+<div class="rcms-card rcms-mb-4">
+    <h2 class="rcms-m-0 rcms-mb-2 rcms-text-lg">{{ "New collection" | translate(locale=LANG) }}</h2>
+    <form method="post" action="{{ url(name='rcms-admin:media:collections:new') }}" class="rcms-field-row rcms-flex-wrap">
+        {{ csrf_token | csrf_input | safe }}
+        <div class="rcms-field rcms-minw-180">
+            <label>{{ "Name" | translate(locale=LANG) }}</label>
+            <input type="text" name="name" placeholder="{{ "Brand assets" | translate(locale=LANG) }}" required maxlength="100">
+        </div>
+        <div class="rcms-field rcms-minw-160">
+            <label>{{ "Parent" | translate(locale=LANG) }}</label>
+            <select name="parent_id">
+                <option value="">{{ "— top-level —" | translate(locale=LANG) }}</option>
+                {% for c in collections %}
+                    <option value="{{ c.id }}">
+                        {% for _ in range(end=c.depth) %}&nbsp;&nbsp;{% endfor %}{{ c.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="rcms-field rcms-w-100">
+            <label>{{ "Sort order" | translate(locale=LANG) }}</label>
+            <input type="number" name="sort_order" value="100">
+        </div>
+        <button type="submit" class="rcms-btn">{{ "+ Create" | translate(locale=LANG) }}</button>
+    </form>
+</div>
+
+{% if collections | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "No collections yet. Create one above to start grouping media." | translate(locale=LANG) }}</p>
+    </div>
+{% else %}
+    {# The table is the surface here, as on every other list page. A
+       wrapping card was left behind empty by an earlier refactor, with
+       the table orphaned outside it and flattened by hand. #}
+    <div class="rcms-table-wrap">
+        <table class="rcms-data">
+            <thead>
+                <tr>
+                    <th>{{ "Name" | translate(locale=LANG) }}</th>
+                    <th>{{ "Parent" | translate(locale=LANG) }}</th>
+                    <th>{{ "Sort" | translate(locale=LANG) }}</th>
+                    <th>{{ "Items" | translate(locale=LANG) }}</th>
+                    <th>{{ "Created" | translate(locale=LANG) }}</th>
+                    <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for c in collections %}
+                <tr>
+                    <td>
+                        {% for _ in range(end=c.depth) %}<span class="rcms-text-muted-2">↳&nbsp;</span>{% endfor %}
+                        <strong>{{ c.name }}</strong>
+                    </td>
+                    <td>
+                        {% if c.parent_id %}
+                            {% if c.parent_name %}{{ c.parent_name }}{% else %}<code>#{{ c.parent_id }}</code>{% endif %}
+                        {% else %}
+                            <span class="rcms-hint">{{ "top-level" | translate(locale=LANG) }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ c.sort_order }}</td>
+                    <td>
+                        {% if c.media_count > 0 %}
+                            <a href="{{ url(name='rcms-admin:media:list') }}?collection={{ c.id }}">{{ c.media_count }}</a>
+                        {% else %}
+                            <span class="rcms-hint">0</span>
+                        {% endif %}
+                    </td>
+                    <td class="rcms-text-muted rcms-text-xs">
+                        {% if c.created_at %}
+                            <time data-utc="{{ c.created_at | date(format='%+') }}">{{ c.created_at | naturaltime }}</time>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td class="rcms-actions">
+                        <details class="rcms-kebab-menu rcms-inline-block">
+                            <summary class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit ▾" | translate(locale=LANG) }}</summary>
+                            <div class="rcms-kebab-panel rcms-p-3 rcms-minw-280">
+                                <form method="post" action="{{ url(name='rcms-admin:media:collections:edit', id=c.id) }}">
+                                    {{ csrf_token | csrf_input | safe }}
+                                    <div class="rcms-field rcms-mb-2">
+                                        <label class="rcms-text-2xs">{{ "Name" | translate(locale=LANG) }}</label>
+                                        <input type="text" name="name" value="{{ c.name }}" required>
+                                    </div>
+                                    <div class="rcms-field rcms-mb-2">
+                                        <label class="rcms-text-2xs">{{ "Parent" | translate(locale=LANG) }}</label>
+                                        <select name="parent_id">
+                                            <option value="">{{ "— top-level —" | translate(locale=LANG) }}</option>
+                                            {% for o in collections %}
+                                                {% if o.id != c.id %}
+                                                    <option value="{{ o.id }}"{% if o.id == c.parent_id %} selected{% endif %}>
+                                                        {% for _ in range(end=o.depth) %}&nbsp;&nbsp;{% endfor %}{{ o.name }}
+                                                    </option>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="rcms-field rcms-mb-2">
+                                        <label class="rcms-text-2xs">{{ "Sort order" | translate(locale=LANG) }}</label>
+                                        <input type="number" name="sort_order" value="{{ c.sort_order }}">
+                                    </div>
+                                    <button type="submit" class="rcms-btn rcms-btn-small">{{ "Save" | translate(locale=LANG) }}</button>
+                                </form>
+                            </div>
+                        </details>
+                        <a href="{{ url(name='rcms-admin:media:collection-permissions', id=c.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small" title="{{ "Per-collection permissions (#19)" | translate(locale=LANG) }}">
+                            <span class="material-symbols-rounded sm">admin_panel_settings</span>
+                        </a>
+                        <form method="post" action="{{ url(name='rcms-admin:media:collections:delete', id=c.id) }}"
+                              onsubmit="return confirm('Delete `{{ c.name }}`? Children re-parent + media moves to Uncategorized.');">
+                            {{ csrf_token | csrf_input | safe }}
+                            <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">{{ "Delete" | translate(locale=LANG) }}</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,43 @@
+{#- Template for the Product page type made in the admin (tutorial chapter
+    4). Choose it on the page type's Template screen. It reads the fields
+    built there: price, glaze, photo, description, and the "order" zone. -#}
+{% extends "_base.html" %}
+{#- Words written here (not typed in the admin) are translated with a
+    `LANG` check — see the "A second language" chapter. -#}
+{% block content %}
+<nav class="mb-8 text-sm text-ink/70">
+    {% for a in ancestors %}<a href="{{ a | page_href }}" class="hover:text-ink">{{ a.title }}</a> <span class="mx-1">/</span> {% endfor %}<span class="text-ink/80">{{ page.title }}</span>
+</nav>
+<article class="grid gap-10 md:grid-cols-2 md:gap-16">
+    <div class="self-start overflow-hidden rounded-3xl bg-clay-100 md:sticky md:top-28">
+        {% if builder.photo %}<img src="{{ rcms_image_url(media_id=builder.photo, filter="fill-1200x1200") }}" alt="{{ page.title }}" class="aspect-square w-full object-cover">{% else %}<div class="aspect-square"></div>{% endif %}
+    </div>
+    <div class="md:pt-6">
+        <p class="text-sm uppercase tracking-[0.2em] text-ink/70">{% for c in page.categories %}{{ c.name }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+        <h1 class="mt-3 font-display text-5xl leading-tight text-ink">{{ page.title }}</h1>
+        {% if builder.price %}<p class="mt-4 text-2xl font-medium text-[color:var(--accent)]">€{% if builder.price | round == builder.price %}{{ builder.price | int }}{% else %}{{ builder.price | round(precision=2) }}{% endif %}</p>{% endif %}
+        {% if builder.glaze %}
+        <dl class="mt-8 border-y border-clay-100 py-4 text-sm">
+            <div class="flex justify-between"><dt class="text-ink/70">{% if LANG == "fr" %}Émail{% else %}Glaze{% endif %}</dt><dd class="font-medium">{{ builder_labels.glaze | default(value=builder.glaze) }}</dd></div>
+        </dl>
+        {% endif %}
+        {% if builder.description %}<div class="prose-shop mt-6">{{ builder.description | safe }}</div>{% endif %}
+        {#- The "shipping" Library element — the same text the About page shows.
+            Edit it once in the Library and every product page follows. -#}
+        {% set shipping = cms_snippet(slug="shipping", body=true) %}
+        {% if shipping %}
+        <div class="mt-8 rounded-2xl bg-white p-5 text-sm leading-relaxed text-ink/75 ring-1 ring-clay-100">
+            <p class="mb-2 font-medium text-ink">{% if LANG == "fr" %}Livraison{% else %}Shipping{% endif %}</p>
+            <div class="prose-shop">{{ shipping | safe }}</div>
+        </div>
+        {% endif %}
+        {% set order = _stream_html['order'] | default(value="") %}
+        {% if order %}
+        <section class="mt-10 rounded-3xl bg-white p-6 ring-1 ring-clay-100 md:p-8">
+            <h2 class="font-display text-2xl text-ink">{% if LANG == "fr" %}Commander cette pièce{% else %}Order this piece{% endif %}</h2>
+            <div class="prose-shop mt-4">{{ order | safe }}</div>
+        </section>
+        {% endif %}
+    </div>
+</article>
+{% endblock %}

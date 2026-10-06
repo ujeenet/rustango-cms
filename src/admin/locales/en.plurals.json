@@ -1,0 +1,82 @@
+{
+  "Archived {count} page(s).": {
+    "one": "Archived {count} page.",
+    "other": "Archived {count} pages."
+  },
+  "Can't delete “{title}” — it has {count} child page(s). Delete or move them first.": {
+    "one": "Can't delete “{title}” — it has {count} child page. Delete or move it first.",
+    "other": "Can't delete “{title}” — it has {count} child pages. Delete or move them first."
+  },
+  "Can't delete “{title}” — {count} page(s) have history under it. Toggle Active off instead.": {
+    "one": "Can't delete “{title}” — {count} page has history under it. Toggle Active off instead.",
+    "other": "Can't delete “{title}” — {count} pages have history under it. Toggle Active off instead."
+  },
+  "Deleted {count} page(s).": {
+    "one": "Deleted {count} page.",
+    "other": "Deleted {count} pages."
+  },
+  "Deleted {count} unused media item(s).": {
+    "one": "Deleted {count} unused media item.",
+    "other": "Deleted {count} unused media items."
+  },
+  "Deleted “{title}”. Promoted {count} alias(es) to standalone page(s) with the source's last content.": {
+    "one": "Deleted “{title}”. Promoted {count} alias to a standalone page with the source's last content.",
+    "other": "Deleted “{title}”. Promoted {count} aliases to standalone pages with the source's last content."
+  },
+  "Moved {count} item(s) {dest}.": {
+    "one": "Moved {count} item {dest}.",
+    "other": "Moved {count} items {dest}."
+  },
+  "Moved {count} page(s) under “{parent}”.": {
+    "one": "Moved {count} page under “{parent}”.",
+    "other": "Moved {count} pages under “{parent}”."
+  },
+  "Published {count} page(s) ({already} already in the target state).": {
+    "one": "Published {count} page ({already} already in the target state).",
+    "other": "Published {count} pages ({already} already in the target state)."
+  },
+  "Saved {count} pinned result(s).": {
+    "one": "Saved {count} pinned result.",
+    "other": "Saved {count} pinned results."
+  },
+  "Saved “{title}”. Auto-created {count} redirect(s) from the old URL(s).": {
+    "one": "Saved “{title}”. Auto-created {count} redirect from the old URL.",
+    "other": "Saved “{title}”. Auto-created {count} redirects from the old URLs."
+  },
+  "Seeded “{name}” with {count} item(s) from pages marked Show in menus.": {
+    "one": "Seeded “{name}” with {count} item from pages marked Show in menus.",
+    "other": "Seeded “{name}” with {count} items from pages marked Show in menus."
+  },
+  "Unarchived {count} page(s).": {
+    "one": "Unarchived {count} page.",
+    "other": "Unarchived {count} pages."
+  },
+  "Unpublished {count} page(s) ({already} already in the target state).": {
+    "one": "Unpublished {count} page ({already} already in the target state).",
+    "other": "Unpublished {count} pages ({already} already in the target state)."
+  },
+  "{action}: touched {count} row(s) in `{type_name}`.": {
+    "one": "{action}: touched {count} row in `{type_name}`.",
+    "other": "{action}: touched {count} rows in `{type_name}`."
+  },
+  "{count} extra permission(s) preserved on save": {
+    "one": "{count} extra permission preserved on save",
+    "other": "{count} extra permissions preserved on save"
+  },
+  "{count} field(s)": {
+    "one": "{count} field",
+    "other": "{count} fields"
+  },
+  "{count} page(s)": {
+    "one": "{count} page",
+    "other": "{count} pages"
+  },
+  "{count} revision(s)": {
+    "one": "{count} revision",
+    "other": "{count} revisions"
+  },
+  "{count} row(s).": {
+    "one": "{count} row.",
+    "other": "{count} rows."
+  }
+}

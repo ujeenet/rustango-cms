@@ -1,0 +1,24 @@
+{#- Wagtail TypedTableBlock parity. Iterates `value.rows` (an array
+    of `{type, id, value}` envelopes via `BlockField::Repeat`),
+    rendering each as a <tr> through the row block's own template.
+    The default row block ships three columns (label / value /
+    notes); hosts subclass with their own row block + override this
+    template to match. -#}
+<figure class="rcms-block-typed-table">
+<table>
+    <tbody>
+        {%- for entry in value.rows | default(value=[]) -%}
+            {%- if entry.type == "typed_table_row" and entry.value -%}
+                <tr class="rcms-block-typed-table-row">
+                    <td>{{ entry.value.label | default(value="") }}</td>
+                    <td>{{ entry.value.value | default(value="") }}</td>
+                    <td>{{ entry.value.notes | default(value="") }}</td>
+                </tr>
+            {%- endif -%}
+        {%- endfor -%}
+    </tbody>
+</table>
+{%- if value.caption -%}
+    <figcaption>{{ value.caption }}</figcaption>
+{%- endif -%}
+</figure>

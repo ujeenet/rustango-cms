@@ -1,0 +1,143 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Sites" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}<h1>{{ "Sites" | translate(locale=LANG) }}</h1>{% endblock %}
+{% block content %}
+<div class="rcms-card-stack">
+
+  <div class="rcms-card rcms-maxw-900">
+    <h2 class="rcms-m-0 rcms-mb-1 rcms-text-lg">{{ "Hostnames" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint rcms-m-0 rcms-mb-3 rcms-text-2xs">
+      {{ "Each hostname serves one page. Visitors see that page at / and its children at the top level, so a section of the tree becomes a site of its own rather than a subfolder." | translate(locale=LANG) }}
+    </p>
+
+    <div class="rcms-table-wrap rcms-mb-3">
+      <table class="rcms-data">
+        <thead>
+          <tr>
+            <th>{{ "Hostname" | translate(locale=LANG) }}</th>
+            <th>{{ "Serves" | translate(locale=LANG) }}</th>
+            <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for h in hosts %}
+          <tr>
+            <td>
+              <strong>{{ h.hostname }}</strong>
+              {# The base host has no registry row of its own, so there is
+                 nothing to remove — saying so beats a button that always
+                 fails. #}
+              {% if h.is_base %}<span class="rcms-tag rcms-tag--small">{{ "base" | translate(locale=LANG) }}</span>{% endif %}
+              {% if h.needs_approval %}<span class="rcms-tag rcms-tag--small draft">{{ "awaiting operator approval" | translate(locale=LANG) }}</span>
+              {% elif not h.enabled %}<span class="rcms-tag rcms-tag--small draft">{{ "disabled" | translate(locale=LANG) }}</span>{% endif %}
+              {% if h.missing %}
+              <div class="rcms-hint rcms-text-2xs">{{ "Mapped to a page that no longer exists — serving the default root." | translate(locale=LANG) }}</div>
+              {% endif %}
+            </td>
+            <td>
+              {# Any page, not only a root — the prefix is just that page's
+                 url_path, so a campaign section works as well as a root.
+                 A list of every page would not fit a <select>, so this is
+                 the shared page chooser (same data-chooser contract as the
+                 page editor's widgets). Empty means the conventional
+                 root, which is what an unmapped host already serves. #}
+              <form method="post" action="/cms-admin/sites/root" class="rcms-flex rcms-items-center rcms-gap-2">
+                {{ csrf_token | csrf_input | safe }}
+                <input type="hidden" name="hostname" value="{{ h.hostname }}">
+                <div class="rcms-chooser" data-chooser data-chooser-kind="page">
+                  <input type="hidden" name="root_page_id" data-chooser-input
+                         value="{% if h.root_page_id %}{{ h.root_page_id }}{% endif %}">
+                  <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small" data-chooser-open>
+                    <span class="material-symbols-rounded sm">article</span>
+                    <span data-chooser-label class="rcms-truncate rcms-maxw-240">
+                      {%- if h.root_title -%}{{ h.root_title }}
+                      {%- elif h.root_page_id -%}#{{ h.root_page_id }}
+                      {%- else -%}{{ "Default root" | translate(locale=LANG) }}{%- endif -%}
+                    </span>
+                  </button>
+                  {% if h.root_page_id %}
+                  <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-chooser-clear>{{ "Clear" | translate(locale=LANG) }}</button>
+                  {% endif %}
+                </div>
+                <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Save" | translate(locale=LANG) }}</button>
+              </form>
+            </td>
+            <td class="rcms-actions">
+              {% if not h.is_base %}
+              {% if not h.needs_approval %}
+              <form method="post" action="/cms-admin/sites/toggle" class="rcms-inline">
+                {{ csrf_token | csrf_input | safe }}
+                <input type="hidden" name="hostname" value="{{ h.hostname }}">
+                <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+                  {% if h.enabled %}{{ "Disable" | translate(locale=LANG) }}{% else %}{{ "Enable" | translate(locale=LANG) }}{% endif %}
+                </button>
+              </form>
+              {% endif %}
+              <form method="post" action="/cms-admin/sites/delete" class="rcms-inline"
+                    onsubmit="return confirm({{ "Stop serving this hostname?" | translate(locale=LANG) | json_encode() }});">
+                {{ csrf_token | csrf_input | safe }}
+                <input type="hidden" name="hostname" value="{{ h.hostname }}">
+                <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Remove" | translate(locale=LANG) }}</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h3 class="rcms-text-sm rcms-mb-2">{{ "Add a hostname" | translate(locale=LANG) }}</h3>
+    <form method="post" action="/cms-admin/sites/new">
+      {{ csrf_token | csrf_input | safe }}
+      <div class="rcms-field rcms-mb-2">
+        <label for="site-hostname">{{ "Hostname" | translate(locale=LANG) }}</label>
+        <input type="text" id="site-hostname" name="hostname" maxlength="255" required
+               placeholder="{{ "e.g. shop.example.com" | translate(locale=LANG) }}">
+        <p class="rcms-hint rcms-text-2xs">{{ "Bare host only — no scheme, port or path. Point its DNS here as well." | translate(locale=LANG) }}</p>
+      </div>
+      <div class="rcms-field rcms-mb-2">
+        <label>{{ "Root page" | translate(locale=LANG) }}</label>
+        <div class="rcms-chooser" data-chooser data-chooser-kind="page">
+          <input type="hidden" name="root_page_id" value="" data-chooser-input>
+          <button type="button" class="rcms-btn rcms-btn-outlined" data-chooser-open>
+            <span class="material-symbols-rounded sm">article</span>
+            <span data-chooser-label>{{ "Default root" | translate(locale=LANG) }}</span>
+          </button>
+        </div>
+        <p class="rcms-hint rcms-text-2xs">{{ "Any page, not only a root — the hostname serves that page at / and its children below it. Leave empty to serve the default root." | translate(locale=LANG) }}</p>
+      </div>
+      <button type="submit" class="rcms-btn rcms-btn-filled">{{ "Add hostname" | translate(locale=LANG) }}</button>
+    </form>
+  </div>
+
+  {% if orphans and orphans | length > 0 %}
+  <div class="rcms-card rcms-maxw-900">
+    <h2 class="rcms-m-0 rcms-mb-1 rcms-text-lg">{{ "Unrouted mappings" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint rcms-m-0 rcms-mb-3 rcms-text-2xs">
+      {{ "These hostnames have a root mapping but no longer reach this site, so the mapping does nothing." | translate(locale=LANG) }}
+    </p>
+    <div class="rcms-table-wrap">
+      <table class="rcms-data">
+        <tbody>
+          {% for o in orphans %}
+          <tr>
+            <td><strong>{{ o.hostname }}</strong></td>
+            <td>{% if o.root_title %}{{ o.root_title }}{% else %}<span class="rcms-hint">{{ "missing page" | translate(locale=LANG) }}</span>{% endif %}</td>
+            <td class="rcms-actions">
+              <form method="post" action="/cms-admin/sites/delete" class="rcms-inline">
+                {{ csrf_token | csrf_input | safe }}
+                <input type="hidden" name="hostname" value="{{ o.hostname }}">
+                <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Remove" | translate(locale=LANG) }}</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

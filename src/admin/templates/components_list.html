@@ -1,0 +1,72 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Components" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Components" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ new_url }}" class="rcms-btn">
+        <span class="material-symbols-rounded sm">add</span> {{ "New component" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block description %}
+    {{ "Reusable field groups you can drop into any page type's body (like Strapi shared components / ACF clones). Editing a component updates every page type that uses it — no schema edits needed." | translate(locale=LANG) }}
+{% endblock %}
+
+{% block body %}
+
+{% if components | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "No components yet." | translate(locale=LANG) }}</p>
+        <a href="{{ new_url }}" class="rcms-btn rcms-btn-outlined rcms-btn-small rcms-mt-2">
+            <span class="material-symbols-rounded sm">add</span> {{ "New component" | translate(locale=LANG) }}
+        </a>
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Name" | translate(locale=LANG) }}</th>
+                <th>{{ "Slug" | translate(locale=LANG) }}</th>
+                <th>{{ "Version" | translate(locale=LANG) }}</th>
+                <th>{{ "Used by" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for c in components %}
+            <tr>
+                <td>
+                    <a href="{{ url(name='rcms-admin:components:edit', id=c.id) }}" class="rcms-inline-flex rcms-items-center rcms-gap-2" style="text-decoration: none;">
+                        <span class="material-symbols-rounded sm rcms-text-accent">{{ c.icon }}</span>
+                        <strong>{{ c.label }}</strong>
+                    </a>
+                    {% if c.description %}<div class="rcms-text-xs rcms-text-muted">{{ c.description }}</div>{% endif %}
+                </td>
+                <td><code>{{ c.slug }}</code></td>
+                <td>v{{ c.version }}</td>
+                <td>
+                    {% if c.ref_count > 0 %}
+                        <span class="rcms-tag" title="{{ "Page types using this component" | translate(locale=LANG) }}">{{ c.ref_count }}</span>
+                    {% else %}
+                        <span class="rcms-text-muted rcms-text-xs">—</span>
+                    {% endif %}
+                </td>
+                <td class="rcms-actions">
+                    <a href="{{ url(name='rcms-admin:components:edit', id=c.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit" | translate(locale=LANG) }}</a>
+                    <form method="post" action="{{ url(name='rcms-admin:components:delete', id=c.id) }}" class="rcms-inline"
+                          onsubmit="return confirm('{{ "Delete this component?" | translate(locale=LANG) }}');">
+                        {{ csrf_token | csrf_input | safe }}
+                        <button type="submit" class="rcms-btn rcms-btn-text rcms-btn-small rcms-text-error"
+                            {% if c.ref_count > 0 %}disabled title="{{ "In use — remove it from page types first" | translate(locale=LANG) }}"{% endif %}>
+                            {{ "Delete" | translate(locale=LANG) }}
+                        </button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block heading %}{{ "Templates" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ "Templates" | translate(locale=LANG) }}{% endblock %}
+{% block description %}{{ "Templates this site renders. Ones you have customised are stored for this tenant; the rest are inherited and shown so you can start from them." | translate(locale=LANG) }}{% endblock %}
+{% block body %}
+<div class="rcms-page-head">
+    <h1>{{ "Templates" | translate(locale=LANG) }}</h1>
+</div>
+
+{% if not_configured %}
+<div class="rcms-card">
+    <div class="rcms-empty">
+        <p><strong>{{ "Per-tenant templates are not configured" | translate(locale=LANG) }}</strong></p>
+        <p class="rcms-hint">{{ "The host application has not enabled a template directory for tenants, so there is nothing to edit here." | translate(locale=LANG) }}</p>
+    </div>
+</div>
+{% else %}
+<div class="rcms-card">
+    <form method="post" action="{{ url(name='rcms-admin:templates:new') }}" class="rcms-inline-form">
+        {{ csrf_token | csrf_input | safe }}
+        <input type="text" name="name" placeholder="blocks/hero.html" aria-label="{{ "New template name" | translate(locale=LANG) }}">
+        <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+            <span class="material-symbols-rounded sm">add</span> {{ "New template" | translate(locale=LANG) }}
+        </button>
+    </form>
+
+    <div class="rcms-table-panel">
+        <table class="rcms-table">
+            <thead><tr>
+                <th>{{ "Template" | translate(locale=LANG) }}</th>
+                <th>{{ "Source" | translate(locale=LANG) }}</th>
+                <th class="rcms-num">{{ "Size" | translate(locale=LANG) }}</th>
+                <th></th>
+            </tr></thead>
+            <tbody>
+            {% for r in rows %}
+                <tr>
+                    <td><code>{{ r.name }}</code></td>
+                    <td>
+                        {% if r.overridden %}
+                            <span class="rcms-tag live">{{ "Customised" | translate(locale=LANG) }}</span>
+                        {% else %}
+                            <span class="rcms-tag">{{ "Inherited" | translate(locale=LANG) }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="rcms-num">{{ r.bytes }}</td>
+                    <td class="rcms-row-actions">
+                        <a class="rcms-btn rcms-btn-outlined rcms-btn-small"
+                           href="{{ url(name='rcms-admin:templates:edit') }}?name={{ r.name | urlencode }}">
+                            {% if r.overridden %}{{ "Edit" | translate(locale=LANG) }}{% else %}{{ "Customise" | translate(locale=LANG) }}{% endif %}
+                        </a>
+                        {% if r.overridden %}
+                        <form method="post" action="{{ url(name='rcms-admin:templates:delete') }}"
+                              onsubmit="return confirm('{{ "Revert this template to the inherited version?" | translate(locale=LANG) }}');">
+                            {{ csrf_token | csrf_input | safe }}
+                            <input type="hidden" name="name" value="{{ r.name }}">
+                            <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small rcms-btn-danger">
+                                {{ "Revert" | translate(locale=LANG) }}
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <p class="rcms-hint">
+        {{ "{n} of these are customised for this site." | translate(locale=LANG, n=overridden_count) }}
+        {{ "Changes go live within a few seconds — no restart." | translate(locale=LANG) }}
+    </p>
+</div>
+{% endif %}
+{% endblock %}

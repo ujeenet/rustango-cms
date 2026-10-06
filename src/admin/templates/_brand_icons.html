@@ -1,0 +1,10 @@
+{#- Favicon for every admin page. A tenant's uploaded favicon (#199) wins;
+    otherwise the Rustango CMS icon, light or dark to match the browser. -#}
+{% if branding_favicon_url %}
+    <link rel="icon" href="{{ branding_favicon_url }}">
+{% else %}
+    <link rel="icon" href="/cms-admin/static/brand/favicon.ico?v={{ cms_asset_version() }}" sizes="any">
+    <link rel="icon" type="image/png" href="/cms-admin/static/brand/icon-light.png?v={{ cms_asset_version() }}" media="(prefers-color-scheme: light)">
+    <link rel="icon" type="image/png" href="/cms-admin/static/brand/icon-dark.png?v={{ cms_asset_version() }}" media="(prefers-color-scheme: dark)">
+    <link rel="apple-touch-icon" href="/cms-admin/static/brand/apple-touch-icon.png?v={{ cms_asset_version() }}">
+{% endif %}

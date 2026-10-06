@@ -1,0 +1,41 @@
+{% extends "_base.html" %}
+{% block hero %}
+{% if extension.hero_image %}
+<section class="relative isolate min-h-[70vh] overflow-hidden">
+    <img src="{{ rcms_image_url(media_id=extension.hero_image, filter="fill-2000x1100") }}" alt="" class="absolute inset-0 -z-10 h-full w-full object-cover">
+    <div class="absolute inset-0 -z-10 bg-gradient-to-r from-ink/75 via-ink/40 to-transparent"></div>
+    <div class="mx-auto flex min-h-[70vh] max-w-6xl items-end px-5 pb-16">
+        <div class="max-w-xl text-white">
+            <h1 class="font-display text-5xl leading-[1.05] md:text-7xl">{{ extension.hero_heading | default(value=page.title) }}</h1>
+            {% if extension.hero_text %}<p class="mt-5 text-lg text-white/85 md:text-xl">{{ extension.hero_text }}</p>{% endif %}
+        </div>
+    </div>
+</section>
+{% endif %}
+{% endblock %}
+{% block content %}
+{% if not extension.hero_image %}
+<h1 class="font-display text-5xl text-ink md:text-6xl">{{ extension.hero_heading | default(value=page.title) }}</h1>
+{% if extension.hero_text %}<p class="mt-4 max-w-2xl text-lg text-ink/70">{{ extension.hero_text }}</p>{% endif %}
+{% endif %}
+<div class="prose-shop mx-auto max-w-3xl">{{ _stream_html['body'] | default(value="") | safe }}</div>
+{% set shown = children | visible %}
+{% if shown | length > 0 %}
+<section class="mt-16">
+    <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        {% for child in shown %}
+        <a href="{{ child | page_href }}" class="group block overflow-hidden rounded-3xl bg-white shadow-sm ring-1 ring-clay-100 transition hover:-translate-y-1 hover:shadow-lg">
+            {% if child.og_image_media_id %}
+            <img src="{{ rcms_image_url(media_id=child.og_image_media_id, filter="fill-800x600") }}" alt="" class="aspect-[4/3] w-full object-cover transition duration-500 group-hover:scale-105">
+            {% else %}<div class="aspect-[4/3] w-full bg-clay-100"></div>{% endif %}
+            <div class="p-6">
+                <h2 class="font-display text-2xl text-ink">{{ child.title }}</h2>
+                {% if child.seo_description %}<p class="mt-2 text-ink/65">{{ child.seo_description }}</p>{% endif %}
+                <span class="mt-4 inline-block text-sm font-medium text-[color:var(--accent)]">{% if LANG == "fr" %}Découvrir{% else %}Discover{% endif %} →</span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+{% endblock %}

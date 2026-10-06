@@ -1,0 +1,59 @@
+# Documentation table of contents.
+#
+# rustangodocs reads this manifest to seed the docs site: each [[section]]
+# becomes a nav section, and every page (a markdown file in this directory)
+# becomes one documentation page, rendered in the order listed here.
+#
+# Files not listed below are NOT published. That's deliberate — this
+# directory also holds internal design notes (i18n-decision.md, logging.md,
+# …) that are working documents, not user-facing docs. Add a file here only
+# when it has been written, run, and screenshotted end to end.
+
+version = "0.1"
+
+[[section]]
+title = "Getting started"
+slug = "getting-started"
+pages = ["cms-overview.md", "getting-started.md"]
+
+[[section]]
+title = "For editors"
+slug = "editors"
+pages = [
+    "admin-find-your-way.md",
+    "admin-first-page.md",
+    "admin-live-preview.md",
+]
+
+[[section]]
+title = "Build a ceramics shop"
+slug = "shop"
+pages = [
+    "shop-overview.md",
+    "shop-brand.md",
+    "shop-photos.md",
+    "shop-home-page.md",
+    "shop-product-type.md",
+    "shop-categories.md",
+    "shop-shop-page.md",
+    "shop-products.md",
+    "shop-menu.md",
+    "shop-reusable-text.md",
+    "shop-order-form.md",
+    "shop-seo.md",
+    "shop-second-language.md",
+    "shop-members-area.md",
+    "shop-team.md",
+    "shop-dev-templates.md",
+    "shop-dev-helper-traits.md",
+]
+
+[[section]]
+title = "Headless API"
+slug = "api"
+pages = ["api.md"]
+
+[[section]]
+title = "Per-tenant templates"
+slug = "tenant-templates"
+pages = ["tenant-templates.md"]

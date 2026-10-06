@@ -1,0 +1,158 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Page types" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Page types" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    {% if can_build_types %}
+    <a href="{{ new_type_url }}" class="rcms-btn">
+        <span class="material-symbols-rounded sm">add</span> {{ "New page type" | translate(locale=LANG) }}
+    </a>
+    {% endif %}
+{% endblock %}
+
+{% block description %}
+        {{ "Page types available in this site, with how many pages currently use each and when each was last used. Sorted by usage — most-used first." | translate(locale=LANG) }}
+        {{ "Total: <strong>{types}</strong> types · <strong>{pages}</strong> pages." | translate(locale=LANG, types=total_types, pages=total_pages) | safe }}
+{% endblock %}
+
+{% block body %}
+
+    {% if rows | length == 0 %}
+        <div class="rcms-empty">
+            <p>{{ "No page types are available yet. Ask a developer to register one for this site." | translate(locale=LANG) }}</p>
+        </div>
+    {% else %}
+        <div class="rcms-table-wrap">
+        <table class="rcms-data">
+            <thead>
+                <tr>
+                    <th>{{ "Type" | translate(locale=LANG) }}</th>
+                    <th>{{ "Pages" | translate(locale=LANG) }}</th>
+                    <th>{{ "Last used" | translate(locale=LANG) }}</th>
+                    <th>{{ "Template" | translate(locale=LANG) }}</th>
+                    <th>{{ "Allowed parents / children" | translate(locale=LANG) }}</th>
+                    <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr>
+                        <td>
+                            <div class="rcms-flex rcms-items-center rcms-gap-2">
+                                {% if row.icon %}
+                                    <span class="material-symbols-rounded rcms-text-primary">{{ row.icon }}</span>
+                                {% else %}
+                                    <span class="material-symbols-rounded rcms-text-muted-2">article</span>
+                                {% endif %}
+                                <div>
+                                    <strong>{{ row.verbose_name }}</strong>
+                                    <br><code class="rcms-text-2xs rcms-text-muted">{{ row.app_label }}.{{ row.type_name }}</code>
+                                    {% if row.description %}
+                                        <br><span class="rcms-hint rcms-text-xs">{{ row.description }}</span>
+                                    {% endif %}
+                                    {% if row.ui_type %}
+                                        <span class="rcms-tag scheduled rcms-text-3xs rcms-ml-1" title="{{ "Created from the UI (no code handler) — a first-class page type." | translate(locale=LANG) }}">{{ "UI type" | translate(locale=LANG) }}</span>
+                                    {% elif not row.registered %}
+                                        <span class="rcms-tag archived rcms-text-3xs rcms-ml-1" title="{{ "DB row exists but no handler is compiled into the binary — build drift." | translate(locale=LANG) }}">{{ "orphaned" | translate(locale=LANG) }}</span>
+                                    {% endif %}
+                                    {% if not row.is_creatable %}
+                                        <span class="rcms-tag draft rcms-text-3xs rcms-ml-1" title="{{ "Hidden from the page-type picker." | translate(locale=LANG) }}">{{ "not creatable" | translate(locale=LANG) }}</span>
+                                    {% endif %}
+                                    {% if row.feed_kind %}
+                                        <span class="rcms-tag scheduled rcms-text-3xs rcms-ml-1" title="{{ "Surfaces in the feed router under this kind." | translate(locale=LANG) }}">{{ "feed:" | translate(locale=LANG) }} {{ row.feed_kind }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if row.count > 0 %}
+                                <strong class="rcms-text-xl">{{ row.count }}</strong>
+                            {% else %}
+                                <span class="rcms-hint">0</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.latest %}
+                                {{ row.latest | naturaltime }}
+                                <br>
+                                <time class="rcms-hint rcms-text-2xs" data-utc="{{ row.latest | date(format='%+') }}">{{ row.latest }}</time>
+                            {% else %}
+                                <span class="rcms-hint">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {# Assignable, not just displayed — gated on the
+                               same codename as the template editor. #}
+                            {% if row.row_id and (user_is_superuser or "cms_template.edit" in allowed_resources) %}
+                                <a href="{{ url(name='rcms-admin:page-types:template', id=row.row_id) }}"
+                                   title="{{ "Change this type's template" | translate(locale=LANG) }}">
+                                    {% if row.default_template %}
+                                        <code class="rcms-text-xs">{{ row.default_template }}</code>
+                                    {% else %}
+                                        <span class="rcms-hint">{{ "— none (JSON only) —" | translate(locale=LANG) }}</span>
+                                    {% endif %}
+                                </a>
+                            {% elif row.default_template %}
+                                <code class="rcms-text-xs">{{ row.default_template }}</code>
+                            {% else %}
+                                <span class="rcms-hint">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="rcms-text-xs rcms-leading-normal">
+                                {% if row.allowed_parents | length > 0 %}
+                                    <div><span class="rcms-hint">{{ "parents:" | translate(locale=LANG) }}</span>
+                                        {% for p in row.allowed_parents %}<code class="rcms-text-2xs">{{ p }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+                                    </div>
+                                {% else %}
+                                    <div><span class="rcms-hint">{{ "parents: any" | translate(locale=LANG) }}</span></div>
+                                {% endif %}
+                                {% if row.allowed_children | length > 0 %}
+                                    <div><span class="rcms-hint">{{ "children:" | translate(locale=LANG) }}</span>
+                                        {% for c in row.allowed_children %}<code class="rcms-text-2xs">{{ c }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+                                    </div>
+                                {% else %}
+                                    <div><span class="rcms-hint">{{ "children: none" | translate(locale=LANG) }}</span></div>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="rcms-actions">
+                            {# Flex row so mixed icon / text-only buttons align on their
+                               centres (inline-flex buttons default to baseline align, which
+                               left "Build fields" sitting a few px above "View pages"). #}
+                            <div class="rcms-inline-flex rcms-items-center rcms-gap-2">
+                            {% if row.count > 0 %}
+                                <a class="rcms-btn rcms-btn-outlined rcms-btn-small"
+                                   href="{{ url(name='rcms-admin:pages:list') }}?type={{ row.type_name }}"
+                                   title="{{ "Filter the page list by this type (filter UI lands with #2)." | translate(locale=LANG) }}">
+                                    <span class="material-symbols-rounded sm">list_alt</span> {{ "View pages" | translate(locale=LANG) }}
+                                </a>
+                            {% endif %}
+                            {# #559/#562 — field builder, Developer-gated. #}
+                            {% if row.row_id and (user_is_superuser or "cms_page_type.build" in allowed_resources) %}
+                                <a class="rcms-btn rcms-btn-outlined rcms-btn-small"
+                                   href="{{ url(name='rcms-admin:page-types:build', id=row.row_id) }}"
+                                   title="{{ "Design this page type's body fields" | translate(locale=LANG) }}">
+                                    <span class="material-symbols-rounded sm">build</span> {{ "Build fields" | translate(locale=LANG) }}
+                                </a>
+                                {# #843 — name, parent/child rules and workflow of a UI type. #}
+                                {% if row.ui_type %}
+                                <a class="rcms-btn rcms-btn-outlined rcms-btn-small"
+                                   href="{{ url(name='rcms-admin:page-types:edit', id=row.row_id) }}"
+                                   title="{{ "Name, where it can be created, and its workflow" | translate(locale=LANG) }}">
+                                    <span class="material-symbols-rounded sm">tune</span> {{ "Settings" | translate(locale=LANG) }}
+                                </a>
+                                {% endif %}
+                            {% endif %}
+                            {# #566 — deleting a UI-created type lives in the builder's danger
+                               zone (a rare, destructive type-lifecycle action), not inline here. #}
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Permissions overview" | translate(locale=LANG) }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Permissions overview" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:roles') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "Roles" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block description %}
+        {{ "Read-only matrix of every resource × role. Each cell lists the actions that role is granted on that resource. Edit grants from a <a href='{url}'>role's</a> page." | translate(locale=LANG, url=url(name='rcms-admin:roles')) | safe }}
+{% endblock %}
+
+{% block body %}
+
+    {% if role_count == 0 %}
+        <div class="rcms-empty">
+            <p>{{ "No roles yet. Create one to start granting permissions." | translate(locale=LANG) }}</p>
+        </div>
+    {% else %}
+        {% for section in sections %}
+            <h3 class="rcms-text-sm rcms-mt-4 rcms-mb-2">{{ section.label | translate(locale=LANG) }}</h3>
+            <div class="rcms-table-wrap">
+            <table class="rcms-data rcms-perm-overview">
+                <thead>
+                    <tr>
+                        <th>{{ "Resource" | translate(locale=LANG) }}</th>
+                        {% for r in roles %}<th>{{ r.name }}</th>{% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in section.rows %}
+                        <tr>
+                            <td><strong>{{ row.label | translate(locale=LANG) }}</strong></td>
+                            {% for cell in row.cells %}
+                                <td>
+                                    {% if cell.any %}
+                                        {% for a in cell.actions %}
+                                            <span class="rcms-tag published rcms-text-2xs">{{ a | translate(locale=LANG) }}</span>
+                                        {% endfor %}
+                                    {% else %}
+                                        <span class="rcms-hint">—</span>
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+{% endblock %}

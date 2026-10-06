@@ -1,0 +1,48 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block heading %}{{ "Page types" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ verbose_name }}{% endblock %}
+{% block description %}{{ "Which template this page type renders with. Create one under Templates first, then pick it here." | translate(locale=LANG) }}{% endblock %}
+{% block body %}
+<div class="rcms-page-head">
+    <h1>{{ verbose_name }} <code class="rcms-text-sm">{{ type_name }}</code></h1>
+    <a class="rcms-btn rcms-btn-outlined rcms-btn-small" href="{{ url(name='rcms-admin:page-types') }}">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "Page types" | translate(locale=LANG) }}
+    </a>
+</div>
+
+{% if error %}
+<div class="rcms-alert rcms-alert-danger">
+    <strong>{{ "Not saved — no such template" | translate(locale=LANG) }}</strong>
+    <p class="rcms-m-0"><code>{{ error }}</code> {{ "cannot be resolved, so pages of this type would fail to render." | translate(locale=LANG) }}</p>
+</div>
+{% endif %}
+
+<div class="rcms-card">
+    <form method="post" action="{{ url(name='rcms-admin:page-types:template', id=type_id) }}">
+        {{ csrf_token | csrf_input | safe }}
+        <div class="rcms-field">
+            <label for="template">{{ "Template" | translate(locale=LANG) }}</label>
+            <select id="template" name="template">
+                {# Blank is meaningful, not "unset": with no template a page
+                   type has no HTML representation and serves JSON only. #}
+                <option value="">{{ "— none (JSON only) —" | translate(locale=LANG) }}</option>
+                {% for c in choices %}
+                    <option value="{{ c }}"{% if c == current %} selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+            </select>
+            <div class="rcms-hint">
+                {% if is_api_only %}
+                    {{ "This type currently has no template, so it serves JSON only. Choosing one gives it an HTML page." | translate(locale=LANG) }}
+                {% else %}
+                    {{ "Choosing “none” removes this type's HTML page — it will serve JSON only." | translate(locale=LANG) }}
+                {% endif %}
+            </div>
+        </div>
+        <div class="rcms-form-actions">
+            <button type="submit" class="rcms-btn rcms-btn-small">
+                <span class="material-symbols-rounded sm">save</span> {{ "Save" | translate(locale=LANG) }}
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}

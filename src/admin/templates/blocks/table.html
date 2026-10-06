@@ -1,0 +1,37 @@
+{#- Wagtail TableBlock parity. Editor enters TSV (one row per line,
+    tabs between cells); the first row is the header. Tera does
+    the split into a 2D grid; cells are auto-escaped by the
+    bundled Tera config. -#}
+{%- set rows = value.tsv | default(value="") | split(pat="
+") -%}
+{%- if rows | length > 0 -%}
+<figure class="rcms-block-table">
+<table>
+    {%- set header = rows[0] | split(pat="	") -%}
+    <thead>
+        <tr>
+            {%- for cell in header -%}
+                <th>{{ cell }}</th>
+            {%- endfor -%}
+        </tr>
+    </thead>
+    <tbody>
+        {%- for r in rows -%}
+            {%- if not loop.first -%}
+                {%- set cells = r | split(pat="	") -%}
+                {%- if r | trim != "" -%}
+                    <tr>
+                        {%- for cell in cells -%}
+                            <td>{{ cell }}</td>
+                        {%- endfor -%}
+                    </tr>
+                {%- endif -%}
+            {%- endif -%}
+        {%- endfor -%}
+    </tbody>
+</table>
+{%- if value.caption -%}
+    <figcaption>{{ value.caption }}</figcaption>
+{%- endif -%}
+</figure>
+{%- endif -%}

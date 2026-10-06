@@ -1,0 +1,66 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Workflow report" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Workflow report" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:reports:workflows-csv') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">download</span> {{ "CSV" | translate(locale=LANG) }}
+    </a>
+    <a href="{{ url(name='rcms-admin:workflows:list') }}" class="rcms-btn rcms-btn-text rcms-btn-small">
+        {{ "Manage workflows" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block description %}
+    {{ "Every workflow submission — active, approved, needs-changes, or cancelled — sorted newest first." | translate(locale=LANG) }}
+{% endblock %}
+
+{% block body %}
+
+{% if rows | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "No workflow submissions yet." | translate(locale=LANG) }}</p>
+        <p class="rcms-hint">{{ "When an editor clicks <strong>Submit for review</strong> on a page type bound to a workflow, a row appears here." | translate(locale=LANG) | safe }}</p>
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Workflow" | translate(locale=LANG) }}</th>
+                <th>{{ "Page" | translate(locale=LANG) }}</th>
+                <th>{{ "Status" | translate(locale=LANG) }}</th>
+                <th>{{ "Current step" | translate(locale=LANG) }}</th>
+                <th>{{ "Submitted by" | translate(locale=LANG) }}</th>
+                <th>{{ "Submitted" | translate(locale=LANG) }}</th>
+                <th>{{ "Finished" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Open" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+                <tr>
+                    <td><strong>{{ r.workflow_name }}</strong></td>
+                    <td>
+                        {{ r.page_title }}
+                        <br><code class="rcms-text-2xs">{{ r.page_url_path }}</code>
+                    </td>
+                    <td>
+                        <span class="rcms-tag {% if r.status == 'approved' %}published{% elif r.status == 'cancelled' or r.status == 'needs_changes' %}draft{% else %}scheduled{% endif %}">
+                            {{ r.status | replace(from="_", to=" ") }}
+                        </span>
+                    </td>
+                    <td>{% if r.current_task_name %}{{ r.current_task_name }}{% else %}<span class="rcms-text-muted-2">—</span>{% endif %}</td>
+                    <td>{% if r.requested_by_username %}{{ r.requested_by_username }}{% else %}<em class="rcms-hint">—</em>{% endif %}</td>
+                    <td>{% if r.requested_at %}<time data-utc="{{ r.requested_at | date(format='%+') }}">{{ r.requested_at | naturaltime }}</time>{% endif %}</td>
+                    <td>{% if r.finished_at %}<time data-utc="{{ r.finished_at | date(format='%+') }}">{{ r.finished_at | naturaltime }}</time>{% else %}<span class="rcms-text-muted-2">—</span>{% endif %}</td>
+                    <td class="rcms-actions">
+                        <a href="{{ url(name='rcms-admin:pages:edit', id=r.page_id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Open" | translate(locale=LANG) }}</a>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,155 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{% if mode == "new" %}{{ "New role" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} {{ role.name }}{% endif %} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{% if mode == "new" %}{{ "New role" | translate(locale=LANG) }}{% else %}{{ "Edit role" | translate(locale=LANG) }}{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:roles') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "All roles" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block content %}
+<form method="post" id="role-form" class="rcms-card rcms-page-form-section" data-primary-save
+      action="{% if mode == 'new' %}{{ url(name='rcms-admin:roles:new') }}{% else %}{{ url(name='rcms-admin:roles:edit', id=role.id) }}{% endif %}">
+    {{ csrf_token | csrf_input | safe }}
+
+    <div class="rcms-field">
+        <label>{{ "Name" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+        <input type="text" name="name" value="{{ role.name }}" required maxlength="150">
+        <div class="rcms-hint">{{ "Unique within this tenant. Examples: <code>Editor</code>, <code>Publisher</code>, <code>Reviewer</code>." | translate(locale=LANG) | safe }}</div>
+    </div>
+
+    <div class="rcms-field">
+        <label>{{ "Description" | translate(locale=LANG) }}</label>
+        <textarea name="description" rows="2" maxlength="500">{{ role.description }}</textarea>
+    </div>
+
+    <h3 class="rcms-mt-6 rcms-mx-0 rcms-mb-2">{{ "Permissions" | translate(locale=LANG) }}</h3>
+    <p class="rcms-hint rcms-mt-0">
+        {{ "Tick the cells this role can perform. Cells marked <code>—</code> don't apply to that resource (read-only sections, or sections without separate Add / Edit / Publish / Delete verbs). Per-page and per-folder grants on the page editor and media editor sit on top of this." | translate(locale=LANG) | safe }}
+    </p>
+
+    <div class="rcms-row-actions rcms-mb-3">
+        <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-perm-bulk="grant-all">{{ "Grant all" | translate(locale=LANG) }}</button>
+        <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-perm-bulk="revoke-all">{{ "Revoke all" | translate(locale=LANG) }}</button>
+    </div>
+
+    {% for group in matrix %}
+        <div class="rcms-perm-section">
+            <div class="rcms-perm-section-heading rcms-flex rcms-items-center rcms-gap-2 rcms-text-muted rcms-rounded">
+                <span>{{ group.section_label | translate(locale=LANG) }}</span>
+                <span class="rcms-flex-1"></span>
+                <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-perm-bulk="grant-section" data-section="{{ group.section_label }}">{{ "All" | translate(locale=LANG) }}</button>
+                <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-perm-bulk="revoke-section" data-section="{{ group.section_label }}">{{ "None" | translate(locale=LANG) }}</button>
+            </div>
+            <div class="rcms-table-wrap">
+            <table class="rcms-data rcms-perm-table rcms-mt-1">
+                <thead>
+                    <tr class="rcms-text-xs rcms-text-muted">
+                        <th class="rcms-fw-medium">{{ "Resource" | translate(locale=LANG) }}</th>
+                        <th class="rcms-text-center rcms-fw-medium rcms-w-70">{{ "Access" | translate(locale=LANG) }}</th>
+                        <th class="rcms-text-center rcms-fw-medium rcms-w-70">{{ "View" | translate(locale=LANG) }}</th>
+                        <th class="rcms-text-center rcms-fw-medium rcms-w-70">{{ "Add" | translate(locale=LANG) }}</th>
+                        <th class="rcms-text-center rcms-fw-medium rcms-w-70">{{ "Edit" | translate(locale=LANG) }}</th>
+                        <th class="rcms-text-center rcms-fw-medium rcms-w-70">{{ "Publish" | translate(locale=LANG) }}</th>
+                        <th class="rcms-text-center rcms-fw-medium rcms-w-70">{{ "Delete" | translate(locale=LANG) }}</th>
+                        <th class="rcms-text-center rcms-fw-medium rcms-w-60">{{ "Row" | translate(locale=LANG) }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in group.rows %}
+                        <tr data-section="{{ group.section_label }}" class="rcms-border-top">
+                            <td>{{ row.label | translate(locale=LANG) }}</td>
+            {# For the "Access" column we pick whichever access verb
+               applies to this row — `access` for the CMS row,
+               `access_admin` for the framework-admin row. The row's
+               first applicable verb wins; non-Access rows render `—`. #}
+                            {% for action in ["access", "view", "add", "edit", "publish", "delete"] %}
+                                {% set render_action = action %}
+                                {% if action == "access" and "access_admin" in row.applicable %}
+                                    {% set render_action = "access_admin" %}
+                                {% endif %}
+                                <td class="rcms-text-center">
+                                    {% if render_action in row.applicable %}
+                                        <input type="checkbox"
+                                               name="perm[{{ row.key }}][{{ render_action }}]"
+                                               value="1"
+                                               class="rcms-perm-cell"
+                                               data-section="{{ group.section_label }}"
+                                               data-row="{{ row.key }}"
+                                               data-action="{{ render_action }}"
+                                               {% if render_action in row.granted %}checked{% endif %}>
+                                    {% else %}
+                                        <span class="rcms-text-muted-2">—</span>
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                            <td class="rcms-text-center">
+                                <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small"
+                                        data-perm-bulk="toggle-row"
+                                        data-row="{{ row.key }}"
+                                        title="{{ "Toggle every applicable cell in this row" | translate(locale=LANG) }}">
+                                    {{ "Toggle" | translate(locale=LANG) }}
+                                </button>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+    {% endfor %}
+
+    {% if legacy_codenames | length > 0 %}
+        <details class="rcms-mt-4">
+            <summary class="rcms-cursor-pointer rcms-text-muted rcms-text-sm">
+                {{ "For developers —" | translate(locale=LANG) }} {{ translate_plural(key="{count} extra permission(s) preserved on save", n=legacy_codenames | length, locale=LANG, count=legacy_codenames | length) }}
+            </summary>
+            <div class="rcms-hint rcms-mt-2">
+                {{ "Permissions on this role that aren't represented by the grid above are kept across saves so custom or legacy entries don't get dropped silently." | translate(locale=LANG) }}
+            </div>
+            <ul class="rcms-mt-2 rcms-mb-2 rcms-mx-0 rcms-text-xs rcms-pl-5 rcms-font-mono">
+                {% for c in legacy_codenames %}<li>{{ c }}</li>{% endfor %}
+            </ul>
+        </details>
+    {% endif %}
+
+    <div class="rcms-form-actions rcms-mt-5">
+        <a href="{{ url(name='rcms-admin:roles') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">{% if mode == 'new' %}{{ "Create role" | translate(locale=LANG) }}{% else %}{{ "Save" | translate(locale=LANG) }}{% endif %}</button>
+    </div>
+</form>
+
+<script>
+(() => {
+    const form = document.getElementById('role-form');
+    if (!form) return;
+    const cells = () => form.querySelectorAll('input.rcms-perm-cell');
+    const setAll = (predicate, value) => {
+        cells().forEach((cb) => { if (predicate(cb)) cb.checked = value; });
+    };
+    form.addEventListener('click', (event) => {
+        const target = event.target.closest('[data-perm-bulk]');
+        if (!target) return;
+        event.preventDefault();
+        const action = target.dataset.permBulk;
+        if (action === 'grant-all') setAll(() => true, true);
+        if (action === 'revoke-all') setAll(() => true, false);
+        if (action === 'grant-section') {
+            const section = target.dataset.section;
+            setAll((cb) => cb.dataset.section === section, true);
+        }
+        if (action === 'revoke-section') {
+            const section = target.dataset.section;
+            setAll((cb) => cb.dataset.section === section, false);
+        }
+        if (action === 'toggle-row') {
+            const row = target.dataset.row;
+            const rowCells = Array.from(cells()).filter((cb) => cb.dataset.row === row);
+            const allChecked = rowCells.every((cb) => cb.checked);
+            rowCells.forEach((cb) => { cb.checked = !allChecked; });
+        }
+    });
+})();
+</script>
+{% endblock %}

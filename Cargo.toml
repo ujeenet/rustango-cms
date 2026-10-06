@@ -1,0 +1,172 @@
+[package]
+name = "rustango-cms"
+version = "0.1.0"
+description = "A page-tree content management system for Rust, built on rustango"
+readme = "README.md"
+keywords = ["cms", "content", "headless", "rustango", "web"]
+categories = ["web-programming", "web-programming::http-server"]
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+# The crate ships its source, templates, static assets and migrations;
+# the docs screenshots, example photos and test suites stay in the repo
+# (crates.io refuses packages over 10 MB).
+exclude = ["docs/img", "examples/*/photos", "e2e", ".github", ".claude", ".cargo"]
+
+# Workspace root + main package. The proc-macro derive lives in a
+# sibling crate at crates/rustango-cms-macros/ so a downstream user
+# transitively gets `#[derive(PageType)]` via the rustango-cms
+# dependency without a second crate to add to their Cargo.toml.
+[workspace]
+members = ["crates/rustango-cms-macros", "crates/rcms-scaffold"]
+
+# Shared by every crate in the workspace (`<field>.workspace = true`).
+[workspace.package]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/ujeenet/rustango-cms"
+homepage = "https://github.com/ujeenet/rustango-cms"
+authors = ["Ievgenii Svyryd <ujeenet2@gmail.com>"]
+rust-version = "1.88"
+
+# Lints every workspace crate opts into with `[lints] workspace = true`.
+# The crate has no unsafe code; forbidding it keeps it that way.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+# Build the docs with every backend and the optional integrations, so
+# feature-gated modules appear on docs.rs (#719).
+features = ["postgres", "sqlite", "mysql", "storage_s3", "cache_cloudflare", "cache_varnish", "cache_gcp", "cache_azure", "search_elasticsearch", "test_utils"]
+
+[features]
+default = ["postgres"]
+# Forwarded backend selectors — the rustango Model derive emits
+# `#[cfg(feature = "postgres")]` arms that are evaluated against THIS
+# crate's features, so we have to mirror them here.
+postgres = ["rustango/postgres"]
+mysql = ["rustango/mysql"]
+sqlite = ["rustango/sqlite"]
+# #321 — exposes the framework's `Tenant::for_test(...)` constructor so
+# DATABASE_URL-gated integration tests can build a tenant + drive the
+# write paths directly. Off by default; enable with `--features test_utils`.
+test_utils = ["rustango/test_utils"]
+# #193 — opt-in frontend-cache invalidator backends. Each backend
+# pulls in only the dependencies it needs (reqwest for the HTTP-based
+# ones via `rustango/http-client`; the AWS SDK crates for CloudFront).
+# Default build pulls none.
+cache_cloudflare = ["rustango/http-client"]
+cache_varnish = ["rustango/http-client"]
+cache_cloudfront = ["dep:aws-config", "dep:aws-sdk-cloudfront"]
+# #428 — Google Cloud CDN + Azure CDN purge backends. Both POST to a
+# cloud management API via the framework's reqwest client; auth is a
+# short-lived OAuth2 bearer token supplied by an `AccessTokenSource`.
+cache_gcp = ["rustango/http-client"]
+cache_azure = ["rustango/http-client"]
+# #398 — AVIF rendition output. Off by default because it pulls the
+# `ravif`/`rav1e` AV1 encoder (heavy build + binary). `format-avif`
+# specs return a clear error until this is enabled.
+avif = ["image/avif"]
+# #408 — Elasticsearch full-text backend (`search::elasticsearch`).
+# Off by default; pulls the framework's reqwest-based HTTP client. When
+# enabled + `search::set_backend(...)` is wired, search routes to ES
+# instead of the built-in Postgres FTS path.
+search_elasticsearch = ["rustango/http-client"]
+# S3-compatible media storage (`media_storage` + an `S3Storage` disk).
+# The CMS lib itself only ever touches the `Storage` trait, so this is
+# purely for hosts (and `cms_demo`) that want to *build* an S3 backend:
+# it pulls the framework's SigV4 client. Local disk stays the default.
+storage_s3 = ["rustango/storage-s3"]
+
+[dependencies]
+rustango = { version = "0.60", default-features = false, features = [
+    "admin", "admin-sso", "auth_flows", "cache", "cache-page", "config", "email", "forms", "jobs", "manage", "passwords", "runtime", "signals", "signed_url", "storage", "tenancy", "template_views", "websocket", "mcp", "http-client",
+] }
+# In-tree proc-macro crate for `#[derive(PageType)]` — re-exported
+# from the lib via `pub use rustango_cms_macros::PageType` so users
+# only depend on `rustango-cms`.
+rustango-cms-macros = { path = "crates/rustango-cms-macros", version = "0.1.0" }
+axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json", "form", "query", "multipart", "ws"] }
+tera = { version = "1.20", default-features = false, features = ["builtins"] }
+pulldown-cmark = { version = "0.13.3", default-features = false, features = ["html"] }
+ammonia = { version = "4", default-features = false }
+serde = { version = "1", features = ["derive"] }
+serde_urlencoded = "0.7"
+serde_json = "1"
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+async-trait = "0.1"
+inventory = "0.3"
+# Already in the tree through rustango's http-client; declared to build the
+# notification channels' egress-guarded client (#645): redirects off and the
+# vetted address pinned, which the framework's wrapper doesn't expose.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+thiserror = "2.0.18"
+tracing = "0.1"
+sha2 = "0.11.0"
+mime_guess = "2"
+# #198 — routable_page URL patterns. `regex` is already a transitive
+# dep via `tracing`; declaring it directly keeps the dependency edge
+# explicit. `std`+`unicode` only — `perf` (which adds ~200KB of
+# precompiled tables) is unnecessary for the typically-tiny set of
+# route patterns hosts will define.
+regex = { version = "1", default-features = false, features = ["std", "unicode-perl"] }
+# Process-local secret for signing flash-message cookies. The
+# framework's `rustango::messages::push` / `drain` are HMAC-SHA256
+# over the payload; we seed the secret from `OsRng` at first call.
+# Already in the dep graph via rustango; named explicitly here so
+# the import is greppable.
+rand = { version = "0.10", default-features = false, features = ["std", "std_rng", "thread_rng"] }
+# #319 — explicit OS CSPRNG at auth/URL-identifier boundaries (signing key,
+# flash-cookie HMAC secret). Already transitive via rand; named here for the
+# direct `getrandom::fill` calls. rand 0.10 removed the `OsRng` type.
+getrandom = "0.3"
+# v0.2 Slice 5b — image renditions. `default-features = false` +
+# the codec list keeps the build slim; add formats as needed.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
+# #193 — AWS SDK for the CloudFront invalidator backend. Optional;
+# only pulled when the `cache_cloudfront` feature is on. Both crates
+# already depend on tokio + rustls — no extra runtime alignment work
+# beyond the framework's default rustls / tokio defaults.
+# Default features off (#699): the CloudFront crate's default `rustls`
+# feature selects the legacy hyper 0.14 / rustls 0.21 client, a second
+# HTTP/TLS stack beside the one everything else uses. `default-https-client`
+# is the current hyper 1 / rustls 0.23 client.
+aws-config = { version = "1", optional = true, default-features = false, features = ["default-https-client", "rt-tokio", "credentials-process", "sso"] }
+aws-sdk-cloudfront = { version = "1", optional = true, default-features = false, features = ["default-https-client", "rt-tokio"] }
+
+[dev-dependencies]
+# `#[rustango::main]` resolves tokio through rustango's
+# `__private_runtime` re-export (since rustango 0.31.1), so the
+# example doesn't need a direct tokio dep here. Integration tests
+# do — `#[tokio::test]` is a proc-macro that resolves `::tokio::*`
+# against the *test* crate's deps, not the framework's re-export.
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+# Test-only — `ServiceExt::oneshot` for router-level HTTP tests
+# (#258 anonymous-redirect smoke test). Axum already pulls tower
+# into the build graph; this just makes the trait import work in
+# the test crate.
+tower = { version = "0.5", default-features = false, features = ["util"] }
+# #193 — httpmock for the Cloudflare / Varnish backend tests. Mock
+# server stubs the upstream API so the tests run offline.
+httpmock = "0.8"
+
+# rustango resolves from crates.io, so a plain clone builds. To develop
+# against a local framework checkout instead (projects/rustango beside this
+# repo), copy .cargo/config.toml.example to .cargo/config.toml — it holds
+# the [patch.crates-io] block and is gitignored.
+
+# Disable incremental compilation. Trades faster local rebuilds for
+# smaller target/ trees + deterministic artifacts — matches the
+# shape CI / Docker layer caches want, and avoids the
+# incremental cache growing unbounded across long dev sessions.
+[profile.dev]
+incremental = false
+
+[profile.test]
+incremental = false

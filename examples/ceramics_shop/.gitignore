@@ -1,0 +1,8 @@
+# Generated at boot, not source (see examples/cms_demo/.gitignore): the CMS
+# baseline migrations are copied in by `materialize`, the framework writes
+# system/, and var/ holds the local database and uploads. Only this
+# example's own migration, emitted by `makemigrations`, is source.
+migrations/*
+!migrations/0013_create_shop_content_page_and_shop_home_page_and_shop_shop_page_etc.json
+system/
+var/

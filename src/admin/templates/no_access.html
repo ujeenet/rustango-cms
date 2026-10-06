@@ -1,0 +1,21 @@
+{% extends "rcms_admin/_auth_layout.html" %}
+{% block page_title %}{{ "No CMS admin access" | translate(locale=LANG) }} — {{ admin_title | default(value="CMS") }}{% endblock %}
+{% block brand_name %}{{ admin_title | default(value="CMS Admin") }}{% endblock %}
+{% block sub %}{{ "You're signed in, but not allowed in the CMS admin." | translate(locale=LANG) }}{% endblock %}
+
+{% block body %}
+    <h1>{{ "No access" | translate(locale=LANG) }}</h1>
+    <p>
+        {{ "Your account doesn't have the <code>cms_admin.access</code> permission, so you can't open the CMS admin from here. This is usually intentional — different users get different surfaces of the same app." | translate(locale=LANG) | safe }}
+    </p>
+    <p>
+        {{ "If you should have access, ask an administrator to add your account to a role that includes the <strong>Access the CMS admin</strong> permission. Note this is distinct from the <strong>Access the framework admin</strong> permission (<code>auth.access_admin</code>) which gates the raw-DB-CRUD framework admin at <code>/admin/</code>." | translate(locale=LANG) | safe }}
+    </p>
+    <div class="rcms-form-actions rcms-flex rcms-gap-3 rcms-mt-4">
+        <form method="post" action="/logout" class="rcms-m-0">
+            {{ csrf_token | csrf_input | safe }}
+            <button type="submit" class="rcms-btn rcms-btn-outlined">{{ "Sign out" | translate(locale=LANG) }}</button>
+        </form>
+        <a href="/" class="rcms-btn rcms-btn-text">{{ "Back to site" | translate(locale=LANG) }}</a>
+    </div>
+{% endblock %}

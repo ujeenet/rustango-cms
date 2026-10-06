@@ -1,0 +1,75 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{% if is_edit %}{{ "Edit component" | translate(locale=LANG) }}: {{ label }}{% else %}{{ "New component" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% block heading %}{% if is_edit %}{{ "Edit component" | translate(locale=LANG) }}{% else %}{{ "New component" | translate(locale=LANG) }}{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ list_url }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+    <button type="submit" form="ptb-form" class="rcms-btn">
+        <span class="material-symbols-rounded sm">save</span> {{ "Save" | translate(locale=LANG) }}
+    </button>
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="rcms-breadcrumbs">
+    <a href="{{ list_url }}">{{ "Components" | translate(locale=LANG) }}</a>
+    <span class="rcms-sep">›</span>
+    <span>{% if is_edit %}{{ label }}{% else %}{{ "New component" | translate(locale=LANG) }}{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+{% if error %}
+<div class="rcms-alert rcms-alert--error rcms-mb-3" role="alert">
+    <span class="material-symbols-rounded">error</span>
+    <div class="rcms-alert-body">{{ error }}</div>
+</div>
+{% endif %}
+
+<div id="ptb-root"
+     data-schema="{{ schema_json }}"
+     data-components="[]"
+     data-component-mode="1">
+
+    <form method="post" action="{{ save_url }}" id="ptb-form">
+        {{ csrf_token | csrf_input | safe }}
+        <div class="rcms-card rcms-mb-3">
+            <div class="rcms-grid rcms-gap-3" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                <div class="rcms-field">
+                    <label for="cmp-label">{{ "Label" | translate(locale=LANG) }}</label>
+                    <input type="text" id="cmp-label" name="label" value="{{ label }}" required
+                           placeholder="{{ "Call to action" | translate(locale=LANG) }}">
+                </div>
+                <div class="rcms-field">
+                    <label for="cmp-slug">{{ "Slug" | translate(locale=LANG) }}</label>
+                    <input type="text" id="cmp-slug" name="slug" value="{{ slug }}"
+                           {% if is_edit %}readonly title="{{ "The slug is the reference key — it can't change" | translate(locale=LANG) }}"{% endif %}
+                           placeholder="cta_banner" pattern="[a-zA-Z][a-zA-Z0-9_]*">
+                    <div class="rcms-text-xs rcms-text-muted">{{ "Referenced in page types as this key. Letters, digits, underscores." | translate(locale=LANG) }}</div>
+                </div>
+                <div class="rcms-field">
+                    <label for="cmp-icon">{{ "Icon" | translate(locale=LANG) }}</label>
+                    <input type="text" id="cmp-icon" name="icon" value="{{ icon }}" placeholder="extension">
+                    <div class="rcms-text-xs rcms-text-muted">{{ "Material Symbols name (optional)." | translate(locale=LANG) }}</div>
+                </div>
+                <div class="rcms-field">
+                    <label for="cmp-desc">{{ "Description" | translate(locale=LANG) }}</label>
+                    <input type="text" id="cmp-desc" name="description" value="{{ description }}">
+                </div>
+            </div>
+        </div>
+        {# The JS serializes the node tree into this input on every edit. #}
+        <input type="hidden" name="schema" id="ptb-schema" value="{{ schema_json }}">
+    </form>
+
+    <p class="rcms-text-sm rcms-text-muted-2 rcms-mb-3">
+        {{ "A component is a reusable set of fields (and rows of fields). Drop it into any page type's body or flexible zone; editing it here updates every page type that uses it." | translate(locale=LANG) }}
+    </p>
+
+    <div class="rcms-ptb-workspace rcms-flex rcms-gap-3 rcms-items-start rcms-flex-wrap">
+        <div class="rcms-ptb-canvas rcms-card" id="ptb-canvas" style="flex: 1 1 480px; min-width: 320px;"></div>
+        <aside class="rcms-ptb-inspector rcms-card" id="ptb-inspector" style="flex: 0 1 340px; min-width: 280px;"></aside>
+    </div>
+</div>
+
+<script src="/cms-admin/static/page_type_builder.js?v={{ cms_asset_version() }}"></script>
+{% endblock %}

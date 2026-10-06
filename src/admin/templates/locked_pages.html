@@ -1,0 +1,63 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Locked pages" | translate(locale=LANG) }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Locked pages" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:reports:locked-pages-csv') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">download</span> {{ "CSV" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block description %}
+    {{ "Every page with a live editor lock right now. The lock holder + the page's edit-permission holders can force-release it. Stale locks (past their 30-minute TTL) are filtered out automatically." | translate(locale=LANG) }}
+{% endblock %}
+
+{% block body %}
+
+{% if rows | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "No pages are locked." | translate(locale=LANG) }}</p>
+        <p class="rcms-hint">{{ "Locks acquire on page-edit open and release on save or force-unlock." | translate(locale=LANG) }}</p>
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Page" | translate(locale=LANG) }}</th>
+                <th>{{ "URL" | translate(locale=LANG) }}</th>
+                <th>{{ "Locked by" | translate(locale=LANG) }}</th>
+                <th>{{ "Acquired" | translate(locale=LANG) }}</th>
+                <th>{{ "TTL remaining" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+                <tr>
+                    <td><strong>{{ r.title }}</strong></td>
+                    <td><code class="rcms-text-2xs">{{ r.url_path }}</code></td>
+                    <td>{{ r.username }}</td>
+                    <td>
+                        {% if r.acquired_at %}
+                            <time data-utc="{{ r.acquired_at | date(format='%+') }}">{{ r.acquired_at | naturaltime }}</time>
+                        {% endif %}
+                    </td>
+                    <td>{{ r.ttl_remaining_secs }}s</td>
+                    <td class="rcms-actions">
+                        <a href="{{ url(name='rcms-admin:pages:edit', id=r.page_id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Open" | translate(locale=LANG) }}</a>
+                        <form method="post" action="{{ url(name='rcms-admin:pages:unlock', id=r.page_id) }}"
+                              data-confirm="Force-unlock “{{ r.title }}”? The holder ({{ r.username }}) loses unsaved work in their session."
+                              data-confirm-style="danger"
+                              class="rcms-inline rcms-m-0">
+                            {{ csrf_token | csrf_input | safe }}
+                            <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">{{ "Force-unlock" | translate(locale=LANG) }}</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+{% endblock %}

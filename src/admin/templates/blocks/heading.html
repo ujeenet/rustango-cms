@@ -1,0 +1,8 @@
+{%- set raw_level = value.level | default(value="") -%}
+{%- if raw_level == "3" -%}
+    <h3 class="rcms-block-heading">{{ value.text | default(value="") }}</h3>
+{%- elif raw_level == "4" -%}
+    <h4 class="rcms-block-heading">{{ value.text | default(value="") }}</h4>
+{%- else -%}
+    <h2 class="rcms-block-heading">{{ value.text | default(value="") }}</h2>
+{%- endif -%}

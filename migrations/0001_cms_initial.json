@@ -1,0 +1,6297 @@
+{
+  "name": "0001_cms_initial",
+  "created_at": "2026-07-18T14:43:31.560398+00:00",
+  "atomic": true,
+  "replaces": [
+    "0002_cms_initial",
+    "0003_media_description",
+    "0004_snippet_translation",
+    "0005_categories"
+  ],
+  "snapshot": {
+    "tables": [
+      {
+        "name": "cms_analytics_event",
+        "model": "AnalyticsEvent",
+        "fields": [
+          {
+            "name": "browser",
+            "column": "browser",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "country",
+            "column": "country",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 2
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "device",
+            "column": "device",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "duration_ms",
+            "column": "duration_ms",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "event_type",
+            "column": "event_type",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "is_bounce",
+            "column": "is_bounce",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "locale",
+            "column": "locale",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "max_scroll_pct",
+            "column": "max_scroll_pct",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "os",
+            "column": "os",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "path",
+            "column": "path",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 512
+          },
+          {
+            "name": "referrer_host",
+            "column": "referrer_host",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "screen_h",
+            "column": "screen_h",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "screen_w",
+            "column": "screen_w",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "session_id",
+            "column": "session_id",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 36
+          },
+          {
+            "name": "visitor_id",
+            "column": "visitor_id",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 36
+          }
+        ]
+      },
+      {
+        "name": "cms_brand_color",
+        "model": "BrandColor",
+        "fields": [
+          {
+            "name": "color_value",
+            "column": "color_value",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "color_value_dark",
+            "column": "color_value_dark",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "name",
+            "column": "name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100
+          },
+          {
+            "name": "slug",
+            "column": "slug",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "sort_order",
+            "column": "sort_order",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "theme_id",
+            "column": "theme_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_theme",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_category",
+        "model": "Category",
+        "fields": [
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "depth",
+            "column": "depth",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "description",
+            "column": "description",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 1024,
+            "default": "''"
+          },
+          {
+            "name": "featured_image_id",
+            "column": "featured_image_id",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_media",
+              "on": "id"
+            }
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "name",
+            "column": "name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 200
+          },
+          {
+            "name": "parent_id",
+            "column": "parent_id",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_category",
+              "on": "id"
+            }
+          },
+          {
+            "name": "path",
+            "column": "path",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 510
+          },
+          {
+            "name": "slug",
+            "column": "slug",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 200
+          },
+          {
+            "name": "sort_order",
+            "column": "sort_order",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "taxonomy_id",
+            "column": "taxonomy_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_taxonomy",
+              "on": "id"
+            }
+          },
+          {
+            "name": "thumbnail_id",
+            "column": "thumbnail_id",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_media",
+              "on": "id"
+            }
+          },
+          {
+            "name": "updated_at",
+            "column": "updated_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          }
+        ]
+      },
+      {
+        "name": "cms_collection_permission",
+        "model": "CollectionPermission",
+        "fields": [
+          {
+            "name": "collection_id",
+            "column": "collection_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_media_collection",
+              "on": "id"
+            }
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "permission",
+            "column": "permission",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "role_id",
+            "column": "role_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_roles",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_collection_view_restriction",
+        "model": "CollectionViewRestriction",
+        "fields": [
+          {
+            "name": "collection_id",
+            "column": "collection_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_media_collection",
+              "on": "id"
+            }
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "group_ids",
+            "column": "group_ids",
+            "ty": "json",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "kind",
+            "column": "kind",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "password_hash",
+            "column": "password_hash",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255,
+            "default": "''"
+          },
+          {
+            "name": "updated_at",
+            "column": "updated_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          }
+        ]
+      },
+      {
+        "name": "cms_comment",
+        "model": "Comment",
+        "fields": [
+          {
+            "name": "author_id",
+            "column": "author_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_users",
+              "on": "id"
+            }
+          },
+          {
+            "name": "body",
+            "column": "body",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "field_path",
+            "column": "field_path",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "resolved_at",
+            "column": "resolved_at",
+            "ty": "datetime",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "resolved_by",
+            "column": "resolved_by",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false
+          }
+        ]
+      },
+      {
+        "name": "cms_comment_reply",
+        "model": "CommentReply",
+        "fields": [
+          {
+            "name": "author_id",
+            "column": "author_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_users",
+              "on": "id"
+            }
+          },
+          {
+            "name": "body",
+            "column": "body",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "comment_id",
+            "column": "comment_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_comment",
+              "on": "id"
+            }
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          }
+        ]
+      },
+      {
+        "name": "cms_dismissible",
+        "model": "Dismissible",
+        "fields": [
+          {
+            "name": "dismissed_at",
+            "column": "dismissed_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "key",
+            "column": "key",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 128
+          },
+          {
+            "name": "user_id",
+            "column": "user_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_users",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_editing_session",
+        "model": "EditingSession",
+        "fields": [
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "is_editing",
+            "column": "is_editing",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "last_seen_at",
+            "column": "last_seen_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "user_id",
+            "column": "user_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_users",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_error_page",
+        "model": "ErrorPageExt",
+        "fields": [
+          {
+            "name": "body",
+            "column": "body",
+            "ty": "string",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "unique": true,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "status_code",
+            "column": "status_code",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 8
+          }
+        ]
+      },
+      {
+        "name": "cms_form_entry",
+        "model": "FormEntry",
+        "fields": [
+          {
+            "name": "data_json",
+            "column": "data_json",
+            "ty": "json",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "form_snippet_id",
+            "column": "form_snippet_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "form_version",
+            "column": "form_version",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "ip",
+            "column": "ip",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "locale",
+            "column": "locale",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "source_page_id",
+            "column": "source_page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "source_url",
+            "column": "source_url",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 512
+          },
+          {
+            "name": "submitted_at",
+            "column": "submitted_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          }
+        ]
+      },
+      {
+        "name": "cms_library_type",
+        "model": "LibraryType",
+        "fields": [
+          {
+            "name": "app_label",
+            "column": "app_label",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "extension_table",
+            "column": "extension_table",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 128
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "type_name",
+            "column": "type_name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "updated_at",
+            "column": "updated_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "verbose_name",
+            "column": "verbose_name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 128
+          }
+        ]
+      },
+      {
+        "name": "cms_locale",
+        "model": "Locale",
+        "fields": [
+          {
+            "name": "active",
+            "column": "active",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "code",
+            "column": "code",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "is_default",
+            "column": "is_default",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "name",
+            "column": "name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "sort_order",
+            "column": "sort_order",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          }
+        ]
+      },
+      {
+        "name": "cms_media",
+        "model": "Media",
+        "fields": [
+          {
+            "name": "alt_text",
+            "column": "alt_text",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 1024
+          },
+          {
+            "name": "collection_id",
+            "column": "collection_id",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_media_collection",
+              "on": "id"
+            }
+          },
+          {
+            "name": "content_hash",
+            "column": "content_hash",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "description",
+            "column": "description",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 1024,
+            "default": "''"
+          },
+          {
+            "name": "filename",
+            "column": "filename",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "focal_point_x",
+            "column": "focal_point_x",
+            "ty": "f32",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "focal_point_y",
+            "column": "focal_point_y",
+            "ty": "f32",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "height",
+            "column": "height",
+            "ty": "i32",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "kind",
+            "column": "kind",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "mime",
+            "column": "mime",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 128
+          },
+          {
+            "name": "size",
+            "column": "size",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "storage_key",
+            "column": "storage_key",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 512
+          },
+          {
+            "name": "title",
+            "column": "title",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "uploaded_at",
+            "column": "uploaded_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "uploaded_by",
+            "column": "uploaded_by",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "width",
+            "column": "width",
+            "ty": "i32",
+            "nullable": true,
+            "primary_key": false
+          }
+        ]
+      },
+      {
+        "name": "cms_media_collection",
+        "model": "MediaCollection",
+        "fields": [
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "name",
+            "column": "name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100
+          },
+          {
+            "name": "parent_id",
+            "column": "parent_id",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_media_collection",
+              "on": "id"
+            }
+          },
+          {
+            "name": "sort_order",
+            "column": "sort_order",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          }
+        ]
+      },
+      {
+        "name": "cms_media_rendition",
+        "model": "MediaRendition",
+        "fields": [
+          {
+            "name": "content_hash",
+            "column": "content_hash",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "filter_spec",
+            "column": "filter_spec",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "height",
+            "column": "height",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "last_used_at",
+            "column": "last_used_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "media_id",
+            "column": "media_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_media",
+              "on": "id"
+            }
+          },
+          {
+            "name": "mime",
+            "column": "mime",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 128
+          },
+          {
+            "name": "size",
+            "column": "size",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "storage_key",
+            "column": "storage_key",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 512
+          },
+          {
+            "name": "width",
+            "column": "width",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          }
+        ]
+      },
+      {
+        "name": "cms_menu",
+        "model": "Menu",
+        "fields": [
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "name",
+            "column": "name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100
+          },
+          {
+            "name": "slug",
+            "column": "slug",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64,
+            "unique": true
+          }
+        ]
+      },
+      {
+        "name": "cms_menu_item",
+        "model": "MenuItem",
+        "fields": [
+          {
+            "name": "external_url",
+            "column": "external_url",
+            "ty": "string",
+            "nullable": true,
+            "primary_key": false,
+            "max_length": 500
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "label",
+            "column": "label",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 200
+          },
+          {
+            "name": "menu_id",
+            "column": "menu_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_menu",
+              "on": "id"
+            }
+          },
+          {
+            "name": "open_in_new_tab",
+            "column": "open_in_new_tab",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "parent_id",
+            "column": "parent_id",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_menu_item",
+              "on": "id"
+            }
+          },
+          {
+            "name": "sort_order",
+            "column": "sort_order",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          }
+        ]
+      },
+      {
+        "name": "cms_notification_pref",
+        "model": "NotificationPref",
+        "fields": [
+          {
+            "name": "enabled",
+            "column": "enabled",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "kind",
+            "column": "kind",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "user_id",
+            "column": "user_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_users",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_page",
+        "model": "Page",
+        "fields": [
+          {
+            "name": "alias_of",
+            "column": "alias_of",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "depth",
+            "column": "depth",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "expire_at",
+            "column": "expire_at",
+            "ty": "datetime",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "go_live_at",
+            "column": "go_live_at",
+            "ty": "datetime",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "last_published_at",
+            "column": "last_published_at",
+            "ty": "datetime",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "locale_variant_of",
+            "column": "locale_variant_of",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "notification_pre_published_sent",
+            "column": "notification_pre_published_sent",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false,
+            "default": "false"
+          },
+          {
+            "name": "og_description",
+            "column": "og_description",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 300,
+            "default": "''"
+          },
+          {
+            "name": "og_image_media_id",
+            "column": "og_image_media_id",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_media",
+              "on": "id"
+            }
+          },
+          {
+            "name": "og_title",
+            "column": "og_title",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 120,
+            "default": "''"
+          },
+          {
+            "name": "page_type_id",
+            "column": "page_type_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page_type",
+              "on": "id"
+            }
+          },
+          {
+            "name": "parent_id",
+            "column": "parent_id",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "path",
+            "column": "path",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 510
+          },
+          {
+            "name": "published_at",
+            "column": "published_at",
+            "ty": "datetime",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "robots_index",
+            "column": "robots_index",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false,
+            "default": "true"
+          },
+          {
+            "name": "seo_description",
+            "column": "seo_description",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 200
+          },
+          {
+            "name": "seo_title",
+            "column": "seo_title",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 70
+          },
+          {
+            "name": "show_in_menus",
+            "column": "show_in_menus",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false,
+            "default": "false"
+          },
+          {
+            "name": "sitemap_priority",
+            "column": "sitemap_priority",
+            "ty": "f32",
+            "nullable": false,
+            "primary_key": false,
+            "default": "0.5"
+          },
+          {
+            "name": "slug",
+            "column": "slug",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "sort_order",
+            "column": "sort_order",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "status",
+            "column": "status",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "theme_id",
+            "column": "theme_id",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_theme",
+              "on": "id"
+            }
+          },
+          {
+            "name": "title",
+            "column": "title",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "twitter_card",
+            "column": "twitter_card",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32,
+            "default": "'summary_large_image'"
+          },
+          {
+            "name": "updated_at",
+            "column": "updated_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "url_path",
+            "column": "url_path",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 510,
+            "default": "''"
+          }
+        ]
+      },
+      {
+        "name": "cms_page_category",
+        "model": "PageCategory",
+        "fields": [
+          {
+            "name": "category_id",
+            "column": "category_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_category",
+              "on": "id"
+            }
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "sort_order",
+            "column": "sort_order",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "taxonomy_id",
+            "column": "taxonomy_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_taxonomy",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_page_lock",
+        "model": "PageLock",
+        "fields": [
+          {
+            "name": "acquired_at",
+            "column": "acquired_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "expires_at",
+            "column": "expires_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "user_id",
+            "column": "user_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_users",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_page_log_entry",
+        "model": "PageLogEntry",
+        "fields": [
+          {
+            "name": "action",
+            "column": "action",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "actor_id",
+            "column": "actor_id",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_users",
+              "on": "id"
+            }
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "data_json",
+            "column": "data_json",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "default": "'{}'"
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "message",
+            "column": "message",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 500,
+            "default": "''"
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_page_permission",
+        "model": "PagePermission",
+        "fields": [
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "permission",
+            "column": "permission",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "role_id",
+            "column": "role_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_roles",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_page_snippet_m2m",
+        "model": "PageSnippetM2M",
+        "fields": [
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "relation_name",
+            "column": "relation_name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "snippet_id",
+            "column": "snippet_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_snippet",
+              "on": "id"
+            }
+          },
+          {
+            "name": "sort_order",
+            "column": "sort_order",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          }
+        ]
+      },
+      {
+        "name": "cms_page_subscription",
+        "model": "PageSubscription",
+        "fields": [
+          {
+            "name": "comment_notifications",
+            "column": "comment_notifications",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false,
+            "default": "false"
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "user_id",
+            "column": "user_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_users",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_page_tag",
+        "model": "PageTag",
+        "fields": [
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "name",
+            "column": "name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_page_type",
+        "model": "PageType",
+        "fields": [
+          {
+            "name": "allowed_child_types",
+            "column": "allowed_child_types",
+            "ty": "json",
+            "nullable": false,
+            "primary_key": false,
+            "default": "'[]'::jsonb"
+          },
+          {
+            "name": "allowed_parent_types",
+            "column": "allowed_parent_types",
+            "ty": "json",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "app_label",
+            "column": "app_label",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "default_template",
+            "column": "default_template",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "is_creatable",
+            "column": "is_creatable",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "type_name",
+            "column": "type_name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100,
+            "unique": true
+          },
+          {
+            "name": "updated_at",
+            "column": "updated_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "verbose_name",
+            "column": "verbose_name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 200
+          }
+        ]
+      },
+      {
+        "name": "cms_page_view_restriction",
+        "model": "PageViewRestriction",
+        "fields": [
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "group_ids",
+            "column": "group_ids",
+            "ty": "json",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "kind",
+            "column": "kind",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "password_hash",
+            "column": "password_hash",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "updated_at",
+            "column": "updated_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          }
+        ]
+      },
+      {
+        "name": "cms_redirect",
+        "model": "Redirect",
+        "fields": [
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "disabled_reason",
+            "column": "disabled_reason",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255,
+            "default": "''"
+          },
+          {
+            "name": "from_page_id",
+            "column": "from_page_id",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "from_path",
+            "column": "from_path",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 510,
+            "unique": true
+          },
+          {
+            "name": "hit_count",
+            "column": "hit_count",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "default": "0"
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "is_active",
+            "column": "is_active",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false,
+            "default": "true"
+          },
+          {
+            "name": "is_permanent",
+            "column": "is_permanent",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false,
+            "default": "true"
+          },
+          {
+            "name": "last_hit_at",
+            "column": "last_hit_at",
+            "ty": "datetime",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "note",
+            "column": "note",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255,
+            "default": "''"
+          },
+          {
+            "name": "overrides_live",
+            "column": "overrides_live",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false,
+            "default": "false"
+          },
+          {
+            "name": "to_page_id",
+            "column": "to_page_id",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "to_path",
+            "column": "to_path",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 1024
+          },
+          {
+            "name": "updated_at",
+            "column": "updated_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          }
+        ]
+      },
+      {
+        "name": "cms_reference_index",
+        "model": "ReferenceIndex",
+        "fields": [
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "field_path",
+            "column": "field_path",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 128
+          },
+          {
+            "name": "from_id",
+            "column": "from_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "from_kind",
+            "column": "from_kind",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "to_id",
+            "column": "to_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "to_kind",
+            "column": "to_kind",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          }
+        ]
+      },
+      {
+        "name": "cms_revision",
+        "model": "Revision",
+        "fields": [
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "created_by",
+            "column": "created_by",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "sequence",
+            "column": "sequence",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "snapshot",
+            "column": "snapshot",
+            "ty": "json",
+            "nullable": false,
+            "primary_key": false
+          }
+        ]
+      },
+      {
+        "name": "cms_search_promotion",
+        "model": "SearchPromotion",
+        "fields": [
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "description",
+            "column": "description",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 200
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "query_id",
+            "column": "query_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_search_query",
+              "on": "id"
+            }
+          },
+          {
+            "name": "sort_order",
+            "column": "sort_order",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          }
+        ]
+      },
+      {
+        "name": "cms_search_query",
+        "model": "SearchQuery",
+        "fields": [
+          {
+            "name": "first_seen_at",
+            "column": "first_seen_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "hits",
+            "column": "hits",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "last_seen_at",
+            "column": "last_seen_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "normalized",
+            "column": "normalized",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 200
+          },
+          {
+            "name": "raw",
+            "column": "raw",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 200
+          }
+        ]
+      },
+      {
+        "name": "cms_site_setting",
+        "model": "SiteSetting",
+        "fields": [
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "scope",
+            "column": "scope",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "updated_at",
+            "column": "updated_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "value_json",
+            "column": "value_json",
+            "ty": "json",
+            "nullable": false,
+            "primary_key": false
+          }
+        ]
+      },
+      {
+        "name": "cms_snippet",
+        "model": "Snippet",
+        "fields": [
+          {
+            "name": "body_markdown",
+            "column": "body_markdown",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "data",
+            "column": "data",
+            "ty": "json",
+            "nullable": false,
+            "primary_key": false,
+            "default": "'{}'::jsonb"
+          },
+          {
+            "name": "folder_path",
+            "column": "folder_path",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255,
+            "default": "''"
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "slug",
+            "column": "slug",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 128,
+            "unique": true
+          },
+          {
+            "name": "title",
+            "column": "title",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 200
+          },
+          {
+            "name": "type_name",
+            "column": "type_name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "updated_at",
+            "column": "updated_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          }
+        ]
+      },
+      {
+        "name": "cms_snippet_revision",
+        "model": "SnippetRevision",
+        "fields": [
+          {
+            "name": "captured_at",
+            "column": "captured_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "captured_by",
+            "column": "captured_by",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "sequence",
+            "column": "sequence",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "snapshot",
+            "column": "snapshot",
+            "ty": "json",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "snippet_id",
+            "column": "snippet_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_snippet",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_snippet_translation",
+        "model": "SnippetTranslation",
+        "fields": [
+          {
+            "name": "field_path",
+            "column": "field_path",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "locale_id",
+            "column": "locale_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_locale",
+              "on": "id"
+            }
+          },
+          {
+            "name": "snippet_id",
+            "column": "snippet_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_snippet",
+              "on": "id"
+            }
+          },
+          {
+            "name": "updated_at",
+            "column": "updated_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "value",
+            "column": "value",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false
+          }
+        ]
+      },
+      {
+        "name": "cms_task_state",
+        "model": "TaskState",
+        "fields": [
+          {
+            "name": "comment",
+            "column": "comment",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "decided_at",
+            "column": "decided_at",
+            "ty": "datetime",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "decided_by",
+            "column": "decided_by",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "status",
+            "column": "status",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "task_id",
+            "column": "task_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_workflow_task",
+              "on": "id"
+            }
+          },
+          {
+            "name": "workflow_state_id",
+            "column": "workflow_state_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_workflow_state",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_taxonomy",
+        "model": "Taxonomy",
+        "fields": [
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "description",
+            "column": "description",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255,
+            "default": "''"
+          },
+          {
+            "name": "ext_table",
+            "column": "ext_table",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 120,
+            "default": "''"
+          },
+          {
+            "name": "hierarchical",
+            "column": "hierarchical",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false,
+            "default": "true"
+          },
+          {
+            "name": "icon",
+            "column": "icon",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 80,
+            "default": "''"
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "max_depth",
+            "column": "max_depth",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false,
+            "default": "10"
+          },
+          {
+            "name": "slug",
+            "column": "slug",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100,
+            "unique": true
+          },
+          {
+            "name": "updated_at",
+            "column": "updated_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "verbose_name",
+            "column": "verbose_name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 200
+          }
+        ]
+      },
+      {
+        "name": "cms_theme",
+        "model": "Theme",
+        "fields": [
+          {
+            "name": "color_bg",
+            "column": "color_bg",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_bg_dark",
+            "column": "color_bg_dark",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_border",
+            "column": "color_border",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_border_dark",
+            "column": "color_border_dark",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_error",
+            "column": "color_error",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_focus_ring",
+            "column": "color_focus_ring",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_info",
+            "column": "color_info",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_link",
+            "column": "color_link",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_success",
+            "column": "color_success",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_surface",
+            "column": "color_surface",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_surface_dark",
+            "column": "color_surface_dark",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_text_muted",
+            "column": "color_text_muted",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_text_muted_dark",
+            "column": "color_text_muted_dark",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_text_primary",
+            "column": "color_text_primary",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_text_primary_dark",
+            "column": "color_text_primary_dark",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_text_secondary",
+            "column": "color_text_secondary",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_text_secondary_dark",
+            "column": "color_text_secondary_dark",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "color_warning",
+            "column": "color_warning",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 32
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "default_mode",
+            "column": "default_mode",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "font_body",
+            "column": "font_body",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "font_heading",
+            "column": "font_heading",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "font_url",
+            "column": "font_url",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 500
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "is_admin_default",
+            "column": "is_admin_default",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "is_default",
+            "column": "is_default",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "name",
+            "column": "name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100
+          },
+          {
+            "name": "radius_lg",
+            "column": "radius_lg",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "radius_md",
+            "column": "radius_md",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "radius_sm",
+            "column": "radius_sm",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "shadow_lg",
+            "column": "shadow_lg",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "shadow_md",
+            "column": "shadow_md",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "shadow_sm",
+            "column": "shadow_sm",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "slug",
+            "column": "slug",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64,
+            "unique": true
+          },
+          {
+            "name": "updated_at",
+            "column": "updated_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          }
+        ]
+      },
+      {
+        "name": "cms_translation",
+        "model": "Translation",
+        "fields": [
+          {
+            "name": "field_path",
+            "column": "field_path",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "locale_id",
+            "column": "locale_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_locale",
+              "on": "id"
+            }
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "updated_at",
+            "column": "updated_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "value",
+            "column": "value",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false
+          }
+        ]
+      },
+      {
+        "name": "cms_uploaded_file",
+        "model": "UploadedFile",
+        "fields": [
+          {
+            "name": "content_hash",
+            "column": "content_hash",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "mime",
+            "column": "mime",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 128
+          },
+          {
+            "name": "original_filename",
+            "column": "original_filename",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "size",
+            "column": "size",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "storage_key",
+            "column": "storage_key",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 512
+          },
+          {
+            "name": "uploaded_at",
+            "column": "uploaded_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "user_id",
+            "column": "user_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_users",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_workflow",
+        "model": "Workflow",
+        "fields": [
+          {
+            "name": "active",
+            "column": "active",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "description",
+            "column": "description",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "name",
+            "column": "name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100
+          },
+          {
+            "name": "require_reapproval_on_edit",
+            "column": "require_reapproval_on_edit",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "updated_at",
+            "column": "updated_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          }
+        ]
+      },
+      {
+        "name": "cms_workflow_state",
+        "model": "WorkflowState",
+        "fields": [
+          {
+            "name": "current_task_id",
+            "column": "current_task_id",
+            "ty": "i64",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "finished_at",
+            "column": "finished_at",
+            "ty": "datetime",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "page_id",
+            "column": "page_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_page",
+              "on": "id"
+            }
+          },
+          {
+            "name": "requested_at",
+            "column": "requested_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "requested_by",
+            "column": "requested_by",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_users",
+              "on": "id"
+            }
+          },
+          {
+            "name": "status",
+            "column": "status",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 16
+          },
+          {
+            "name": "workflow_id",
+            "column": "workflow_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_workflow",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "cms_workflow_task",
+        "model": "WorkflowTask",
+        "fields": [
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "kind",
+            "column": "kind",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64,
+            "default": "'group_approval'"
+          },
+          {
+            "name": "name",
+            "column": "name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100
+          },
+          {
+            "name": "role_id",
+            "column": "role_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_roles",
+              "on": "id"
+            }
+          },
+          {
+            "name": "sort_order",
+            "column": "sort_order",
+            "ty": "i32",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "webhook_url",
+            "column": "webhook_url",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 500,
+            "default": "''"
+          },
+          {
+            "name": "workflow_id",
+            "column": "workflow_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "cms_workflow",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "rustango_admin_users",
+        "model": "AdminUser",
+        "fields": [
+          {
+            "name": "active",
+            "column": "active",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false,
+            "default": "true"
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "email",
+            "column": "email",
+            "ty": "string",
+            "nullable": true,
+            "primary_key": false,
+            "max_length": 254,
+            "unique": true
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "is_superuser",
+            "column": "is_superuser",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false,
+            "default": "false"
+          },
+          {
+            "name": "password_hash",
+            "column": "password_hash",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 200
+          },
+          {
+            "name": "username",
+            "column": "username",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 150,
+            "unique": true
+          }
+        ]
+      },
+      {
+        "name": "rustango_api_keys",
+        "model": "ApiKey",
+        "fields": [
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()",
+            "auto": true
+          },
+          {
+            "name": "expires_at",
+            "column": "expires_at",
+            "ty": "datetime",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "key_hash",
+            "column": "key_hash",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "key_prefix",
+            "column": "key_prefix",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 8
+          },
+          {
+            "name": "label",
+            "column": "label",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100
+          },
+          {
+            "name": "user_id",
+            "column": "user_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_users",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "rustango_audit_log",
+        "model": "AuditLog",
+        "fields": [
+          {
+            "name": "changes",
+            "column": "changes",
+            "ty": "json",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "entity_pk",
+            "column": "entity_pk",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "entity_table",
+            "column": "entity_table",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "occurred_at",
+            "column": "occurred_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false,
+            "default": "now()"
+          },
+          {
+            "name": "operation",
+            "column": "operation",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "source",
+            "column": "source",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false
+          }
+        ]
+      },
+      {
+        "name": "rustango_content_types",
+        "model": "ContentType",
+        "fields": [
+          {
+            "name": "app_label",
+            "column": "app_label",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "model_name",
+            "column": "model_name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100
+          },
+          {
+            "name": "table",
+            "column": "table",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100
+          }
+        ]
+      },
+      {
+        "name": "rustango_permissions",
+        "model": "Permission",
+        "fields": [
+          {
+            "name": "codename",
+            "column": "codename",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "name",
+            "column": "name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255,
+            "default": "''"
+          },
+          {
+            "name": "perm_table",
+            "column": "table_name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 150
+          }
+        ]
+      },
+      {
+        "name": "rustango_role_permissions",
+        "model": "RolePermission",
+        "fields": [
+          {
+            "name": "codename",
+            "column": "codename",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "role_id",
+            "column": "role_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_roles",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "rustango_roles",
+        "model": "Role",
+        "fields": [
+          {
+            "name": "data",
+            "column": "data",
+            "ty": "json",
+            "nullable": false,
+            "primary_key": false,
+            "default": "'{}'"
+          },
+          {
+            "name": "description",
+            "column": "description",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 500
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "name",
+            "column": "name",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 150,
+            "unique": true
+          }
+        ]
+      },
+      {
+        "name": "rustango_user_permissions",
+        "model": "UserPermission",
+        "fields": [
+          {
+            "name": "codename",
+            "column": "codename",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 100
+          },
+          {
+            "name": "data",
+            "column": "data",
+            "ty": "json",
+            "nullable": false,
+            "primary_key": false,
+            "default": "'{}'"
+          },
+          {
+            "name": "granted",
+            "column": "granted",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false,
+            "default": "true"
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "user_id",
+            "column": "user_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_users",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "rustango_user_roles",
+        "model": "UserRole",
+        "fields": [
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "role_id",
+            "column": "role_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_roles",
+              "on": "id"
+            }
+          },
+          {
+            "name": "user_id",
+            "column": "user_id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": false,
+            "fk": {
+              "kind": "fk",
+              "to": "rustango_users",
+              "on": "id"
+            }
+          }
+        ]
+      },
+      {
+        "name": "rustango_users",
+        "model": "User",
+        "fields": [
+          {
+            "name": "active",
+            "column": "active",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "created_at",
+            "column": "created_at",
+            "ty": "datetime",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "data",
+            "column": "data",
+            "ty": "json",
+            "nullable": false,
+            "primary_key": false,
+            "default": "'{}'"
+          },
+          {
+            "name": "email",
+            "column": "email",
+            "ty": "string",
+            "nullable": true,
+            "primary_key": false,
+            "max_length": 254,
+            "unique": true
+          },
+          {
+            "name": "id",
+            "column": "id",
+            "ty": "i64",
+            "nullable": false,
+            "primary_key": true,
+            "auto": true
+          },
+          {
+            "name": "is_superuser",
+            "column": "is_superuser",
+            "ty": "bool",
+            "nullable": false,
+            "primary_key": false
+          },
+          {
+            "name": "password_changed_at",
+            "column": "password_changed_at",
+            "ty": "datetime",
+            "nullable": true,
+            "primary_key": false
+          },
+          {
+            "name": "password_hash",
+            "column": "password_hash",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 255
+          },
+          {
+            "name": "username",
+            "column": "username",
+            "ty": "string",
+            "nullable": false,
+            "primary_key": false,
+            "max_length": 64,
+            "unique": true
+          }
+        ]
+      }
+    ],
+    "indexes": [
+      {
+        "name": "cms_brand_color_theme_id_idx",
+        "table": "cms_brand_color",
+        "columns": [
+          "theme_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_category_parent_id_idx",
+        "table": "cms_category",
+        "columns": [
+          "parent_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_category_path_idx",
+        "table": "cms_category",
+        "columns": [
+          "path"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_category_slug_idx",
+        "table": "cms_category",
+        "columns": [
+          "slug"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_category_taxonomy_id_idx",
+        "table": "cms_category",
+        "columns": [
+          "taxonomy_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_collection_permission_collection_id_idx",
+        "table": "cms_collection_permission",
+        "columns": [
+          "collection_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_collection_permission_role_id_idx",
+        "table": "cms_collection_permission",
+        "columns": [
+          "role_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_collection_view_restriction_collection_id_idx",
+        "table": "cms_collection_view_restriction",
+        "columns": [
+          "collection_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_collection_view_restriction_kind_idx",
+        "table": "cms_collection_view_restriction",
+        "columns": [
+          "kind"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_comment_author_id_idx",
+        "table": "cms_comment",
+        "columns": [
+          "author_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_comment_field_path_idx",
+        "table": "cms_comment",
+        "columns": [
+          "field_path"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_comment_page_id_idx",
+        "table": "cms_comment",
+        "columns": [
+          "page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_comment_reply_author_id_idx",
+        "table": "cms_comment_reply",
+        "columns": [
+          "author_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_comment_reply_comment_id_idx",
+        "table": "cms_comment_reply",
+        "columns": [
+          "comment_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_dismissible_key_idx",
+        "table": "cms_dismissible",
+        "columns": [
+          "key"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_dismissible_user_id_idx",
+        "table": "cms_dismissible",
+        "columns": [
+          "user_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_editing_session_page_id_idx",
+        "table": "cms_editing_session",
+        "columns": [
+          "page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_editing_session_user_id_idx",
+        "table": "cms_editing_session",
+        "columns": [
+          "user_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_error_page_status_code_idx",
+        "table": "cms_error_page",
+        "columns": [
+          "status_code"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_form_entry_form_snippet_id_idx",
+        "table": "cms_form_entry",
+        "columns": [
+          "form_snippet_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_form_entry_source_page_id_idx",
+        "table": "cms_form_entry",
+        "columns": [
+          "source_page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_library_type_app_label_idx",
+        "table": "cms_library_type",
+        "columns": [
+          "app_label"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_library_type_type_name_idx",
+        "table": "cms_library_type",
+        "columns": [
+          "type_name"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_locale_code_idx",
+        "table": "cms_locale",
+        "columns": [
+          "code"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_media_collection_id_idx",
+        "table": "cms_media",
+        "columns": [
+          "collection_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_media_collection_parent_id_idx",
+        "table": "cms_media_collection",
+        "columns": [
+          "parent_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_media_content_hash_idx",
+        "table": "cms_media",
+        "columns": [
+          "content_hash"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_media_kind_idx",
+        "table": "cms_media",
+        "columns": [
+          "kind"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_media_rendition_content_hash_idx",
+        "table": "cms_media_rendition",
+        "columns": [
+          "content_hash"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_media_rendition_filter_spec_idx",
+        "table": "cms_media_rendition",
+        "columns": [
+          "filter_spec"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_media_rendition_media_id_idx",
+        "table": "cms_media_rendition",
+        "columns": [
+          "media_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_menu_item_menu_id_idx",
+        "table": "cms_menu_item",
+        "columns": [
+          "menu_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_menu_item_parent_id_idx",
+        "table": "cms_menu_item",
+        "columns": [
+          "parent_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_notification_pref_kind_idx",
+        "table": "cms_notification_pref",
+        "columns": [
+          "kind"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_notification_pref_user_id_idx",
+        "table": "cms_notification_pref",
+        "columns": [
+          "user_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_category_category_id_idx",
+        "table": "cms_page_category",
+        "columns": [
+          "category_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_category_page_id_idx",
+        "table": "cms_page_category",
+        "columns": [
+          "page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_category_taxonomy_id_idx",
+        "table": "cms_page_category",
+        "columns": [
+          "taxonomy_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_lock_page_id_idx",
+        "table": "cms_page_lock",
+        "columns": [
+          "page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_lock_user_id_idx",
+        "table": "cms_page_lock",
+        "columns": [
+          "user_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_log_entry_action_idx",
+        "table": "cms_page_log_entry",
+        "columns": [
+          "action"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_log_entry_page_id_idx",
+        "table": "cms_page_log_entry",
+        "columns": [
+          "page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_page_type_id_idx",
+        "table": "cms_page",
+        "columns": [
+          "page_type_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_path_idx",
+        "table": "cms_page",
+        "columns": [
+          "path"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_permission_page_id_idx",
+        "table": "cms_page_permission",
+        "columns": [
+          "page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_permission_role_id_idx",
+        "table": "cms_page_permission",
+        "columns": [
+          "role_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_snippet_m2m_page_id_idx",
+        "table": "cms_page_snippet_m2m",
+        "columns": [
+          "page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_snippet_m2m_relation_name_idx",
+        "table": "cms_page_snippet_m2m",
+        "columns": [
+          "relation_name"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_snippet_m2m_snippet_id_idx",
+        "table": "cms_page_snippet_m2m",
+        "columns": [
+          "snippet_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_status_idx",
+        "table": "cms_page",
+        "columns": [
+          "status"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_subscription_page_id_idx",
+        "table": "cms_page_subscription",
+        "columns": [
+          "page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_subscription_user_id_idx",
+        "table": "cms_page_subscription",
+        "columns": [
+          "user_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_tag_name_idx",
+        "table": "cms_page_tag",
+        "columns": [
+          "name"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_tag_page_id_idx",
+        "table": "cms_page_tag",
+        "columns": [
+          "page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_type_app_label_idx",
+        "table": "cms_page_type",
+        "columns": [
+          "app_label"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_url_path_idx",
+        "table": "cms_page",
+        "columns": [
+          "url_path"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_view_restriction_kind_idx",
+        "table": "cms_page_view_restriction",
+        "columns": [
+          "kind"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_page_view_restriction_page_id_idx",
+        "table": "cms_page_view_restriction",
+        "columns": [
+          "page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_redirect_from_path_idx",
+        "table": "cms_redirect",
+        "columns": [
+          "from_path"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_reference_index_from_kind_idx",
+        "table": "cms_reference_index",
+        "columns": [
+          "from_kind"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_reference_index_to_kind_idx",
+        "table": "cms_reference_index",
+        "columns": [
+          "to_kind"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_revision_page_id_idx",
+        "table": "cms_revision",
+        "columns": [
+          "page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_search_promotion_page_id_idx",
+        "table": "cms_search_promotion",
+        "columns": [
+          "page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_search_promotion_query_id_idx",
+        "table": "cms_search_promotion",
+        "columns": [
+          "query_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_search_query_normalized_idx",
+        "table": "cms_search_query",
+        "columns": [
+          "normalized"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_site_setting_scope_idx",
+        "table": "cms_site_setting",
+        "columns": [
+          "scope"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_snippet_folder_path_idx",
+        "table": "cms_snippet",
+        "columns": [
+          "folder_path"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_snippet_revision_snippet_id_idx",
+        "table": "cms_snippet_revision",
+        "columns": [
+          "snippet_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_snippet_translation_field_path_idx",
+        "table": "cms_snippet_translation",
+        "columns": [
+          "field_path"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_snippet_translation_locale_id_idx",
+        "table": "cms_snippet_translation",
+        "columns": [
+          "locale_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_snippet_translation_snippet_id_idx",
+        "table": "cms_snippet_translation",
+        "columns": [
+          "snippet_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_snippet_type_name_idx",
+        "table": "cms_snippet",
+        "columns": [
+          "type_name"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_task_state_status_idx",
+        "table": "cms_task_state",
+        "columns": [
+          "status"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_task_state_task_id_idx",
+        "table": "cms_task_state",
+        "columns": [
+          "task_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_task_state_workflow_state_id_idx",
+        "table": "cms_task_state",
+        "columns": [
+          "workflow_state_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_translation_field_path_idx",
+        "table": "cms_translation",
+        "columns": [
+          "field_path"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_translation_locale_id_idx",
+        "table": "cms_translation",
+        "columns": [
+          "locale_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_translation_page_id_idx",
+        "table": "cms_translation",
+        "columns": [
+          "page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_uploaded_file_content_hash_idx",
+        "table": "cms_uploaded_file",
+        "columns": [
+          "content_hash"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_uploaded_file_user_id_idx",
+        "table": "cms_uploaded_file",
+        "columns": [
+          "user_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_workflow_name_idx",
+        "table": "cms_workflow",
+        "columns": [
+          "name"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_workflow_state_page_id_idx",
+        "table": "cms_workflow_state",
+        "columns": [
+          "page_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_workflow_state_requested_by_idx",
+        "table": "cms_workflow_state",
+        "columns": [
+          "requested_by"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_workflow_state_status_idx",
+        "table": "cms_workflow_state",
+        "columns": [
+          "status"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_workflow_state_workflow_id_idx",
+        "table": "cms_workflow_state",
+        "columns": [
+          "workflow_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_workflow_task_role_id_idx",
+        "table": "cms_workflow_task",
+        "columns": [
+          "role_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "cms_workflow_task_workflow_id_idx",
+        "table": "cms_workflow_task",
+        "columns": [
+          "workflow_id"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "rustango_audit_log_entity_table_entity_pk_idx",
+        "table": "rustango_audit_log",
+        "columns": [
+          "entity_table",
+          "entity_pk"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "rustango_audit_log_occurred_at_idx",
+        "table": "rustango_audit_log",
+        "columns": [
+          "occurred_at"
+        ],
+        "unique": false,
+        "method": "btree"
+      },
+      {
+        "name": "rustango_permissions_table_name_codename_idx",
+        "table": "rustango_permissions",
+        "columns": [
+          "table_name",
+          "codename"
+        ],
+        "unique": true,
+        "method": "btree"
+      },
+      {
+        "name": "rustango_role_permissions_role_id_codename_idx",
+        "table": "rustango_role_permissions",
+        "columns": [
+          "role_id",
+          "codename"
+        ],
+        "unique": true,
+        "method": "btree"
+      },
+      {
+        "name": "rustango_user_permissions_user_id_codename_idx",
+        "table": "rustango_user_permissions",
+        "columns": [
+          "user_id",
+          "codename"
+        ],
+        "unique": true,
+        "method": "btree"
+      },
+      {
+        "name": "rustango_user_roles_user_id_role_id_idx",
+        "table": "rustango_user_roles",
+        "columns": [
+          "user_id",
+          "role_id"
+        ],
+        "unique": true,
+        "method": "btree"
+      }
+    ]
+  },
+  "forward": [
+    {
+      "schema": {
+        "CreateTable": "cms_analytics_event"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_brand_color"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_category"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_collection_permission"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_collection_view_restriction"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_comment"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_comment_reply"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_dismissible"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_editing_session"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_error_page"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_form_entry"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_library_type"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_locale"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_media"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_media_collection"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_media_rendition"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_menu"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_menu_item"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_notification_pref"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_page"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_page_category"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_page_lock"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_page_log_entry"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_page_permission"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_page_snippet_m2m"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_page_subscription"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_page_tag"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_page_type"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_page_view_restriction"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_redirect"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_reference_index"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_revision"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_search_promotion"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_search_query"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_site_setting"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_snippet"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_snippet_revision"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_snippet_translation"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_task_state"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_taxonomy"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_theme"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_translation"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_uploaded_file"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_workflow"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_workflow_state"
+      }
+    },
+    {
+      "schema": {
+        "CreateTable": "cms_workflow_task"
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_brand_color_theme_id_idx",
+          "table": "cms_brand_color",
+          "columns": [
+            "theme_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_category_parent_id_idx",
+          "table": "cms_category",
+          "columns": [
+            "parent_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_category_path_idx",
+          "table": "cms_category",
+          "columns": [
+            "path"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_category_slug_idx",
+          "table": "cms_category",
+          "columns": [
+            "slug"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_category_taxonomy_id_idx",
+          "table": "cms_category",
+          "columns": [
+            "taxonomy_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_collection_permission_collection_id_idx",
+          "table": "cms_collection_permission",
+          "columns": [
+            "collection_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_collection_permission_role_id_idx",
+          "table": "cms_collection_permission",
+          "columns": [
+            "role_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_collection_view_restriction_collection_id_idx",
+          "table": "cms_collection_view_restriction",
+          "columns": [
+            "collection_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_collection_view_restriction_kind_idx",
+          "table": "cms_collection_view_restriction",
+          "columns": [
+            "kind"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_comment_author_id_idx",
+          "table": "cms_comment",
+          "columns": [
+            "author_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_comment_field_path_idx",
+          "table": "cms_comment",
+          "columns": [
+            "field_path"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_comment_page_id_idx",
+          "table": "cms_comment",
+          "columns": [
+            "page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_comment_reply_author_id_idx",
+          "table": "cms_comment_reply",
+          "columns": [
+            "author_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_comment_reply_comment_id_idx",
+          "table": "cms_comment_reply",
+          "columns": [
+            "comment_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_dismissible_key_idx",
+          "table": "cms_dismissible",
+          "columns": [
+            "key"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_dismissible_user_id_idx",
+          "table": "cms_dismissible",
+          "columns": [
+            "user_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_editing_session_page_id_idx",
+          "table": "cms_editing_session",
+          "columns": [
+            "page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_editing_session_user_id_idx",
+          "table": "cms_editing_session",
+          "columns": [
+            "user_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_error_page_status_code_idx",
+          "table": "cms_error_page",
+          "columns": [
+            "status_code"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_form_entry_form_snippet_id_idx",
+          "table": "cms_form_entry",
+          "columns": [
+            "form_snippet_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_form_entry_source_page_id_idx",
+          "table": "cms_form_entry",
+          "columns": [
+            "source_page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_library_type_app_label_idx",
+          "table": "cms_library_type",
+          "columns": [
+            "app_label"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_library_type_type_name_idx",
+          "table": "cms_library_type",
+          "columns": [
+            "type_name"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_locale_code_idx",
+          "table": "cms_locale",
+          "columns": [
+            "code"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_media_collection_id_idx",
+          "table": "cms_media",
+          "columns": [
+            "collection_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_media_collection_parent_id_idx",
+          "table": "cms_media_collection",
+          "columns": [
+            "parent_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_media_content_hash_idx",
+          "table": "cms_media",
+          "columns": [
+            "content_hash"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_media_kind_idx",
+          "table": "cms_media",
+          "columns": [
+            "kind"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_media_rendition_content_hash_idx",
+          "table": "cms_media_rendition",
+          "columns": [
+            "content_hash"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_media_rendition_filter_spec_idx",
+          "table": "cms_media_rendition",
+          "columns": [
+            "filter_spec"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_media_rendition_media_id_idx",
+          "table": "cms_media_rendition",
+          "columns": [
+            "media_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_menu_item_menu_id_idx",
+          "table": "cms_menu_item",
+          "columns": [
+            "menu_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_menu_item_parent_id_idx",
+          "table": "cms_menu_item",
+          "columns": [
+            "parent_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_notification_pref_kind_idx",
+          "table": "cms_notification_pref",
+          "columns": [
+            "kind"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_notification_pref_user_id_idx",
+          "table": "cms_notification_pref",
+          "columns": [
+            "user_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_category_category_id_idx",
+          "table": "cms_page_category",
+          "columns": [
+            "category_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_category_page_id_idx",
+          "table": "cms_page_category",
+          "columns": [
+            "page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_category_taxonomy_id_idx",
+          "table": "cms_page_category",
+          "columns": [
+            "taxonomy_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_lock_page_id_idx",
+          "table": "cms_page_lock",
+          "columns": [
+            "page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_lock_user_id_idx",
+          "table": "cms_page_lock",
+          "columns": [
+            "user_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_log_entry_action_idx",
+          "table": "cms_page_log_entry",
+          "columns": [
+            "action"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_log_entry_page_id_idx",
+          "table": "cms_page_log_entry",
+          "columns": [
+            "page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_page_type_id_idx",
+          "table": "cms_page",
+          "columns": [
+            "page_type_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_path_idx",
+          "table": "cms_page",
+          "columns": [
+            "path"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_permission_page_id_idx",
+          "table": "cms_page_permission",
+          "columns": [
+            "page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_permission_role_id_idx",
+          "table": "cms_page_permission",
+          "columns": [
+            "role_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_snippet_m2m_page_id_idx",
+          "table": "cms_page_snippet_m2m",
+          "columns": [
+            "page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_snippet_m2m_relation_name_idx",
+          "table": "cms_page_snippet_m2m",
+          "columns": [
+            "relation_name"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_snippet_m2m_snippet_id_idx",
+          "table": "cms_page_snippet_m2m",
+          "columns": [
+            "snippet_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_status_idx",
+          "table": "cms_page",
+          "columns": [
+            "status"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_subscription_page_id_idx",
+          "table": "cms_page_subscription",
+          "columns": [
+            "page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_subscription_user_id_idx",
+          "table": "cms_page_subscription",
+          "columns": [
+            "user_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_tag_name_idx",
+          "table": "cms_page_tag",
+          "columns": [
+            "name"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_tag_page_id_idx",
+          "table": "cms_page_tag",
+          "columns": [
+            "page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_type_app_label_idx",
+          "table": "cms_page_type",
+          "columns": [
+            "app_label"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_url_path_idx",
+          "table": "cms_page",
+          "columns": [
+            "url_path"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_view_restriction_kind_idx",
+          "table": "cms_page_view_restriction",
+          "columns": [
+            "kind"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_page_view_restriction_page_id_idx",
+          "table": "cms_page_view_restriction",
+          "columns": [
+            "page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_redirect_from_path_idx",
+          "table": "cms_redirect",
+          "columns": [
+            "from_path"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_reference_index_from_kind_idx",
+          "table": "cms_reference_index",
+          "columns": [
+            "from_kind"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_reference_index_to_kind_idx",
+          "table": "cms_reference_index",
+          "columns": [
+            "to_kind"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_revision_page_id_idx",
+          "table": "cms_revision",
+          "columns": [
+            "page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_search_promotion_page_id_idx",
+          "table": "cms_search_promotion",
+          "columns": [
+            "page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_search_promotion_query_id_idx",
+          "table": "cms_search_promotion",
+          "columns": [
+            "query_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_search_query_normalized_idx",
+          "table": "cms_search_query",
+          "columns": [
+            "normalized"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_site_setting_scope_idx",
+          "table": "cms_site_setting",
+          "columns": [
+            "scope"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_snippet_folder_path_idx",
+          "table": "cms_snippet",
+          "columns": [
+            "folder_path"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_snippet_revision_snippet_id_idx",
+          "table": "cms_snippet_revision",
+          "columns": [
+            "snippet_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_snippet_translation_field_path_idx",
+          "table": "cms_snippet_translation",
+          "columns": [
+            "field_path"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_snippet_translation_locale_id_idx",
+          "table": "cms_snippet_translation",
+          "columns": [
+            "locale_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_snippet_translation_snippet_id_idx",
+          "table": "cms_snippet_translation",
+          "columns": [
+            "snippet_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_snippet_type_name_idx",
+          "table": "cms_snippet",
+          "columns": [
+            "type_name"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_task_state_status_idx",
+          "table": "cms_task_state",
+          "columns": [
+            "status"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_task_state_task_id_idx",
+          "table": "cms_task_state",
+          "columns": [
+            "task_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_task_state_workflow_state_id_idx",
+          "table": "cms_task_state",
+          "columns": [
+            "workflow_state_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_translation_field_path_idx",
+          "table": "cms_translation",
+          "columns": [
+            "field_path"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_translation_locale_id_idx",
+          "table": "cms_translation",
+          "columns": [
+            "locale_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_translation_page_id_idx",
+          "table": "cms_translation",
+          "columns": [
+            "page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_uploaded_file_content_hash_idx",
+          "table": "cms_uploaded_file",
+          "columns": [
+            "content_hash"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_uploaded_file_user_id_idx",
+          "table": "cms_uploaded_file",
+          "columns": [
+            "user_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_workflow_name_idx",
+          "table": "cms_workflow",
+          "columns": [
+            "name"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_workflow_state_page_id_idx",
+          "table": "cms_workflow_state",
+          "columns": [
+            "page_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_workflow_state_requested_by_idx",
+          "table": "cms_workflow_state",
+          "columns": [
+            "requested_by"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_workflow_state_status_idx",
+          "table": "cms_workflow_state",
+          "columns": [
+            "status"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_workflow_state_workflow_id_idx",
+          "table": "cms_workflow_state",
+          "columns": [
+            "workflow_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_workflow_task_role_id_idx",
+          "table": "cms_workflow_task",
+          "columns": [
+            "role_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    },
+    {
+      "schema": {
+        "CreateIndex": {
+          "name": "cms_workflow_task_workflow_id_idx",
+          "table": "cms_workflow_task",
+          "columns": [
+            "workflow_id"
+          ],
+          "unique": false,
+          "method": "btree"
+        }
+      }
+    }
+  ]
+}

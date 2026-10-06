@@ -1,0 +1,18 @@
+{#- SnippetChooserBlock — public render. The enrichment pass
+    resolves `value.snippet_id` against `cms_snippet` and stamps
+    `_title` / `_slug` / `_html` (rendered markdown body) onto the
+    value. Default emits the snippet body inline so dropping a
+    snippet block into a stream "just works". Override this file
+    to wrap in custom markup. -#}
+{%- set sid = value.snippet_id | default(value="") -%}
+{%- if sid -%}
+    {%- if value._html -%}
+        <div class="rcms-block-snippet-chooser" data-snippet-id="{{ sid }}" data-snippet-slug="{{ value._slug | default(value='') }}">
+            {{- value._html | safe -}}
+        </div>
+    {%- else -%}
+        <span class="rcms-block-snippet-chooser rcms-block-snippet-chooser--unresolved" data-snippet-id="{{ sid }}">
+            {{- value._title | default(value="Snippet #" ~ sid) -}}
+        </span>
+    {%- endif -%}
+{%- endif -%}

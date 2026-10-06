@@ -1,0 +1,47 @@
+name: Bug report
+description: Something in Rustango-CMS doesn't work as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Found a security problem? Please don't file it
+        here — use [private vulnerability reporting](../../security/advisories/new)
+        instead (see SECURITY.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `cargo run --example cms_demo --no-default-features --features sqlite`
+        2. Open /cms-admin/...
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Rustango-CMS version or commit
+      placeholder: 0.1.0 / a1b2c3d
+    validations:
+      required: true
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database
+      options: [PostgreSQL, SQLite, MySQL]
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Server output (`RUST_LOG=debug`), browser console errors, screenshots.
+      render: text

@@ -1,0 +1,124 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Search" | translate(locale=LANG) }}{% if query %} — {{ query }}{% endif %} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Search" | translate(locale=LANG) }}{% endblock %}
+
+{% block content %}
+<form method="get" action="{{ url(name='rcms-admin:search') }}" class="rcms-card rcms-mb-4" style="padding: 12px 16px;">
+    <label class="rcms-search-input">
+        <span class="material-symbols-rounded">search</span>
+        <input type="search" name="q" placeholder="{{ "Search pages, library, media…" | translate(locale=LANG) }}" value="{{ query }}" autofocus autocomplete="off">
+    </label>
+    <p class="rcms-hint rcms-mt-2 rcms-mx-0 rcms-mb-0 rcms-text-xs">
+        {{ "Matches against title / slug / URL for pages, title / slug for library items, and title / filename / alt-text for media. Up to 20 results per bucket." | translate(locale=LANG) }}
+    </p>
+</form>
+
+{% if query %}
+    {% set q_esc = query | escape %}
+    <p class="rcms-hint rcms-m-0 rcms-mb-4">
+        {% if total_hits != 1 %}{{ "<strong>{count}</strong> results for “<strong>{query}</strong>”" | translate(locale=LANG, count=total_hits, query=q_esc) | safe }}{% else %}{{ "<strong>{count}</strong> result for “<strong>{query}</strong>”" | translate(locale=LANG, count=total_hits, query=q_esc) | safe }}{% endif %}
+    </p>
+
+    {% if total_hits == 0 %}
+        <div class="rcms-empty">
+            <p>{{ "No matches across pages, library, or media." | translate(locale=LANG) }}</p>
+            <p class="rcms-hint">{{ "Try a shorter query, or check spelling / casing — match is case-insensitive substring." | translate(locale=LANG) }}</p>
+        </div>
+    {% endif %}
+
+    {% if pages | length > 0 %}
+        <div class="rcms-card rcms-mb-4">
+            <h3 class="rcms-m-0 rcms-mb-3 rcms-text-base">
+                <span class="material-symbols-rounded sm">article</span>
+                {{ "Pages" | translate(locale=LANG) }} ({{ pages | length }})
+            </h3>
+            <ul class="rcms-list-none rcms-p-0 rcms-m-0">
+                {% for p in pages %}
+                    <li class="rcms-py-2 rcms-px-0 rcms-border-top">
+                        <a href="{{ url(name='rcms-admin:pages:edit', id=p.id) }}" class="rcms-no-underline">
+                            <strong>{{ p.title }}</strong>
+                            <span class="rcms-tag {{ p.status }} rcms-text-3xs rcms-ml-1">{{ p.status }}</span>
+                        </a>
+                        <br>
+                        <code class="rcms-text-2xs rcms-text-muted">{{ p.url_path }}</code>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    {% if snippets | length > 0 %}
+        <div class="rcms-card rcms-mb-4">
+            <h3 class="rcms-m-0 rcms-mb-3 rcms-text-base">
+                <span class="material-symbols-rounded sm">library_books</span>
+                {{ "Library" | translate(locale=LANG) }} ({{ snippets | length }})
+            </h3>
+            <ul class="rcms-list-none rcms-p-0 rcms-m-0">
+                {% for s in snippets %}
+                    <li class="rcms-py-2 rcms-px-0 rcms-border-top">
+                        <a href="{{ url(name='rcms-admin:library:edit', id=s.id) }}" class="rcms-no-underline">
+                            <strong>{{ s.title }}</strong>
+                        </a>
+                        <span class="rcms-hint rcms-text-2xs rcms-ml-2">{{ s.type_name }}</span>
+                        <br>
+                        <code class="rcms-text-2xs rcms-text-muted">{{ s.slug }}</code>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    {% if media | length > 0 %}
+        <div class="rcms-card rcms-mb-4">
+            <h3 class="rcms-m-0 rcms-mb-3 rcms-text-base">
+                <span class="material-symbols-rounded sm">image</span>
+                {{ "Media" | translate(locale=LANG) }} ({{ media | length }})
+            </h3>
+            <ul class="rcms-list-none rcms-p-0 rcms-m-0">
+                {% for m in media %}
+                    <li class="rcms-py-2 rcms-px-0 rcms-border-top">
+                        <a href="{{ url(name='rcms-admin:media:edit', id=m.id) }}" class="rcms-no-underline">
+                            <strong>{{ m.title | default(value=m.filename) }}</strong>
+                        </a>
+                        <span class="rcms-hint rcms-text-2xs rcms-ml-2">{{ m.kind }}</span>
+                        <br>
+                        <code class="rcms-text-2xs rcms-text-muted">{{ m.filename }}</code>
+                        {% if m.alt_text %} · <span class="rcms-hint rcms-text-2xs">{{ m.alt_text }}</span>{% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+
+    {# #107 — plugin-contributed search areas
+       (`register_admin_search_area!`). Each area renders as its own
+       bucket beneath the built-ins. #}
+    {% if plugin_search_areas and plugin_search_areas | length > 0 %}
+        {% for area in plugin_search_areas %}
+            {% if area.hits | length > 0 %}
+                <div class="rcms-search-bucket rcms-card rcms-mb-4" style="padding: 16px;">
+                    <h2 class="rcms-text-base">
+                        <span class="material-symbols-rounded sm">extension</span>
+                        {{ area.label }} ({{ area.hits | length }})
+                    </h2>
+                    <ul class="rcms-list-none rcms-p-0 rcms-m-0">
+                        {% for hit in area.hits %}
+                            <li class="rcms-py-2 rcms-px-0 rcms-border-bottom">
+                                <a href="{{ hit.href }}"><strong>{{ hit.label }}</strong></a>
+                                {% if hit.subtitle %}
+                                    <br><span class="rcms-hint rcms-text-2xs">{{ hit.subtitle }}</span>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+{% else %}
+    <div class="rcms-empty">
+        <p>{{ "Type a query above to search across pages, library, and media." | translate(locale=LANG) }}</p>
+        <p class="rcms-hint">{{ "Tip: press <code>/</code> from any admin page to jump straight to the search box." | translate(locale=LANG) | safe }}</p>
+    </div>
+{% endif %}
+{% endblock %}

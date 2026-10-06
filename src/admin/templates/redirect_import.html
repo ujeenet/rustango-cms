@@ -1,0 +1,35 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Import redirects" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Import redirects" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:redirects:list') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "All redirects" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block description %}
+    {{ "Upload a CSV or TSV file. One row per redirect, columns: <code>old_path,new_path[,is_permanent]</code>. Optional header row is accepted (<code>from_path</code> / <code>from</code> / <code>old</code> / <code>source</code> as the first cell). <code>is_permanent</code> defaults to <code>true</code> (301); set <code>false</code> / <code>0</code> / <code>302</code> for temporary." | translate(locale=LANG) | safe }}
+{% endblock %}
+
+{% block body %}
+
+<form method="post" action="{{ url(name='rcms-admin:redirects:import') }}"
+      enctype="multipart/form-data"
+      class="rcms-card rcms-maxw-640">
+    {{ csrf_token | csrf_input | safe }}
+    <div class="rcms-field">
+        <label>{{ "CSV / TSV file" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+        <input type="file" name="file" required accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
+        <div class="rcms-hint">
+            {{ "Quoted commas inside path values are not supported — paths are URL strings, no commas expected. Use TSV if you do have unusual content." | translate(locale=LANG) }}
+        </div>
+    </div>
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:redirects:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">
+            <span class="material-symbols-rounded sm">upload</span> {{ "Import" | translate(locale=LANG) }}
+        </button>
+    </div>
+</form>
+{% endblock %}

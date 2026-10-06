@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page.seo_title | default(value=page.title) }}</title>
+    <meta name="description" content="{{ page.seo_description }}">
+    {% if not page.robots_index %}<meta name="robots" content="noindex">{% endif %}
+    {% include "_site.css.html" %}
+</head>
+<body>
+    <nav class="breadcrumb">
+        {% for ancestor in ancestors %}
+            <a href="{{ ancestor | page_href }}">{{ ancestor.title }}</a> /
+        {% endfor %}
+        <span>{{ page.title }}</span>
+    </nav>
+    <article>
+        <h1>{{ page.title }}</h1>
+        {# StreamField `body` — the render layer pre-compiles it into the
+           `_stream_html` map; `stream_render` pulls the compiled HTML. Empty
+           string when the page has no body yet, so a bare page still renders. #}
+        <div class="stream-body">{{ stream_render(name="body") | safe }}</div>
+
+        {# Index: this type's `children_query` override lists published
+           children; `page_href` builds each link from the child's full
+           `url_path` (correct for deep trees), never the leaf slug. #}
+        {% if children %}
+        <section class="child-index">
+            <h2>In this section</h2>
+            <ul>
+                {% for child in children %}
+                    <li><a href="{{ child | page_href }}">{{ child.title }}</a></li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
+    </article>
+    <footer>
+        <small>Powered by <a href="https://github.com/ujeenet/rustango-cms">rustango-cms</a></small>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,125 @@
+{# #587 — MCP keys card, shared by Account preferences (self-service) and
+   the user edit form (admin mints for another user). The including
+   template sets `mcp_create_url` + `mcp_revoke_base` before the include.
+   `mcp_one_time` (set only on the create response) opens the show-once
+   dialog — the token never rides a redirect or a cookie. #}
+{# `mcp_card_class` lets each host page match its own card width so the
+   card lines up with its neighbours (account = 720, user form = 760). #}
+<div class="rcms-card {{ mcp_card_class | default(value='rcms-maxw-720') }} rcms-mt-4 rcms-mb-4">
+    <h2 class="rcms-m-0 rcms-mb-1 rcms-text-lg">{{ "MCP keys" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint rcms-m-0 rcms-mb-3 rcms-text-2xs">
+        {{ "Let an AI agent (Claude, an IDE assistant) operate the CMS as this user. Paste a key into any MCP client as the Authorization bearer; its capabilities follow this user's roles and update live. Revoking takes effect immediately." | translate(locale=LANG) }}
+    </p>
+
+    {% if mcp_keys and mcp_keys | length > 0 %}
+    <div class="rcms-table-wrap rcms-mb-3">
+        <table class="rcms-data">
+            <thead>
+                <tr>
+                    <th>{{ "Label" | translate(locale=LANG) }}</th>
+                    <th>{{ "Key" | translate(locale=LANG) }}</th>
+                    <th>{{ "Scope" | translate(locale=LANG) }}</th>
+                    <th>{{ "Created" | translate(locale=LANG) }}</th>
+                    <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for key in mcp_keys %}
+                <tr>
+                    <td>{{ key.label }}</td>
+                    <td><code>{{ key.prefix }}…</code></td>
+                    <td>
+                        {% if key.scope and key.scope | length > 0 %}
+                            {% for s in key.scope %}<span class="rcms-tag rcms-tag--small">{{ s }}</span> {% endfor %}
+                        {% else %}
+                            <span class="rcms-hint">{{ "All permitted skills" | translate(locale=LANG) }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ key.created_at }}</td>
+                    <td class="rcms-actions">
+                        <form method="post" action="{{ mcp_revoke_base }}/{{ key.id }}/revoke"
+                              onsubmit="return confirm({{ "Revoke this key? Agents using it lose access immediately." | translate(locale=LANG) | json_encode() }});">
+                            {{ csrf_token | csrf_input | safe }}
+                            <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Revoke" | translate(locale=LANG) }}</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="rcms-hint rcms-mb-3">{{ "No keys yet." | translate(locale=LANG) }}</p>
+    {% endif %}
+
+    <form method="post" action="{{ mcp_create_url }}">
+        {{ csrf_token | csrf_input | safe }}
+        <div class="rcms-field rcms-mb-2">
+            <label>{{ "Key label" | translate(locale=LANG) }}</label>
+            <input type="text" name="label" maxlength="100" placeholder="{{ "e.g. Claude Code on my laptop" | translate(locale=LANG) }}">
+        </div>
+        {% if mcp_skills and mcp_skills | length > 0 %}
+        <div class="rcms-field rcms-m-0">
+            <label>{{ "Limit to skills (optional)" | translate(locale=LANG) }}</label>
+        </div>
+        <div class="rcms-hint rcms-text-2xs rcms-mb-1">
+            {{ "Leave unchecked for everything this user's roles allow. A scoped key can never exceed the user's own permissions." | translate(locale=LANG) }}
+        </div>
+        <ul class="rcms-list-none rcms-p-0 rcms-m-0 rcms-mb-3">
+            {% for s in mcp_skills %}
+            <li class="rcms-flex rcms-items-start rcms-gap-3 rcms-py-2 rcms-px-0 rcms-border-bottom">
+                <input type="checkbox" id="mcp-skill-{{ s.codename }}" name="skill"
+                       value="{{ s.codename }}" class="rcms-mt-1">
+                <label for="mcp-skill-{{ s.codename }}" class="rcms-flex-1 rcms-cursor-pointer">
+                    <strong>{{ s.name }}</strong>
+                    <div class="rcms-hint">{{ s.description }}</div>
+                </label>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        <div class="rcms-form-actions">
+            <button type="submit" class="rcms-btn">{{ "Create MCP key" | translate(locale=LANG) }}</button>
+        </div>
+    </form>
+</div>
+
+
+{% if mcp_one_time %}
+<dialog id="mcp-one-time" class="rcms-confirm-dialog">
+    <div class="rcms-confirm-form">
+        <h2>{{ "Copy your new MCP key" | translate(locale=LANG) }}</h2>
+        <p>{{ "This is the only time the key is shown. Store it like a password." | translate(locale=LANG) }}</p>
+        <div class="rcms-flex rcms-gap-2 rcms-mb-3">
+            <input id="mcp-one-time-token" type="text" readonly value="{{ mcp_one_time.token }}"
+                   class="rcms-w-full" onclick="this.select()">
+            <button type="button" class="rcms-btn rcms-btn-tonal" id="mcp-one-time-copy">{{ "Copy" | translate(locale=LANG) }}</button>
+        </div>
+        <p>{{ "Connect any MCP client to <code>/cms-admin/mcp</code> on this site with header <code>Authorization: Bearer &lt;key&gt;</code>." | translate(locale=LANG) | safe }}</p>
+        <div class="rcms-confirm-actions">
+            <button type="button" class="rcms-btn" id="mcp-one-time-close">{{ "Done" | translate(locale=LANG) }}</button>
+        </div>
+    </div>
+</dialog>
+<script>
+(function () {
+    const dlg = document.getElementById("mcp-one-time");
+    if (!dlg) return;
+    dlg.showModal();
+    const token = document.getElementById("mcp-one-time-token");
+    const copy = document.getElementById("mcp-one-time-copy");
+    copy.addEventListener("click", () => {
+        token.select();
+        const done = () => { copy.textContent = "✓"; setTimeout(() => { copy.textContent = copy.dataset.label || "Copy"; }, 1500); };
+        copy.dataset.label = copy.textContent;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(token.value).then(done, done);
+        } else {
+            document.execCommand("copy");
+            done();
+        }
+    });
+    document.getElementById("mcp-one-time-close").addEventListener("click", () => dlg.close());
+})();
+</script>
+{% endif %}

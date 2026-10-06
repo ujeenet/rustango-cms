@@ -1,0 +1,66 @@
+{#- The shop's layout. The name, colours and footer come from the "Brand"
+    setting and the navigation from the "main" menu, both made in the
+    admin. A child template fills `content` (and may replace `hero`). -#}
+{% set brand = site_setting(scope="brand") %}
+{% set shop_name = brand.shop_name | default(value="Clay & Kiln") %}
+<!DOCTYPE html>
+<html lang="{{ LANG | default(value="en") }}" class="scroll-smooth">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{% if page.seo_title %}{{ page.seo_title }}{% else %}{{ page.title }}{% endif %} · {{ shop_name }}{% endblock %}</title>
+    {{ rcms_meta_tags(page=page, canonical=canonical_url, origin=site_origin) | safe }}
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Inter:wght@400;500;600&display=swap">
+    <link rel="stylesheet" href="/static/shop.css?v={{ shop_css_version() }}">
+    <style>
+        :root { --accent: {{ brand.accent | default(value="#9c5431") }}; --bg: {{ brand.background | default(value="#faf6f0") }}; }
+    </style>
+</head>
+<body class="flex min-h-screen flex-col bg-[color:var(--bg)] font-sans text-ink antialiased">
+    <header class="sticky top-0 z-30 border-b border-clay-100 bg-[color:var(--bg)]/90 backdrop-blur">
+        <div class="mx-auto flex max-w-6xl flex-wrap items-center gap-x-8 gap-y-3 px-5 py-4">
+            <a href="/" class="font-display text-2xl font-semibold tracking-tight text-ink">{{ shop_name }}</a>
+            {% set nav = menu(slug="main") %}
+            {% if nav %}
+            <nav aria-label="Main" class="order-last flex w-full flex-wrap gap-x-6 gap-y-2 text-[15px] md:order-none md:w-auto md:flex-1">
+                {% for item in nav.items %}{% if item.url %}
+                <a href="{{ item.url }}" class="transition hover:text-[color:var(--accent)] {% if item.in_active_trail %}font-semibold text-[color:var(--accent)]{% else %}text-ink/75{% endif %}">{{ item.label }}</a>
+                {% endif %}{% endfor %}
+            </nav>
+            {% else %}<div class="flex-1"></div>{% endif %}
+            {% set langs = language_switcher() %}
+            {% if langs | length > 1 %}
+            <nav aria-label="Language" class="ml-auto flex gap-1 rounded-full border border-clay-200 p-1 text-xs font-medium md:ml-0">
+                {% for l in langs %}
+                <a href="{{ l.url }}" hreflang="{{ l.code }}" class="rounded-full px-2.5 py-1 {% if l.is_current %}bg-ink text-white{% else %}text-ink/70 hover:text-ink{% endif %}">{{ l.code | upper }}</a>
+                {% endfor %}
+            </nav>
+            {% endif %}
+        </div>
+    </header>
+
+    {% block hero %}{% endblock %}
+
+    <main class="mx-auto w-full max-w-6xl flex-1 px-5 py-12 md:py-16">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="border-t border-clay-100 bg-white/60">
+        <div class="mx-auto flex max-w-6xl flex-col gap-3 px-5 py-10 text-sm text-ink/70 md:flex-row md:justify-between">
+            <p class="font-display text-lg text-ink">{{ shop_name }}</p>
+            {% if brand.footer %}<p class="max-w-md">{{ brand.footer }}</p>{% endif %}
+            {#- The pages under Home that have "Show in menus" ticked — no menu
+                to keep up to date by hand. -#}
+            {% for root in auto_menu(depth=2) %}{% if root.children | length > 0 %}
+            <nav aria-label="Explore" class="flex flex-wrap gap-x-5 gap-y-1">
+                {% for item in root.children %}<a href="{{ item.url_path }}" class="hover:text-[color:var(--accent)]">{{ item.title }}</a>{% endfor %}
+            </nav>
+            {% endif %}{% endfor %}
+            <p>© {{ now() | date(format="%Y") }} {{ shop_name }}</p>
+        </div>
+    </footer>
+</body>
+</html>

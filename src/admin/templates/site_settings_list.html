@@ -1,0 +1,72 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Site settings" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Site settings" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:site-settings:edit', scope='new') }}" class="rcms-btn rcms-btn-small">{{ "+ New scope" | translate(locale=LANG) }}</a>
+{% endblock %}
+
+{% block description %}
+    {{ "Editor-managed singleton key-value rows. Templates read them via" | translate(locale=LANG) }}
+    <code>{{"{{"}} site_setting(scope='X') {{"}}"}}</code>. {{ "Common scopes:" | translate(locale=LANG) }} <code>footer</code>,
+    <code>header</code>, <code>contact</code>, <code>social</code>.
+{% endblock %}
+
+{% block body %}
+
+{% if rows | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "No site settings yet." | translate(locale=LANG) }}</p>
+        <p class="rcms-hint">{{ "Create a scope (e.g. <code>footer</code>) and store JSON like" | translate(locale=LANG) | safe }}
+            <code>{"copy": "© 2026", "links": [...]}</code>.</p>
+        <a href="{{ url(name='rcms-admin:site-settings:edit', scope='new') }}" class="rcms-btn">{{ "Create first setting" | translate(locale=LANG) }}</a>
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Scope" | translate(locale=LANG) }}</th>
+                <th>{{ "Preview" | translate(locale=LANG) }}</th>
+                <th>{{ "Updated" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+                <tr>
+                    <td>
+                        <strong>{{ r.scope }}</strong>
+                        {% if r.typed %}<span class="rcms-tag" title="{{ r.label }} — registered typed schema">{{ "Typed" | translate(locale=LANG) }}</span>{% endif %}
+                    </td>
+                    <td>
+                        {% if r.configured %}
+                            <code class="rcms-text-2xs">{{ r.preview | truncate(length=80) }}</code>
+                        {% else %}
+                            <span class="rcms-hint">{{ "Not configured yet" | translate(locale=LANG) }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if r.updated_at %}
+                            <time data-utc="{{ r.updated_at | date(format='%+') }}">{{ r.updated_at | naturaltime }}</time>
+                        {% endif %}
+                    </td>
+                    <td class="rcms-actions">
+                        <a href="{{ url(name='rcms-admin:site-settings:edit', scope=r.scope) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{% if r.configured %}{{ "Edit" | translate(locale=LANG) }}{% else %}{{ "Configure" | translate(locale=LANG) }}{% endif %}</a>
+                        {% if r.configured %}
+                            <form method="post" action="{{ url(name='rcms-admin:site-settings:delete', scope=r.scope) }}"
+                                  data-confirm="{{ "Delete site setting “{scope}”? Templates reading this scope will fall back to absent." | translate(locale=LANG, scope=r.scope) }}"
+                                  data-confirm-style="danger"
+                                  class="rcms-inline rcms-m-0">
+                                {{ csrf_token | csrf_input | safe }}
+                                <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">{{ "Delete" | translate(locale=LANG) }}</button>
+                            </form>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+{% endblock %}

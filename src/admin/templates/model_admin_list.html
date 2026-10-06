@@ -1,0 +1,35 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ model_label }} — CMS Admin{% endblock %}
+{% block heading %}{{ model_label }}{% endblock %}
+
+{% block description %}
+    {{ total }} {% if total != 1 %}{{ "rows" | translate(locale=LANG) }}{% else %}{{ "row" | translate(locale=LANG) }}{% endif %} ·
+    {{ "generic model admin" | translate(locale=LANG) }} (<code>{{ model_slug }}</code>).
+{% endblock %}
+
+{% block body %}
+
+{% if rows | length == 0 %}
+    <div class="rcms-empty">
+        {% set label = model_label | lower %}
+        <p>{{ "No {label} yet." | translate(locale=LANG, label=label) }}</p>
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                {% for col in columns %}<th>{{ col }}</th>{% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+                <tr>
+                    {% for cell in row %}<td>{{ cell | truncate(length=120) }}</td>{% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+{% endblock %}

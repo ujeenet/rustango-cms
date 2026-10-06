@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page.seo_title | default(value=page.title) }}</title>
+    <meta name="description" content="{{ page.seo_description }}">
+    {% if not page.robots_index %}<meta name="robots" content="noindex">{% endif %}
+    {% include "_site.css.html" %}
+</head>
+<body>
+    <header class="site-header">
+        <h1>{{ page.title }}</h1>
+        {% if page.seo_description %}<p class="lede">{{ page.seo_description }}</p>{% endif %}
+    </header>
+    <main>
+        {% if children | length > 0 %}
+        <section>
+            <h2>Articles</h2>
+            <ul class="index">
+            {% for child in children %}
+                <li>
+                    <a href="{{ url_prefix }}/{{ child.slug }}">{{ child.title }}</a>
+                    {% if child.seo_description %}<span>{{ child.seo_description }}</span>{% endif %}
+                </li>
+            {% endfor %}
+            </ul>
+        </section>
+        {% else %}
+        <p class="empty">No articles yet. Add a child page in the admin to see it listed here.</p>
+        {% endif %}
+    </main>
+</body>
+</html>

@@ -1,0 +1,206 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Permissions" | translate(locale=LANG) }} — {{ collection_name }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Permissions" | translate(locale=LANG) }} — {{ collection_name }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:media:list') }}?collection={{ collection_id }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "Back to collection" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block extra_head %}
+{% endblock %}
+
+{% block description %}
+    {% set cn = collection_name | escape %}
+        {{ "Grant per-role permissions on <strong>{name}</strong>. Permissions <strong>inherit</strong> down the collection tree — a grant here applies to every nested collection unless explicitly overridden. Tenant superusers bypass every check. (<code>publish</code> doesn't apply to collections; leave it unchecked.)" | translate(locale=LANG, name=cn) | safe }}
+{% endblock %}
+
+{% block body %}
+
+    {% if perm_grid | length == 0 %}
+        <div class="rcms-empty">
+            <p>{{ "No roles defined yet — create one in <a href='{url}'>Roles</a> first." | translate(locale=LANG, url=url(name='rcms-admin:roles:list')) | safe }}</p>
+        </div>
+    {% else %}
+        <div class="rcms-table-wrap">
+        <table class="rcms-data rcms-perm-table" id="permissions-table" data-collection-id="{{ collection_id }}">
+            <thead>
+                <tr>
+                    <th>{{ "Role" | translate(locale=LANG) }}</th>
+                    {% for action in perm_actions %}
+                        <th>{{ action | translate(locale=LANG) }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in perm_grid %}
+                    <tr>
+                        <td>
+                            <strong>{{ row.role_name }}</strong>
+                            {% if row.role_description %}
+                                <br><span class="rcms-hint rcms-text-2xs">{{ row.role_description }}</span>
+                            {% endif %}
+                        </td>
+                        {% for cell in row.cells %}
+                            <td>
+                                <input type="checkbox"
+                                       data-role-id="{{ row.role_id }}"
+                                       data-action="{{ cell.action }}"
+                                       {% if cell.granted %}checked{% endif %}>
+                            </td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+
+        <div class="rcms-mt-3 rcms-flex rcms-justify-between rcms-items-center">
+            <span class="rcms-hint rcms-text-xs" id="perm-save-status"
+                  data-i18n-saving="{{ "Saving…" | translate(locale=LANG) }}"
+                  data-i18n-saved-one="{{ "Saved {n} grant." | translate(locale=LANG) }}"
+                  data-i18n-saved-other="{{ "Saved {n} grants." | translate(locale=LANG) }}"
+                  data-i18n-failed="{{ "Save failed: {error}" | translate(locale=LANG) }}"
+                  data-i18n-neterror="{{ "Network error: {error}" | translate(locale=LANG) }}"></span>
+            <button type="button" class="rcms-btn rcms-btn-small" id="perm-save-btn">
+                <span class="material-symbols-rounded sm">save</span> {{ "Save permissions" | translate(locale=LANG) }}
+            </button>
+        </div>
+    {% endif %}
+
+
+{# #195 — Collection view restriction. Mirrors the page Privacy
+   widget on the page editor's Status tab; gates /__media__/<spec>/<id>
+   requests when set. Inherits down the collection tree. #}
+<div class="rcms-card rcms-mt-6">
+    <h2 class="rcms-m-0 rcms-mb-2">
+        <span class="material-symbols-rounded sm">lock</span>
+        {{ "Privacy" | translate(locale=LANG) }}
+    </h2>
+    <p class="rcms-hint rcms-mt-0">
+        {{ "Restrict who can serve images / documents from this collection. The restriction inherits to every nested collection unless the nested collection sets its own." | translate(locale=LANG) }}
+    </p>
+    <form method="post" action="{{ url(name='rcms-admin:media:collection-privacy', id=collection_id) }}">
+        {{ csrf_token | csrf_input | safe }}
+        <div class="rcms-field rcms-mb-2">
+            <label>
+                <input type="radio" name="kind" value="none"
+                       {% if restriction_kind == "none" %}checked{% endif %}>
+                {{ "Public (no restriction)" | translate(locale=LANG) }}
+            </label>
+        </div>
+        <div class="rcms-field rcms-mb-2">
+            <label>
+                <input type="radio" name="kind" value="login"
+                       {% if restriction_kind == "login" %}checked{% endif %}>
+                {{ "Requires login (any signed-in user passes)" | translate(locale=LANG) }}
+            </label>
+        </div>
+        <div class="rcms-field rcms-mb-2">
+            <label>
+                <input type="radio" name="kind" value="groups"
+                       {% if restriction_kind == "groups" %}checked{% endif %}>
+                {{ "Restricted to selected groups" | translate(locale=LANG) }}
+            </label>
+            {% if restriction_roles and restriction_roles | length > 0 %}
+                <div class="rcms-mt-2 rcms-pl-6">
+                    <select name="group_ids_picker" multiple size="4" class="rcms-w-320"
+                            onchange="this.parentNode.querySelector('[name=group_ids]').value = Array.from(this.selectedOptions).map(o => o.value).join(',');">
+                        {% for r in restriction_roles %}
+                            <option value="{{ r.id }}" {% if r.selected %}selected{% endif %}>{{ r.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <input type="hidden" name="group_ids"
+                           value="{% for r in restriction_roles %}{% if r.selected %}{{ r.id }}{% if not loop.last %},{% endif %}{% endif %}{% endfor %}">
+                </div>
+            {% endif %}
+        </div>
+        <div class="rcms-field rcms-mb-2">
+            <label>
+                <input type="radio" name="kind" value="permission"
+                       {% if restriction_kind == "permission" %}checked{% endif %}>
+                {{ "Members with a permission" | translate(locale=LANG) }}
+            </label>
+            {% if restriction_codename_choices and restriction_codename_choices | length > 0 %}
+                <div class="rcms-mt-2 rcms-pl-6">
+                    <div class="rcms-flex rcms-gap-3 rcms-flex-wrap">
+                        {% for c in restriction_codename_choices %}
+                            <label class="rcms-items-center rcms-gap-1 rcms-inline-flex">
+                                <input type="checkbox" name="_codename_choice" value="{{ c.codename }}"{% if c.checked %} checked{% endif %}
+                                       onchange="this.closest('.rcms-field').querySelector('[name=codenames]').value = Array.from(this.closest('.rcms-field').querySelectorAll('[name=_codename_choice]:checked')).map(cb => cb.value).join(',');">
+                                {{ c.label }}
+                            </label>
+                        {% endfor %}
+                    </div>
+                    <input type="hidden" name="codenames" value="{{ restriction_codenames_str }}">
+                </div>
+            {% endif %}
+        </div>
+        <div class="rcms-field rcms-mb-2">
+            <label>
+                <input type="radio" name="kind" value="password"
+                       {% if restriction_kind == "password" %}checked{% endif %}>
+                {{ "Password-protected" | translate(locale=LANG) }}
+                {% if restriction_has_password %}
+                    <span class="rcms-hint rcms-text-2xs">{{ "(leave the field blank to keep the existing password)" | translate(locale=LANG) }}</span>
+                {% endif %}
+            </label>
+            <div class="rcms-mt-2 rcms-pl-6">
+                <input type="password" name="password" autocomplete="new-password"
+                       placeholder="{{ "Set or change the password" | translate(locale=LANG) }}"
+                       class="rcms-w-320">
+                <p class="rcms-hint rcms-text-2xs rcms-mt-1 rcms-mx-0 rcms-mb-0">
+                    {{ "Password-protected collections require any signed-in user to fetch images — direct <code>&lt;img src&gt;</code> URLs can't run an interactive prompt." | translate(locale=LANG) | safe }}
+                </p>
+            </div>
+        </div>
+        <div class="rcms-form-actions">
+            <button type="submit" class="rcms-btn">{{ "Save privacy" | translate(locale=LANG) }}</button>
+        </div>
+    </form>
+</div>
+
+<script>
+(function () {
+    const table = document.getElementById('permissions-table');
+    const btn = document.getElementById('perm-save-btn');
+    const status = document.getElementById('perm-save-status');
+    if (!table || !btn) return;
+
+    btn.addEventListener('click', async () => {
+        const cid = table.dataset.collectionId;
+        const grants = Array.from(table.querySelectorAll('input[type="checkbox"]:checked')).map(cb => ({
+            role_id: parseInt(cb.dataset.roleId, 10),
+            action: cb.dataset.action,
+        }));
+        const csrfCookie = document.cookie.split('; ').find(c => c.startsWith('rustango_csrf='));
+        const token = csrfCookie ? decodeURIComponent(csrfCookie.split('=')[1]) : '';
+        btn.disabled = true;
+        status.textContent = status.dataset.i18nSaving;
+        status.style.color = 'var(--muted)';
+        try {
+            const resp = await fetch(`/cms-admin/media/collections/${cid}/permissions`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', 'X-CSRF-Token': token },
+                body: JSON.stringify({ grants }),
+            });
+            if (resp.ok) {
+                const tpl = grants.length === 1 ? status.dataset.i18nSavedOne : status.dataset.i18nSavedOther;
+                status.textContent = tpl.replace('{n}', grants.length);
+                status.style.color = 'var(--success)';
+            } else {
+                const text = await resp.text();
+                status.textContent = status.dataset.i18nFailed.replace('{error}', text.slice(0, 200));
+                status.style.color = 'var(--danger)';
+            }
+        } catch (err) {
+            status.textContent = status.dataset.i18nNeterror.replace('{error}', err.message);
+            status.style.color = 'var(--danger)';
+        } finally {
+            btn.disabled = false;
+        }
+    });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block heading %}{{ "Templates" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ name }}{% endblock %}
+{% block description %}
+    {% if is_override %}{{ "Customised for this site. Reverting removes your copy and restores the inherited template." | translate(locale=LANG) }}
+    {% elif has_global %}{{ "Inherited. Saving creates a copy for this site only; the shared template is left alone." | translate(locale=LANG) }}
+    {% else %}{{ "New template for this site." | translate(locale=LANG) }}{% endif %}
+{% endblock %}
+{% block body %}
+<div class="rcms-page-head">
+    <h1><code>{{ name }}</code></h1>
+    <a class="rcms-btn rcms-btn-outlined rcms-btn-small" href="{{ url(name='rcms-admin:templates:list') }}">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "All templates" | translate(locale=LANG) }}
+    </a>
+</div>
+
+{% if saved %}
+<div class="rcms-alert rcms-alert-success">{{ "Saved. The change is live." | translate(locale=LANG) }}</div>
+{% endif %}
+{% if error %}
+<div class="rcms-alert rcms-alert-danger">
+    <strong>{{ "Not saved — the template does not parse" | translate(locale=LANG) }}</strong>
+    <pre class="rcms-pre-wrap rcms-font-mono rcms-text-sm">{{ error }}</pre>
+</div>
+{% endif %}
+
+<div class="rcms-card">
+    <form method="post" action="{{ url(name='rcms-admin:templates:edit') }}" data-template-form>
+        {{ csrf_token | csrf_input | safe }}
+        <input type="hidden" name="name" value="{{ name }}">
+        {# The editor enhances this textarea in place. Without JS — or if
+           the vendored bundle is missing — it stays a usable monospace
+           editor rather than nothing. #}
+        <textarea name="body" data-template-editor spellcheck="false"
+                  aria-label="{{ "Template source" | translate(locale=LANG) }}">{{ body }}</textarea>
+
+        {# Inline result of the Validate button. Filled by JS; stays empty
+           (and hidden) without it, so nothing dangles. #}
+        <div class="rcms-validate-result" data-validate-result hidden></div>
+
+        <div class="rcms-form-actions">
+            <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small"
+                    data-validate-url="{{ url(name='rcms-admin:templates:validate') }}"
+                    data-ok-text="{{ "Template parses — safe to save." | translate(locale=LANG) }}"
+                    data-validate>
+                <span class="material-symbols-rounded sm">check_circle</span> {{ "Validate" | translate(locale=LANG) }}
+            </button>
+            <button type="submit" class="rcms-btn rcms-btn-small">
+                <span class="material-symbols-rounded sm">save</span> {{ "Save" | translate(locale=LANG) }}
+            </button>
+            {% if is_override %}
+            <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small rcms-btn-danger"
+                    formaction="{{ url(name='rcms-admin:templates:delete') }}"
+                    onclick="return confirm('{{ "Revert this template to the inherited version?" | translate(locale=LANG) }}');">
+                {{ "Revert to inherited" | translate(locale=LANG) }}
+            </button>
+            {% endif %}
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/cms-admin/static/template-editor.js?v={{ cms_asset_version() }}" defer></script>
+{% endblock %}

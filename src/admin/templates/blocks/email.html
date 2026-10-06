@@ -1,0 +1,5 @@
+{%- set label = value.label | default(value="") | trim -%}
+{%- set addr = value.value | default(value="") -%}
+{%- if addr -%}
+<a class="rcms-block-email" href="mailto:{{ addr }}">{{ label | default(value=addr) }}</a>
+{%- endif -%}

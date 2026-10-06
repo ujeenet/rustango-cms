@@ -1,0 +1,128 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Dashboard" | translate(locale=LANG) }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Dashboard" | translate(locale=LANG) }}{% endblock %}
+
+{% block content %}
+<div class="rcms-dashboard-grid">
+    {% if review_rows | length > 0 %}
+    <section class="rcms-card rcms-dashboard-card rcms-dashboard-span-2">
+        <h2><span class="material-symbols-rounded sm">approval</span> {{ "Waiting for your review" | translate(locale=LANG) }}</h2>
+        <ul class="rcms-dashboard-list">
+            {% for r in review_rows %}
+                <li>
+                    <a href="{{ url(name='rcms-admin:pages:edit', id=r.page_id) }}">
+                        <strong>{{ r.title }}</strong>
+                        <code class="rcms-hint">{{ r.url_path }}</code>
+                    </a>
+                    <span class="rcms-hint">
+                        {{ r.step }}
+                        {% if r.requested_at %} · <time data-utc="{{ r.requested_at | date(format='%+') }}">{{ r.requested_at | naturaltime }}</time>{% endif %}
+                    </span>
+                </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endif %}
+    <section class="rcms-card rcms-dashboard-card">
+        <h2><span class="material-symbols-rounded sm">article</span> {{ "Pages" | translate(locale=LANG) }}</h2>
+        <ul class="rcms-dashboard-counts">
+            <li><span class="rcms-dashboard-count">{{ count_published }}</span><span class="rcms-dashboard-count-label">{{ "Published" | translate(locale=LANG) }}</span></li>
+            <li><span class="rcms-dashboard-count">{{ count_drafts }}</span><span class="rcms-dashboard-count-label">{{ "Drafts" | translate(locale=LANG) }}</span></li>
+            <li><span class="rcms-dashboard-count">{{ count_scheduled }}</span><span class="rcms-dashboard-count-label">{{ "Scheduled" | translate(locale=LANG) }}</span></li>
+            <li><span class="rcms-dashboard-count">{{ count_archived }}</span><span class="rcms-dashboard-count-label">{{ "Archived" | translate(locale=LANG) }}</span></li>
+        </ul>
+        <a href="{{ url(name='rcms-admin:pages:list') }}" class="rcms-btn rcms-btn-text rcms-btn-small">{{ "Open Pages →" | translate(locale=LANG) }}</a>
+    </section>
+
+    <section class="rcms-card rcms-dashboard-card">
+        <h2><span class="material-symbols-rounded sm">library_books</span> {{ "Library + Media" | translate(locale=LANG) }}</h2>
+        <ul class="rcms-dashboard-counts">
+            <li><span class="rcms-dashboard-count">{{ count_snippets }}</span><span class="rcms-dashboard-count-label">{{ "Snippets" | translate(locale=LANG) }}</span></li>
+            <li><span class="rcms-dashboard-count">{{ count_images }}</span><span class="rcms-dashboard-count-label">{{ "Images" | translate(locale=LANG) }}</span></li>
+            <li><span class="rcms-dashboard-count">{{ count_documents }}</span><span class="rcms-dashboard-count-label">{{ "Documents" | translate(locale=LANG) }}</span></li>
+        </ul>
+        <a href="{{ url(name='rcms-admin:library:list') }}" class="rcms-btn rcms-btn-text rcms-btn-small">{{ "Open Library →" | translate(locale=LANG) }}</a>
+    </section>
+
+    <section class="rcms-card rcms-dashboard-card rcms-dashboard-span-2">
+        <h2><span class="material-symbols-rounded sm">history</span> {{ "Recent edits" | translate(locale=LANG) }}</h2>
+        {% if recent_edits | length == 0 %}
+            <p class="rcms-hint">{{ "No edits yet." | translate(locale=LANG) }}</p>
+        {% else %}
+            <ul class="rcms-dashboard-list">
+                {% for r in recent_edits %}
+                    <li>
+                        <a href="{{ url(name='rcms-admin:pages:edit', id=r.page_id) }}">
+                            <strong>{{ r.title }}</strong>
+                            <code class="rcms-hint">{{ r.url_path }}</code>
+                        </a>
+                        <span class="rcms-hint">
+                            #{{ r.sequence }}
+                            {% if r.created_at %} · <time data-utc="{{ r.created_at | date(format='%+') }}">{{ r.created_at | naturaltime }}</time>{% endif %}
+                            {% if r.created_by %} · {{ "by" | translate(locale=LANG) }} {{ r.created_by }}{% endif %}
+                        </span>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </section>
+
+    <section class="rcms-card rcms-dashboard-card">
+        <h2><span class="material-symbols-rounded sm">lock</span> {{ "Locked by you" | translate(locale=LANG) }}</h2>
+        {% if mine_locked | length == 0 %}
+            <p class="rcms-hint">{{ "No pages locked by you right now." | translate(locale=LANG) }}</p>
+        {% else %}
+            <ul class="rcms-dashboard-list">
+                {% for r in mine_locked %}
+                    <li>
+                        <a href="{{ url(name='rcms-admin:pages:edit', id=r.page_id) }}">
+                            <strong>{{ r.title }}</strong>
+                            <code class="rcms-hint">{{ r.url_path }}</code>
+                        </a>
+                        {% if r.acquired_at %}
+                            <span class="rcms-hint">{{ "acquired" | translate(locale=LANG) }} <time data-utc="{{ r.acquired_at | date(format='%+') }}">{{ r.acquired_at | naturaltime }}</time></span>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </section>
+
+    <section class="rcms-card rcms-dashboard-card">
+        <h2><span class="material-symbols-rounded sm">schedule</span> {{ "Scheduled next" | translate(locale=LANG) }}</h2>
+        {% if scheduled_rows | length == 0 %}
+            <p class="rcms-hint">{{ "Nothing queued to publish." | translate(locale=LANG) }}</p>
+        {% else %}
+            <ul class="rcms-dashboard-list">
+                {% for r in scheduled_rows %}
+                    <li>
+                        <a href="{{ url(name='rcms-admin:pages:edit', id=r.page_id) }}">
+                            <strong>{{ r.title }}</strong>
+                            <code class="rcms-hint">{{ r.url_path }}</code>
+                        </a>
+                        {% if r.go_live_at %}
+                            <span class="rcms-hint">
+                                <time data-utc="{{ r.go_live_at | date(format='%+') }}">{{ r.go_live_at | naturaltime }}</time>
+                            </span>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+            <a href="{{ url(name='rcms-admin:reports:scheduled') }}" class="rcms-btn rcms-btn-text rcms-btn-small">{{ "All scheduled →" | translate(locale=LANG) }}</a>
+        {% endif %}
+    </section>
+
+    {# Plugin-contributed widgets via `register_dashboard_widget!`. #}
+    {% if plugin_widgets and plugin_widgets | length > 0 %}
+        {% for w in plugin_widgets %}
+            <section class="rcms-card rcms-dashboard-card">
+                <h2>
+                    <span class="material-symbols-rounded sm">{{ w.icon | default(value='extension') }}</span>
+                    {{ w.label }}
+                </h2>
+                {{ w.html | safe }}
+            </section>
+        {% endfor %}
+    {% endif %}
+</div>
+{% endblock %}

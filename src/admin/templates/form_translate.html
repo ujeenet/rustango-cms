@@ -1,0 +1,64 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block heading %}{{ "Forms" | translate(locale=LANG) }}{% endblock %}
+{% block content %}
+<div class="rcms-form-builder">
+  <div class="rcms-fb-topbar">
+    <div class="rcms-fb-topbar-left">
+      <a href="{{ build_url }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "Builder" | translate(locale=LANG) }}
+      </a>
+      <h1 class="rcms-fb-form-title">{{ "Translate:" | translate(locale=LANG) }} {{ title }} → {{ editing_locale }}</h1>
+    </div>
+  </div>
+
+  {#- The same side-by-side rows as the page and snippet editors: the
+      original left, this language right, one group per field. -#}
+  <form method="post" action="{{ translate_url }}?locale={{ editing_code }}" class="rcms-card rcms-maxw-760">
+    {{ csrf_token | csrf_input | safe }}
+    <div class="rcms-page-form-notice rcms-page-form-notice--translation">
+      <strong><span class="material-symbols-rounded sm">info</span> {{ "Translation mode." | translate(locale=LANG) }}</strong>
+      {% set locname = editing_locale | escape %}
+      {{ "The left column is the original text; the right column is the <strong>{name}</strong> text. Leave a box empty to show the original." | translate(locale=LANG, name=locname) | safe }}
+    </div>
+    {% for g in trans_groups %}
+    <div class="rcms-tr-block">
+      <div class="rcms-tr-block-head"><span class="material-symbols-rounded sm">{% if g.name %}input{% else %}dynamic_form{% endif %}</span> {% if g.name %}{{ g.name }}{% else %}{{ "Form" | translate(locale=LANG) }}{% endif %}</div>
+      {% for leaf in g.leaves %}
+      {% if leaf.part == "submit" %}{% set lbl = "Submit button label" | translate(locale=LANG) %}
+      {% elif leaf.part == "success" %}{% set lbl = "Success message" | translate(locale=LANG) %}
+      {% elif leaf.part == "error" %}{% set lbl = "Error message" | translate(locale=LANG) %}
+      {% elif leaf.part == "next" %}{% set lbl = "Next button label" | translate(locale=LANG) %}
+      {% elif leaf.part == "back" %}{% set lbl = "Back button label" | translate(locale=LANG) %}
+      {% elif leaf.part == "progress" %}{% set lbl = "Progress line" | translate(locale=LANG) %}
+      {% elif leaf.part == "page" %}{% set lbl = "Step name" | translate(locale=LANG) %}
+      {% elif leaf.part == "section" %}{% set lbl = "Section title" | translate(locale=LANG) %}
+      {% elif leaf.part == "help" %}{% set lbl = "Help text" | translate(locale=LANG) %}
+      {% elif leaf.part == "ph" %}{% set lbl = "Placeholder" | translate(locale=LANG) %}
+      {% elif leaf.part == "content" %}{% set lbl = "Content" | translate(locale=LANG) %}
+      {% elif leaf.part == "opt" %}{% set lbl = "Option {n}" | translate(locale=LANG, n=leaf.n) %}
+      {% else %}{% set lbl = "Label" | translate(locale=LANG) %}{% endif %}
+      <div class="rcms-tr-row">
+        <div class="rcms-canonical">
+          <div class="rcms-lbl"><span class="material-symbols-rounded sm">subject</span> {{ lbl }} {{ "(canonical)" | translate(locale=LANG) }}</div>
+          <div class="rcms-canonical-text">{{ leaf.canonical }}</div>
+        </div>
+        <div>
+          <label class="rcms-tr-lbl" for="tr-{{ leaf.path }}"><span class="material-symbols-rounded sm">translate</span> {{ lbl }} ({{ editing_code }})</label>
+          {% if leaf.part == "success" or leaf.part == "content" or leaf.part == "error" %}
+          <textarea id="tr-{{ leaf.path }}" name="tr__{{ leaf.path }}" rows="3" placeholder="{{ leaf.canonical }}">{{ leaf.value }}</textarea>
+          {% else %}
+          <input type="text" id="tr-{{ leaf.path }}" name="tr__{{ leaf.path }}" value="{{ leaf.value }}" placeholder="{{ leaf.canonical }}">
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+    <div class="rcms-form-actions">
+      <a href="{{ build_url }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+      <button type="submit" class="rcms-btn"><span class="material-symbols-rounded sm">save</span> {{ "Save translations" | translate(locale=LANG) }}</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Search promotions" | translate(locale=LANG) }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Search promotions" | translate(locale=LANG) }}{% endblock %}
+
+{% block description %}
+    {{ "Every query the admin search has logged. Click <strong>Edit pins</strong> to pick the pages that should appear at the top of results for that query." | translate(locale=LANG) | safe }}
+{% endblock %}
+
+{% block body %}
+
+{% if rows | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "No queries logged yet." | translate(locale=LANG) }}</p>
+        <p class="rcms-hint">{{ "Queries land here every time someone searches via the topbar or the global search page." | translate(locale=LANG) }}</p>
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Query" | translate(locale=LANG) }}</th>
+                <th>{{ "Hits" | translate(locale=LANG) }}</th>
+                <th>{{ "Last seen" | translate(locale=LANG) }}</th>
+                <th>{{ "Pinned" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+                <tr>
+                    <td>
+                        <strong>{{ r.raw }}</strong>
+                        {% if r.normalized != r.raw %}
+                            <br><code class="rcms-text-2xs rcms-text-muted">{{ r.normalized }}</code>
+                        {% endif %}
+                    </td>
+                    <td>{{ r.hits }}</td>
+                    <td>
+                        {% if r.last_seen_at %}
+                            <time data-utc="{{ r.last_seen_at | date(format='%+') }}">{{ r.last_seen_at | naturaltime }}</time>
+                        {% endif %}
+                    </td>
+                    <td>{{ r.promotion_count }}</td>
+                    <td class="rcms-actions">
+                        <a href="{{ url(name='rcms-admin:reports:search:edit', id=r.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+                            <span class="material-symbols-rounded sm">push_pin</span> {{ "Edit pins" | translate(locale=LANG) }}
+                        </a>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+{% endblock %}

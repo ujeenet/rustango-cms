@@ -1,0 +1,110 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Build fields" | translate(locale=LANG) }}: {{ title }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Build fields" | translate(locale=LANG) }}: {{ title }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ list_url }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+    {% if has_unpublished %}
+        <span class="rcms-tag scheduled" title="{{ "The live schema differs from this draft" | translate(locale=LANG) }}">{{ "Unpublished changes" | translate(locale=LANG) }}</span>
+    {% endif %}
+    {#- #863 — translate the choice options' labels. -#}
+    {% if translate_locales and translate_locales | length > 0 %}
+    <details class="rcms-fb-translate-menu">
+        <summary class="rcms-btn rcms-btn-outlined"><span class="material-symbols-rounded sm">translate</span> {{ "Translate" | translate(locale=LANG) }}</summary>
+        <div class="rcms-fb-translate-list">
+            {% for loc in translate_locales %}
+            <a href="{{ translate_url }}?locale={{ loc.code }}">{{ loc.name }}</a>
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
+    <button type="submit" form="ptb-form" class="rcms-btn rcms-btn-outlined">
+        <span class="material-symbols-rounded sm">save</span> {{ "Save draft" | translate(locale=LANG) }}
+    </button>
+    <button type="submit" form="ptb-form" formaction="{{ publish_url }}" class="rcms-btn">
+        <span class="material-symbols-rounded sm">publish</span> {{ "Publish" | translate(locale=LANG) }}
+    </button>
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="rcms-breadcrumbs">
+    <a href="{{ list_url }}">{{ "Page types" | translate(locale=LANG) }}</a>
+    <span class="rcms-sep">›</span>
+    <span>{{ title }}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div id="ptb-root"
+     data-schema="{{ schema_json }}"
+     data-components="{{ components_json }}">
+
+    {# The JS serializes the whole node tree into #ptb-schema on every edit. #}
+    <form method="post" action="{{ build_url }}" id="ptb-form">
+        {{ csrf_token | csrf_input | safe }}
+        <input type="hidden" name="schema" id="ptb-schema" value="{{ schema_json }}">
+    </form>
+
+    <p class="rcms-hint rcms-mt-0">
+        {{ "Define this page type's body: stack fields, put inputs in rows, group them, repeat groups, or add a flexible zone editors compose freely. Save keeps a draft; Publish makes editors fill this structure." | translate(locale=LANG) }}
+    </p>
+
+    <div class="rcms-ptb-workspace rcms-flex rcms-gap-3 rcms-items-start rcms-flex-wrap">
+        <div class="rcms-ptb-canvas rcms-card" id="ptb-canvas" style="flex: 1 1 480px; min-width: 320px;"></div>
+        <aside class="rcms-ptb-inspector rcms-card" id="ptb-inspector" style="flex: 0 1 340px; min-width: 280px;"></aside>
+    </div>
+
+    {% if versions and versions | length > 0 %}
+    <details class="rcms-card rcms-mt-4">
+        <summary class="rcms-text-sm"><strong>{{ "Version history" | translate(locale=LANG) }}</strong></summary>
+        <table class="rcms-data rcms-mt-2">
+            <thead><tr>
+                <th>{{ "Version" | translate(locale=LANG) }}</th>
+                <th>{{ "Status" | translate(locale=LANG) }}</th>
+                <th>{{ "Updated" | translate(locale=LANG) }}</th>
+            </tr></thead>
+            <tbody>
+            {% for v in versions %}
+                <tr>
+                    <td>v{{ v.version }}</td>
+                    <td><span class="rcms-tag {% if v.status == "published" %}published{% else %}archived{% endif %}">{{ v.status }}</span></td>
+                    <td class="rcms-text-muted rcms-text-xs">{{ v.updated_at | naturaltime }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </details>
+    {% endif %}
+
+    {# #566 — danger zone. Deleting a UI-created page type is a rare,
+       destructive, type-lifecycle action, so it lives here (not as an
+       inline row action on the list). Only shown for UI types; blocked
+       while any pages still use the type. #}
+    {% if is_ui_type %}
+    <div class="rcms-card rcms-mt-4" style="border:1px solid var(--md-sys-color-error, #b3261e);">
+        <div class="rcms-flex rcms-items-center rcms-gap-3 rcms-flex-wrap">
+            <div style="flex:1 1 320px;">
+                <strong class="rcms-text-error">{{ "Delete this page type" | translate(locale=LANG) }}</strong>
+                <div class="rcms-text-xs rcms-text-muted">
+                    {% if deletable %}
+                        {{ "Removes the type and its saved field schema. This can't be undone." | translate(locale=LANG) }}
+                    {% else %}
+                        {{ "In use by {count} page(s). Delete or move them before you can remove this type." | translate(locale=LANG, count=page_count) }}
+                    {% endif %}
+                </div>
+            </div>
+            <form method="post" action="{{ delete_url }}"
+                  onsubmit="return confirm('{{ "Delete this page type? This can't be undone." | translate(locale=LANG) }}');">
+                {{ csrf_token | csrf_input | safe }}
+                <button type="submit" class="rcms-btn rcms-btn-outlined rcms-text-error"
+                    {% if not deletable %}disabled{% endif %}>
+                    <span class="material-symbols-rounded sm">delete</span> {{ "Delete page type" | translate(locale=LANG) }}
+                </button>
+            </form>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<script src="/cms-admin/static/page_type_builder.js?v={{ cms_asset_version() }}"></script>
+{% endblock %}

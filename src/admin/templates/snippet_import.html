@@ -1,0 +1,40 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Import “{name}” snippets" | translate(locale=LANG, name=type_name) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Import “{name}” snippets" | translate(locale=LANG, name=type_name) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:library:list') }}?type={{ type_name }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "All {name}" | translate(locale=LANG, name=type_name) }}
+    </a>
+{% endblock %}
+
+{% block description %}
+    {{ "Upload a CSV or TSV file. The header row is <strong>required</strong>; it tells the importer what column is what. Recognized columns:" | translate(locale=LANG) | safe }}
+{% endblock %}
+
+{% block body %}
+<ul class="rcms-hint rcms-m-0 rcms-mb-4">
+    <li>{{ "<code>slug</code> (or <code>key</code>) — required, unique." | translate(locale=LANG) | safe }}</li>
+    <li>{{ "<code>title</code> (or <code>name</code>) — required." | translate(locale=LANG) | safe }}</li>
+    <li>{{ "<code>body_markdown</code> (or <code>body</code> / <code>content</code>) — optional." | translate(locale=LANG) | safe }}</li>
+    <li>{{ "<code>folder_path</code> (or <code>folder</code> / <code>path</code>) — optional." | translate(locale=LANG) | safe }}</li>
+    <li>{{ "Any other column lands in <code>data.&lt;column_name&gt;</code> as a string." | translate(locale=LANG) | safe }}</li>
+</ul>
+
+<form method="post" action="{{ url(name='rcms-admin:library:import', type_name=type_name) }}"
+      enctype="multipart/form-data"
+      class="rcms-card rcms-maxw-640">
+    {{ csrf_token | csrf_input | safe }}
+    <div class="rcms-field">
+        <label>{{ "CSV / TSV file" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+        <input type="file" name="file" required accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain">
+        <div class="rcms-hint">{{ "Quoted commas inside cell values aren't supported. Use TSV for content with commas." | translate(locale=LANG) }}</div>
+    </div>
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:library:list') }}?type={{ type_name }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">
+            <span class="material-symbols-rounded sm">upload</span> {{ "Import" | translate(locale=LANG) }}
+        </button>
+    </div>
+</form>
+{% endblock %}

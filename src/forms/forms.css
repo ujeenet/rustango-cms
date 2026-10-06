@@ -1,0 +1,237 @@
+/* Standard public form styles (#533 form builder).
+ *
+ * Served at /forms/forms.css and auto-linked by the form renderer (unless a
+ * form opts out via its "Use built-in styles" setting). Everything is scoped
+ * under `.rcms-form` / `.rcms-form-thanks` so it never leaks into the host's
+ * own styles.
+ *
+ * REPLACE / RE-THEME — three ways, easiest first:
+ *   1. Override the CSS variables below in your own site CSS, e.g.
+ *        .rcms-form { --rcms-primary: #0a7; --rcms-radius: 4px; }
+ *   2. Add your own rules for the `.rcms-*` selectors AFTER this file
+ *      (normal cascade wins) to restyle individual parts.
+ *   3. Turn off "Use built-in styles" on the form (Settings tab) so this
+ *      file isn't linked at all, then provide your own stylesheet.
+ */
+.rcms-form,
+.rcms-form-thanks {
+  --rcms-text: #1f2328;
+  --rcms-muted: #656d76;
+  --rcms-border: #d0d7de;
+  --rcms-bg: #ffffff;
+  --rcms-input-bg: #ffffff;
+  --rcms-primary: #4f46e5;
+  --rcms-primary-text: #ffffff;
+  --rcms-error: #cf222e;
+  --rcms-radius: 8px;
+  --rcms-gap: 16px;
+  --rcms-focus: color-mix(in srgb, var(--rcms-primary) 35%, transparent);
+}
+
+.rcms-form {
+  color: var(--rcms-text);
+  max-width: 720px;
+  margin: 0 0 1rem;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+/* `hidden` must win over the display rules below (the runtime toggles it to
+ * hide inactive pages + conditionally-hidden fields). */
+.rcms-form [hidden],
+.rcms-form-thanks[hidden] {
+  display: none !important;
+}
+
+/* Honeypot — visually hidden, off the tab order, kept in the DOM. */
+.rcms-form .rcms-hp {
+  position: absolute !important;
+  left: -9999px !important;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.rcms-form-page {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-inline-size: 0; /* let fieldset shrink in flex/grid */
+}
+.rcms-form-page > legend {
+  font-size: 1.15rem;
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: var(--rcms-gap);
+}
+
+.rcms-form-section {
+  margin-bottom: var(--rcms-gap);
+}
+.rcms-form-section-title {
+  font-size: 1.02rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.rcms-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--rcms-gap);
+  margin-bottom: var(--rcms-gap);
+}
+.rcms-form-col {
+  min-width: 180px; /* wrap to full width on narrow screens */
+}
+@media (max-width: 540px) {
+  .rcms-form-col { flex: 1 1 100% !important; }
+}
+
+.rcms-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rcms-field + .rcms-field { margin-top: var(--rcms-gap); }
+
+.rcms-field > label {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.rcms-req { color: var(--rcms-error); }
+.rcms-help {
+  color: var(--rcms-muted);
+  font-size: 0.82rem;
+}
+
+/* Inputs */
+.rcms-form input[type="text"],
+.rcms-form input[type="email"],
+.rcms-form input[type="url"],
+.rcms-form input[type="tel"],
+.rcms-form input[type="number"],
+.rcms-form input[type="date"],
+.rcms-form input[type="datetime-local"],
+.rcms-form input[type="time"],
+.rcms-form input[type="file"],
+.rcms-form select,
+.rcms-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  font: inherit;
+  color: var(--rcms-text);
+  background: var(--rcms-input-bg);
+  border: 1px solid var(--rcms-border);
+  border-radius: var(--rcms-radius);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.rcms-form textarea { resize: vertical; min-height: 88px; }
+
+.rcms-form input:focus,
+.rcms-form select:focus,
+.rcms-form textarea:focus {
+  outline: none;
+  border-color: var(--rcms-primary);
+  box-shadow: 0 0 0 3px var(--rcms-focus);
+}
+/* Native HTML5 + server validation surfacing */
+.rcms-form input:user-invalid,
+.rcms-form textarea:user-invalid,
+.rcms-form select:user-invalid {
+  border-color: var(--rcms-error);
+}
+
+/* Choice groups (radio / checkbox group) */
+.rcms-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.rcms-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+}
+.rcms-choice input { width: auto; }
+
+/* Rating */
+.rcms-rating { display: inline-flex; gap: 4px; }
+.rcms-rating-star { cursor: pointer; }
+.rcms-rating-star input { position: absolute; opacity: 0; pointer-events: none; }
+.rcms-rating-star span { font-size: 1.5rem; color: var(--rcms-border); transition: color 0.1s; }
+.rcms-rating-star:hover span,
+.rcms-rating-star:has(input:checked) span { color: #f5a623; }
+
+/* Presentational blocks */
+.rcms-field-static { font-size: 1.1rem; font-weight: 600; }
+.rcms-field-richtext :where(p, ul, ol) { margin: 0 0 0.5rem; }
+
+/* Navigation + progress */
+.rcms-form-progress {
+  font-size: 0.85rem;
+  color: var(--rcms-muted);
+  margin-bottom: var(--rcms-gap);
+}
+.rcms-form-nav {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: var(--rcms-gap);
+}
+.rcms-form-nav button {
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: var(--rcms-radius);
+  border: 1px solid var(--rcms-primary);
+  cursor: pointer;
+}
+.rcms-form-submit,
+.rcms-form-next {
+  background: var(--rcms-primary);
+  color: var(--rcms-primary-text);
+}
+.rcms-form-prev {
+  background: transparent;
+  color: var(--rcms-primary);
+}
+.rcms-form-nav button:hover { filter: brightness(0.95); }
+.rcms-form-prev { margin-right: auto; }
+
+/* Thanks banner + error/missing states */
+.rcms-form-thanks {
+  padding: 14px 16px;
+  border-radius: var(--rcms-radius);
+  background: color-mix(in srgb, var(--rcms-primary) 10%, var(--rcms-bg));
+  border: 1px solid color-mix(in srgb, var(--rcms-primary) 30%, transparent);
+  font-weight: 500;
+}
+.rcms-form-error {
+  padding: 12px 14px;
+  border-radius: var(--rcms-radius);
+  background: color-mix(in srgb, var(--rcms-error) 8%, var(--rcms-bg));
+  border: 1px solid color-mix(in srgb, var(--rcms-error) 35%, transparent);
+  color: var(--rcms-error);
+}
+/* The question the server refused (?form_error=…), until it is answered. */
+.rcms-field-invalid > label,
+.rcms-field-invalid .rcms-choice {
+  color: var(--rcms-error);
+}
+.rcms-field-invalid input:not([type="checkbox"]):not([type="radio"]),
+.rcms-field-invalid select,
+.rcms-field-invalid textarea,
+.rcms-field-invalid .rcms-choices,
+.rcms-field-invalid .rcms-rating {
+  outline: 2px solid var(--rcms-error);
+  outline-offset: 2px;
+}
+.rcms-form-missing {
+  padding: 10px 12px;
+  border: 1px dashed var(--rcms-error);
+  border-radius: var(--rcms-radius);
+  color: var(--rcms-error);
+  font-size: 0.9rem;
+}

@@ -1,0 +1,48 @@
+{# Public members-area sign-in. Mirrors the admin login chrome
+   (`_auth_layout.html`) but posts to the CMS's own `/members/login`
+   handler (inside the host `api` router → CSRF-protected, so the form
+   carries a `_csrf` field, unlike the framework's `/login`). Context:
+   action, next, error, sso_error, sso_enabled, sso_providers,
+   signup_url, branding. #}
+{% extends "rcms_admin/_auth_layout.html" %}
+
+{% block page_title %}{{ "Sign in" | translate(locale=LANG) }}{% endblock %}
+{% block brand_mark %}<span class="rcms-brand-icon"><span class="material-symbols-rounded">account_circle</span></span>{% endblock %}
+{% block brand_name %}{{ site_name }}{% endblock %}
+{% block brand_sub %}{{ "Sign in to access members-only content" | translate(locale=LANG) }}{% endblock %}
+
+{% block body %}
+<form method="post" action="{{ action }}">
+    {{ csrf_token | csrf_input | safe }}
+    <h1>{{ "Welcome back" | translate(locale=LANG) }}</h1>
+    <p class="rcms-lead">{{ "Sign in to continue." | translate(locale=LANG) }}</p>
+    {% if error %}<p class="rcms-error">{{ "That email/username and password didn't match." | translate(locale=LANG) }}</p>{% endif %}
+    {% if sso_error %}<p class="rcms-error">{{ "Single sign-on failed — try again, or sign in with your password." | translate(locale=LANG) }}</p>{% endif %}
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+    <label for="member-identifier">{{ "Email or username" | translate(locale=LANG) }}</label>
+    <input id="member-identifier" type="text" name="identifier" autocomplete="username" autofocus required>
+    <label for="member-password">{{ "Password" | translate(locale=LANG) }}</label>
+    <input id="member-password" type="password" name="password" autocomplete="current-password" required>
+    <div class="rcms-actions">
+        <a class="rcms-forgot" href="{{ signup_url }}{% if next %}?next={{ next }}{% endif %}">{{ "Create an account" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">{{ "Sign in" | translate(locale=LANG) }}</button>
+    </div>
+</form>
+{#- Visitors arrive here from the site: give them a way back. -#}
+<p class="rcms-auth-back"><a href="/">← {{ "Back to {site}" | translate(locale=LANG, site=site_name) }}</a></p>
+{% if sso_enabled %}
+<div class="rcms-sso-block">
+    <div class="rcms-sso-sep"><span>{{ "or" | translate(locale=LANG) }}</span></div>
+    {% for p in sso_providers %}
+    <a class="rcms-btn rcms-btn-outlined rcms-sso-button" href="{{ p.login_url }}">{{ p.label }}</a>
+    {% endfor %}
+</div>
+<style>
+    .rcms-sso-block { margin-top: 1.25rem; }
+    .rcms-sso-sep { display: flex; align-items: center; gap: .75rem; margin: 1rem 0; color: var(--muted); font-size: .85rem; }
+    .rcms-sso-sep::before, .rcms-sso-sep::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+    .rcms-sso-button { display: flex; width: 100%; justify-content: center; }
+    .rcms-sso-button + .rcms-sso-button { margin-top: .5rem; }
+</style>
+{% endif %}
+{% endblock %}

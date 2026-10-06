@@ -1,0 +1,146 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Choose a page type" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}
+{% if parent %}{{ "Add child under" | translate(locale=LANG) }} "{{ parent.title }}"{% else %}{{ "New root page" | translate(locale=LANG) }}{% endif %}
+{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:pages:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="rcms-breadcrumbs">
+    <a href="{{ url(name='rcms-admin:pages:list') }}">{{ "Pages" | translate(locale=LANG) }}</a>
+    <span class="rcms-sep">›</span>
+    <span>{{ "Choose page type" | translate(locale=LANG) }}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<style>
+    .rcms-type-picker-intro {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 16px 20px;
+        margin-bottom: 20px;
+        font-size: 13px;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .rcms-type-picker-intro .material-symbols-rounded {
+        color: var(--accent);
+    }
+
+    .rcms-type-picker-list {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+    .rcms-type-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 12px 18px;
+        text-decoration: none;
+        color: var(--fg);
+        border-bottom: 1px solid var(--border);
+        transition: background 0.1s;
+    }
+    .rcms-type-row:last-child { border-bottom: none; }
+    .rcms-type-row:hover { background: var(--accent-soft); }
+    .rcms-type-row-icon {
+        flex: 0 0 32px;
+        height: 32px;
+        border-radius: 4px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .rcms-type-row-icon .material-symbols-rounded { font-size: 20px; }
+    .rcms-type-row-body { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+    .rcms-type-row-name { font-size: 14px; font-weight: 600; }
+    .rcms-type-row-description {
+        font-size: 12px;
+        color: var(--muted);
+        width: 100%;
+        margin-top: 2px;
+    }
+    .rcms-type-row-code {
+        font-size: 11px;
+        background: var(--bg);
+        color: var(--muted);
+        padding: 1px 6px;
+        border-radius: 3px;
+    }
+    .rcms-type-row-cta {
+        font-size: 12px;
+        color: var(--accent);
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-weight: 500;
+        white-space: nowrap;
+    }
+    .rcms-type-row-cta .material-symbols-rounded { font-size: 16px; }
+
+    .rcms-type-picker-empty {
+        padding: 48px;
+        text-align: center;
+        color: var(--muted);
+        background: var(--bg-elevated);
+        border: 1px dashed var(--border);
+        border-radius: 6px;
+    }
+</style>
+
+<div class="rcms-type-picker-intro">
+    <span class="material-symbols-rounded">info</span>
+    <div>
+        {{ "Pick the type for this page. The choice is <strong>permanent</strong> — page type can't be changed after the page is created." | translate(locale=LANG) | safe }}
+        {% if parent %}
+            {% set parent_title = parent.title | escape %}
+            {{ "Options are filtered to the types allowed under <strong>{title}</strong>." | translate(locale=LANG, title=parent_title) | safe }}
+        {% endif %}
+    </div>
+</div>
+
+{% if allowed_types and allowed_types | length > 0 %}
+<div class="rcms-type-picker-list">
+    {% for t in allowed_types %}
+        <a class="rcms-type-row"
+           href="{{ url(name='rcms-admin:pages:new') }}?type={{ t.id }}{% if parent %}&parent={{ parent.id }}{% endif %}">
+            <span class="rcms-type-row-icon">
+                <span class="material-symbols-rounded">{{ t.icon | default(value="article") }}</span>
+            </span>
+            <div class="rcms-type-row-body">
+                <span class="rcms-type-row-name">{{ t.verbose_name }}</span>
+                <code class="rcms-type-row-code">{{ t.type_name }}</code>
+                {% if t.description %}<span class="rcms-type-row-description">{{ t.description }}</span>{% endif %}
+            </div>
+            <span class="rcms-type-row-cta">
+                {{ "Use this type" | translate(locale=LANG) }}
+                <span class="material-symbols-rounded">arrow_forward</span>
+            </span>
+        </a>
+    {% endfor %}
+</div>
+{% else %}
+<div class="rcms-type-picker-empty">
+    <p>
+        {% if parent %}
+            {% set parent_title = parent.title | escape %}
+            {{ "No page types are permitted under <strong>{title}</strong>. Adjust the parent's <code>allowed_child_types</code> or the candidate's <code>allowed_parent_types</code>." | translate(locale=LANG, title=parent_title) | safe }}
+        {% else %}
+            {{ "No creatable page types are registered. Define a <code>PageTypeHandler</code> with <code>is_creatable() = true</code>." | translate(locale=LANG) | safe }}
+        {% endif %}
+    </p>
+    <a class="rcms-btn rcms-btn-text" href="{{ url(name='rcms-admin:pages:list') }}">{{ "Back to pages" | translate(locale=LANG) }}</a>
+</div>
+{% endif %}
+{% endblock %}

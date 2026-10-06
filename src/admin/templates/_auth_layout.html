@@ -1,0 +1,55 @@
+{# Shared chrome for every pre-auth admin screen: login, password
+   reset request / sent / confirm / done. Loads the same MD3
+   stylesheet as the dashboard (`/cms-admin/static/cms.css`) so the
+   visual system stays consistent — no duplicated token definitions.
+
+   Child templates extend this and provide:
+   - `{% block page_title %}` — `<title>` element body
+   - `{% block brand_mark %}` — the mark shown when the tenant has no logo:
+     the Rustango CMS badge by default; member pages swap in a plain icon
+   - `{% block brand_sub %}` — short subtitle under the brand name
+   - `{% block body %}` — main form / content (rendered inside `.auth-card`)
+
+   Host apps override the whole layout by dropping
+   `templates/cms_admin/_auth_layout.html` in their project root.
+#}<!doctype html>
+<html lang="{{ LANG | default(value='en') }}" dir="{{ LANG_DIR | default(value='ltr') }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block page_title %}{{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}</title>
+<link rel="stylesheet" href="/cms-admin/static/fonts.css?v={{ cms_asset_version() }}">
+<link rel="stylesheet" href="/cms-admin/static/cms.css?v={{ cms_asset_version() }}">
+{% include "rcms_admin/_brand_icons.html" %}
+{% block extra_head %}{% endblock %}
+</head>
+<body class="rcms-admin rcms-auth-body">
+    {% block card %}
+    <div class="rcms-auth-card">
+        {#- #199 — the tenant's uploaded logo (or favicon) when set, beside the
+            name; otherwise the Rustango CMS badge, large, above it. -#}
+        <div class="rcms-brand">
+            {% if branding_logo_url or branding_favicon_url %}
+            <span class="rcms-brand-icon rcms-brand-icon--img">
+                {% if branding_logo_url %}
+                    <img class="rcms-brand-icon-img" src="{{ branding_logo_url }}" alt="{{ brand_name | default(value='CMS Admin') }}">
+                {% else %}
+                    <img class="rcms-brand-icon-img" src="{{ branding_favicon_url }}" alt="{{ brand_name | default(value='CMS Admin') }}">
+                {% endif %}
+            </span>
+            {% else %}{% block brand_mark %}
+            <span class="rcms-brand-badge">
+                <img src="/cms-admin/static/brand/logo-light.png?v={{ cms_asset_version() }}" alt="Rustango CMS" class="rcms-brand-for-light" width="132" height="132">
+                <img src="/cms-admin/static/brand/logo-dark.png?v={{ cms_asset_version() }}" alt="Rustango CMS" class="rcms-brand-for-dark" width="132" height="132">
+            </span>
+            {% endblock %}{% endif %}
+            <div>
+                <div class="rcms-brand-name">{% block brand_name %}{{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}</div>
+                <div class="rcms-brand-sub">{% block brand_sub %}{{ "Sign in to manage your content" | translate(locale=LANG) }}{% endblock %}</div>
+            </div>
+        </div>
+        {% block body %}{% endblock %}
+    </div>
+    {% endblock %}
+</body>
+</html>

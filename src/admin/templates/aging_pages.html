@@ -1,0 +1,93 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Aging pages" | translate(locale=LANG) }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Aging pages" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:reports:aging-csv') }}?min_days={{ min_days }}&status={{ status_filter }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">download</span> {{ "CSV" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block content %}
+<div class="rcms-card rcms-mb-4">
+    <form method="get" action="{{ url(name='rcms-admin:reports:aging') }}" class="rcms-field-row">
+        <div class="rcms-field">
+            <label>{{ "Minimum days stale" | translate(locale=LANG) }}</label>
+            <select name="min_days">
+                {% for d in [30, 90, 180, 365] %}
+                    <option value="{{ d }}"{% if min_days == d %} selected{% endif %}>{{ d }} {{ "days" | translate(locale=LANG) }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="rcms-field">
+            <label>{{ "Status" | translate(locale=LANG) }}</label>
+            <select name="status">
+                {% for s in ["published", "draft", "scheduled", "archived", "all"] %}
+                    <option value="{{ s }}"{% if status_filter == s %} selected{% endif %}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="rcms-field">
+            <button type="submit" class="rcms-btn rcms-btn-tonal rcms-btn-small">{{ "Filter" | translate(locale=LANG) }}</button>
+        </div>
+    </form>
+    <p class="rcms-hint rcms-mt-3 rcms-mx-0 rcms-mb-0">
+        {{ "Sorted oldest-first. The “last editor” comes from the most-recent <code>cms_revision</code> row; rows without a revision show <em>system</em>." | translate(locale=LANG) | safe }}
+    </p>
+</div>
+
+{% if rows | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "No pages match the current filters." | translate(locale=LANG) }}</p>
+        <p class="rcms-hint">{{ "Lower <strong>Minimum days stale</strong> or widen the status to <code>all</code>." | translate(locale=LANG) | safe }}</p>
+    </div>
+{% else %}
+    <p class="rcms-hint rcms-m-0 rcms-mb-4">
+        <strong>{{ total }}</strong> {% if total != 1 %}{{ "stale pages" | translate(locale=LANG) }}{% else %}{{ "stale page" | translate(locale=LANG) }}{% endif %}
+        ({{ min_days }}+ {{ "days; status =" | translate(locale=LANG) }}
+        {% if status_filter == "all" %}{{ "any" | translate(locale=LANG) }}{% else %}<code>{{ status_filter }}</code>{% endif %}).
+    </p>
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Title" | translate(locale=LANG) }}</th>
+                <th>{{ "URL" | translate(locale=LANG) }}</th>
+                <th>{{ "Status" | translate(locale=LANG) }}</th>
+                <th>{{ "Days stale" | translate(locale=LANG) }}</th>
+                <th>{{ "Last updated" | translate(locale=LANG) }}</th>
+                <th>{{ "Last editor" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Open" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+                <tr>
+                    <td><strong>{{ r.title }}</strong></td>
+                    <td><code class="rcms-text-2xs">{{ r.url_path }}</code></td>
+                    <td><span class="rcms-tag {{ r.status }}">{{ r.status }}</span></td>
+                    <td><strong>{{ r.days_stale }}</strong></td>
+                    <td>
+                        {% if r.updated_at %}
+                            <time data-utc="{{ r.updated_at | date(format='%+') }}">{{ r.updated_at | naturaltime }}</time>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if r.last_editor %}
+                            {{ r.last_editor }}
+                        {% else %}
+                            <em class="rcms-hint">{{ "system" | translate(locale=LANG) }}</em>
+                        {% endif %}
+                    </td>
+                    <td class="rcms-actions">
+                        <a href="{{ url(name='rcms-admin:pages:edit', id=r.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit" | translate(locale=LANG) }}</a>
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+    {% include "rcms_admin/_pagination.html" %}
+{% endif %}
+{% endblock %}

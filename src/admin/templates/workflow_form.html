@@ -1,0 +1,161 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{% if mode == "new" %}{{ "New workflow" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} {{ workflow.name }}{% endif %} — CMS Admin{% endblock %}
+{% block heading %}{% if mode == "new" %}{{ "New workflow" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} {{ workflow.name }}{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:workflows:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="rcms-breadcrumbs">
+    <a href="{{ url(name='rcms-admin:workflows:list') }}">{{ "Workflows" | translate(locale=LANG) }}</a>
+    <span class="rcms-sep">›</span>
+    <span>{% if mode == "new" %}{{ "New" | translate(locale=LANG) }}{% else %}{{ workflow.name }}{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<form method="post" action="{% if mode == "new" %}{{ url(name='rcms-admin:workflows:new') }}{% else %}{{ url(name='rcms-admin:workflows:edit', id=workflow.id) }}{% endif %}" class="rcms-card rcms-maxw-720" data-primary-save>
+    {{ csrf_token | csrf_input | safe }}
+
+    <div class="rcms-field">
+        <label>{{ "Name" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+        <input type="text" name="name" required value="{{ workflow.name | default(value="") }}" maxlength="100" placeholder="{{ "Editorial review" | translate(locale=LANG) }}">
+        <div class="rcms-hint">{{ "Shown in the workflow list and on the page editor's action bar." | translate(locale=LANG) }}</div>
+    </div>
+
+    <div class="rcms-field">
+        <label>{{ "Description" | translate(locale=LANG) }}</label>
+        <input type="text" name="description" value="{{ workflow.description | default(value="") }}" maxlength="255" placeholder="{{ "One-line note for editors" | translate(locale=LANG) }}">
+    </div>
+
+    <div class="rcms-field-row">
+        <div class="rcms-field rcms-checkbox-field">
+            <input type="checkbox" id="active" name="active"{% if workflow.active %} checked{% endif %}>
+            <label for="active">{{ "Active" | translate(locale=LANG) }}</label>
+        </div>
+        <div class="rcms-field rcms-checkbox-field">
+            <input type="checkbox" id="require_reapproval_on_edit" name="require_reapproval_on_edit"{% if workflow.require_reapproval_on_edit %} checked{% endif %}>
+            <label for="require_reapproval_on_edit">{{ "Re-approval on edit" | translate(locale=LANG) }}
+                <span class="rcms-hint">{{ "(changes to a live page wait for review)" | translate(locale=LANG) }}</span>
+            </label>
+        </div>
+    </div>
+
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:workflows:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">{% if mode == "new" %}{{ "Create workflow" | translate(locale=LANG) }}{% else %}{{ "Save workflow" | translate(locale=LANG) }}{% endif %}</button>
+    </div>
+</form>
+
+{% if mode == "edit" %}
+<div class="rcms-card rcms-maxw-720 rcms-mt-6">
+    <h2 class="rcms-m-0 rcms-mb-3">{{ "Review steps" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint rcms-mb-4">
+        {{ "Steps run in order. A page enters the first step when submitted for review and advances to the next when an assignee approves. Any rejection bounces the page back to <strong>Needs changes</strong>." | translate(locale=LANG) | safe }}
+    </p>
+
+    {% if tasks | length == 0 %}
+        <p class="rcms-text-muted rcms-italic">
+            {{ "No steps yet — add the first one below." | translate(locale=LANG) }}
+        </p>
+    {% else %}
+        <div class="rcms-table-wrap">
+        <table class="rcms-data rcms-mb-4">
+            <thead>
+                <tr>
+                    <th class="rcms-w-60">{{ "Order" | translate(locale=LANG) }}</th>
+                    <th>{{ "Step name" | translate(locale=LANG) }}</th>
+                    <th>{{ "Assignee role" | translate(locale=LANG) }}</th>
+                    <th class="rcms-actions rcms-w-100">{{ "Actions" | translate(locale=LANG) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for t in tasks %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td><strong>{{ t.name }}</strong>
+                        {% if t.kind and t.kind != "group_approval" %}
+                            <br><span class="rcms-tag rcms-tag--small scheduled">{{ t.kind_label }}</span>
+                            {% if t.webhook_url %}<br><code class="rcms-text-3xs">{{ t.webhook_url }}</code>{% endif %}
+                        {% endif %}
+                    </td>
+                    <td>{% if t.role_name %}{{ t.role_name }}{% else %}<span class="rcms-text-error">{{ "role #{id} (deleted?)" | translate(locale=LANG, id=t.role_id) }}</span>{% endif %}</td>
+                    <td class="rcms-actions">
+                        <form method="post" action="{{ url(name='rcms-admin:workflows:task-delete', id=workflow.id, task_id=t.id) }}"
+                              data-confirm="{{ "Remove step “" | translate(locale=LANG) }}{{ t.name }}{{ "” from this workflow?" | translate(locale=LANG) }}"
+                              data-confirm-style="danger"
+                              class="rcms-inline rcms-m-0">
+                            {{ csrf_token | csrf_input | safe }}
+                            <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">{{ "Remove" | translate(locale=LANG) }}</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+
+    <h3 class="rcms-mt-4 rcms-mx-0 rcms-mb-2 rcms-text-base">{{ "Add a step" | translate(locale=LANG) }}</h3>
+    {% if roles | length == 0 %}
+        <p class="rcms-hint rcms-text-error">
+            {{ "No roles defined — create at least one role in <a href='{url}'>Roles</a> before adding review steps." | translate(locale=LANG, url=url(name='rcms-admin:roles')) | safe }}
+        </p>
+    {% else %}
+        <form method="post" action="{{ url(name='rcms-admin:workflows:task-add', id=workflow.id) }}">
+            {{ csrf_token | csrf_input | safe }}
+            <div class="rcms-field-row">
+                <div class="rcms-field rcms-flex-2">
+                    <label>{{ "Step name" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+                    <input type="text" name="name" required maxlength="100" placeholder="{{ "Editor review" | translate(locale=LANG) }}">
+                </div>
+                <div class="rcms-field">
+                    <label>{{ "Assignee role" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+                    <select name="role_id" required>
+                        {% for r in roles %}
+                            <option value="{{ r.id }}">{{ r.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            {# #191 — task kind. Defaults to group_approval (human
+               clicks approve). Auto-approve = system advances
+               immediately; webhook-notify = best-effort POST then
+               auto-advance. #}
+            <div class="rcms-field-row">
+                <div class="rcms-field">
+                    <label>{{ "Kind" | translate(locale=LANG) }}</label>
+                    <select name="kind" data-step-kind>
+                        {% for k in task_kinds | default(value=[]) %}
+                            <option value="{{ k.name }}"{% if k.name == "group_approval" %} selected{% endif %}>{{ k.verbose_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="rcms-hint rcms-text-2xs">
+                        {{ "Group approval = human clicks approve (default). Auto-approve / webhook = system advances." | translate(locale=LANG) }}
+                    </div>
+                </div>
+                <div class="rcms-field rcms-flex-2" data-step-webhook hidden>
+                    <label>{{ "Webhook URL" | translate(locale=LANG) }}</label>
+                    <input type="url" name="webhook_url" maxlength="500" placeholder="https://hooks.example.com/legal">
+                </div>
+                <div class="rcms-field">
+                    <button type="submit" class="rcms-btn">{{ "+ Add step" | translate(locale=LANG) }}</button>
+                </div>
+            </div>
+        </form>
+        <script>
+        (() => {
+            // The webhook address matters only for a webhook step.
+            const kind = document.querySelector("[data-step-kind]");
+            const hook = document.querySelector("[data-step-webhook]");
+            if (!kind || !hook) return;
+            const show = () => { hook.hidden = kind.value !== "webhook_notify"; };
+            kind.addEventListener("change", show);
+            show();
+        })();
+        </script>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

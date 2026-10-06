@@ -1,0 +1,76 @@
+{% extends "rcms_admin/_list_base.html" %}
+{# Dedicated Forms list — every form snippet with its submission count and
+   last-submission time, linking straight into the builder + submission
+   history. (The generic library table can't show submissions: render_cell
+   is sync and pool-less, so the handler precomputes them.) #}
+{% block title %}{{ "Forms — CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Forms" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="{{ url(name='rcms-admin:library:new') }}?type=form" class="rcms-btn">
+    <span class="material-symbols-rounded">add</span>
+    {{ "New form" | translate(locale=LANG) }}
+</a>
+{% endblock %}
+
+{% block description %}
+    {{ "Forms collect visitor submissions. Build the fields, drop the form onto a page with the Form block, and every submission is tracked here." | translate(locale=LANG) }}
+{% endblock %}
+
+{% block body %}
+{% if total == 0 %}
+<div class="rcms-empty">
+    <p><em>{{ "No forms yet — create your first form." | translate(locale=LANG) }}</em></p>
+    <a href="{{ url(name='rcms-admin:library:new') }}?type=form" class="rcms-btn">
+        <span class="material-symbols-rounded">add</span>
+        {{ "New form" | translate(locale=LANG) }}
+    </a>
+</div>
+{% else %}
+<div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Form" | translate(locale=LANG) }}</th>
+                <th>{{ "Fields" | translate(locale=LANG) }}</th>
+                <th>{{ "Submissions" | translate(locale=LANG) }}</th>
+                <th>{{ "Last submission" | translate(locale=LANG) }}</th>
+                <th>{{ "Updated" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for r in rows %}
+            <tr>
+                <td><a href="{{ r.build_url }}"><strong>{{ r.title }}</strong></a></td>
+                <td>{{ r.fields }}</td>
+                <td>
+                    {% if r.submissions > 0 %}
+                        <a href="{{ r.submissions_url }}"><strong>{{ r.submissions }}</strong></a>
+                    {% else %}
+                        <span class="rcms-text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td>{% if r.last_submission %}<time datetime="{{ r.last_submission }}">{{ r.last_submission }}</time>{% else %}<span class="rcms-text-muted">—</span>{% endif %}</td>
+                <td>{{ r.updated_at }}</td>
+                <td class="rcms-actions">
+                    <a href="{{ r.build_url }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+                        <span class="material-symbols-rounded sm">edit</span> {{ "Build" | translate(locale=LANG) }}
+                    </a>
+                    <a href="{{ r.submissions_url }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+                        <span class="material-symbols-rounded sm">inbox</span> {{ "Submissions" | translate(locale=LANG) }}
+                    </a>
+                    <form method="post" action="{{ r.delete_url }}" onsubmit="return confirm('Delete form `{{ r.slug }}` and stop collecting? Existing submissions are kept.');" class="rcms-inline">
+                        {{ csrf_token | csrf_input | safe }}
+                        <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">
+                            <span class="material-symbols-rounded sm">delete</span> {{ "Delete" | translate(locale=LANG) }}
+                        </button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

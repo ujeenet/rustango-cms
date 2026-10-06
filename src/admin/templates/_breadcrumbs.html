@@ -1,0 +1,73 @@
+{# Shared breadcrumb macro (#31). Import + call from any template:
+
+       {% import "rcms_admin/_breadcrumbs.html" as bc %}
+       {% set crumbs = breadcrumbs(page_id=page.id) %}
+       {{ bc::render(crumbs=crumbs) | safe }}
+
+   Renders the standard `<nav aria-label="Breadcrumb">` shape plus a
+   parallel `<script type="application/ld+json">` BreadcrumbList block
+   matching schema.org for SEO crawlers. Pass `json_ld=false` to skip
+   the JSON-LD emit when the page already carries its own structured
+   data.
+
+   `truncate=true` (default) drops middle crumbs when the trail
+   exceeds 5 entries, keeping the first crumb + the last two with an
+   ellipsis between them.
+#}
+{% macro render(crumbs, json_ld=true, truncate=true) %}
+    {% if crumbs | length > 0 %}
+        <nav aria-label="{{ "Breadcrumb" | translate(locale=LANG) }}" class="rcms-breadcrumbs">
+            <ol class="rcms-list-none rcms-m-0 rcms-p-0 rcms-flex rcms-flex-wrap rcms-gap-2 rcms-items-center rcms-text-muted" style="font: var(--md-sys-typescale-ui-body);">
+                {% if truncate and crumbs | length > 5 %}
+                    {# First + ellipsis + last two #}
+                    {% set first = crumbs | first %}
+                    <li>
+                        <a href="{{ first.url }}" class="rcms-text-inherit rcms-no-underline">{{ first.title }}</a>
+                    </li>
+                    <li aria-hidden="true">›</li>
+                    <li aria-hidden="true" class="rcms-opacity-60">…</li>
+                    <li aria-hidden="true">›</li>
+                    {% for c in crumbs | slice(start=crumbs | length - 2) %}
+                        <li>
+                            {% if c.is_current %}
+                                <span aria-current="page" class="rcms-fw-medium rcms-text-on-surface">{{ c.title }}</span>
+                            {% else %}
+                                <a href="{{ c.url }}" class="rcms-text-inherit rcms-no-underline">{{ c.title }}</a>
+                            {% endif %}
+                        </li>
+                        {% if not loop.last %}<li aria-hidden="true">›</li>{% endif %}
+                    {% endfor %}
+                {% else %}
+                    {% for c in crumbs %}
+                        <li>
+                            {% if c.is_current %}
+                                <span aria-current="page" class="rcms-fw-medium rcms-text-on-surface">{{ c.title }}</span>
+                            {% else %}
+                                <a href="{{ c.url }}" class="rcms-text-inherit rcms-no-underline">{{ c.title }}</a>
+                            {% endif %}
+                        </li>
+                        {% if not loop.last %}<li aria-hidden="true">›</li>{% endif %}
+                    {% endfor %}
+                {% endif %}
+            </ol>
+        </nav>
+        {% if json_ld %}
+            <script type="application/ld+json">
+            {
+              "@context": "https://schema.org",
+              "@type": "BreadcrumbList",
+              "itemListElement": [
+                {% for c in crumbs %}
+                  {
+                    "@type": "ListItem",
+                    "position": {{ loop.index }},
+                    "name": "{{ c.title | escape }}",
+                    "item": "{{ c.url | escape }}"
+                  }{% if not loop.last %},{% endif %}
+                {% endfor %}
+              ]
+            }
+            </script>
+        {% endif %}
+    {% endif %}
+{% endmacro %}

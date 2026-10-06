@@ -1,0 +1,289 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Library — CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}
+{% if mode == "overview" %}{{ "Library" | translate(locale=LANG) }}{% else %}Library: {{ active_type }}{% endif %}
+{% endblock %}
+
+{% block topbar_actions %}
+{% if mode == "type" %}
+    <a href="{{ url(name='rcms-admin:library:import', type_name=active_type) }}" class="rcms-btn rcms-btn-outlined">
+        <span class="material-symbols-rounded sm">upload</span> {{ "Import CSV" | translate(locale=LANG) }}
+    </a>
+    <a href="{{ url(name='rcms-admin:library:new') }}?type={{ active_type }}&folder={{ folder }}" class="rcms-btn">
+        <span class="material-symbols-rounded">add</span>
+        New {{ active_type }}
+    </a>
+{% else %}
+    <a href="{{ url(name='rcms-admin:library:new') }}" class="rcms-btn">
+        <span class="material-symbols-rounded">add</span>
+        {{ "New snippet" | translate(locale=LANG) }}
+    </a>
+{% endif %}
+{% endblock %}
+
+{% block breadcrumbs %}
+{# Overview mode's only crumb pointed at the page you're already on and
+   restated the heading, so the row renders once there's a hierarchy. #}
+{% if mode == "type" %}
+<nav class="rcms-breadcrumbs">
+    <a href="{{ url(name='rcms-admin:library:list') }}">{{ "Library" | translate(locale=LANG) }}</a>
+    <span class="rcms-sep">›</span>
+    <a href="{{ url(name='rcms-admin:library:list') }}?type={{ active_type }}">{{ active_type }}</a>
+    {% if folder %}
+        {% set parts = folder | split(pat="/") %}
+        {% set_global acc = "" %}
+        {% for p in parts %}
+            {% if p %}
+                {% set_global acc = acc ~ p ~ "/" %}
+                <span class="rcms-sep">›</span>
+                <a href="{{ url(name='rcms-admin:library:list') }}?type={{ active_type }}&folder={{ acc }}">{{ p }}</a>
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+</nav>
+{% endif %}
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .library-layout { display: grid; grid-template-columns: 220px 1fr; gap: 16px; align-items: flex-start; }
+    /* Grid items default to min-width:auto and won't shrink below their
+       content (the wide list table), forcing the whole column — and the
+       page — to overflow sideways. Let them shrink so the inner
+       `.rcms-table-wrap` scrolls instead. */
+    .library-layout > * { min-width: 0; }
+    /* No folder tree → full-width list (don't reserve the empty 220px rail). */
+    .library-layout--single { grid-template-columns: 1fr; }
+    @media (max-width: 768px) { .library-layout { grid-template-columns: 1fr; } }
+    .rcms-library-folder-tree { padding: 12px 4px; max-height: 70vh; overflow-y: auto; position: sticky; top: 12px; }
+    .rcms-library-folder-tree h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0 0 8px; padding: 0 8px; }
+    .rcms-library-folder-tree a { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 6px; text-decoration: none; color: var(--md-sys-color-on-surface); font-size: 13px; }
+    .rcms-library-folder-tree a:hover { background: var(--md-sys-color-surface-container); }
+    .rcms-library-folder-tree a.active { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block description %}
+    {# The heading already says "Library" — repeating it here made the
+       word appear three times above the table. #}
+    {{ "Reusable, non-page content — callouts, FAQ items, authors, hero banners." | translate(locale=LANG) }}
+    {% if mode == "overview" %}{{ "Pick a type below to manage its snippets." | translate(locale=LANG) }}{% endif %}
+{% endblock %}
+
+{% block body %}
+{% if mode == "overview" %}
+    {# === Overview: one card per registered type === #}
+    {% if types | length == 0 %}
+        <div class="rcms-empty">
+            <p><em>{{ "No library types are available yet." | translate(locale=LANG) }}</em></p>
+            <p class="rcms-hint rcms-mt-0">
+                {{ "Ask a developer to register library types for this site." | translate(locale=LANG) }}
+            </p>
+        </div>
+    {% else %}
+        <div class="rcms-table-wrap">
+        <table class="rcms-data">
+            <thead>
+                <tr>
+                    <th>{{ "Type" | translate(locale=LANG) }}</th>
+                    <th>{{ "Identifier" | translate(locale=LANG) }}</th>
+                    <th>{{ "Snippets" | translate(locale=LANG) }}</th>
+                    <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for t in types %}
+                <tr>
+                    <td>
+                        <a href="{{ url(name='rcms-admin:library:list') }}?type={{ t.type_name }}" class="rcms-inline-flex rcms-items-center rcms-gap-2" style="text-decoration: none;">
+                            <span class="material-symbols-rounded sm rcms-text-accent">collections_bookmark</span>
+                            <strong>{{ t.verbose_name }}</strong>
+                        </a>
+                    </td>
+                    <td><code>{{ t.type_name }}</code></td>
+                    <td>{{ counts_by_type | get(key=t.type_name, default=0) | intcomma }}</td>
+                    <td class="rcms-actions">
+                        <a href="{{ url(name='rcms-admin:library:list') }}?type={{ t.type_name }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Manage" | translate(locale=LANG) }}</a>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+{% else %}
+    {# === Type-scoped list: search + filters + folders + paginated table === #}
+
+    {# #196 — left-rail folder tree. Flat list with depth-based indentation;
+       click filters the list to that folder. When there are no folders the
+       layout drops to a single full-width column (no empty 220px rail). #}
+    {% set has_folder_tree = folder_tree and folder_tree | length > 1 %}
+    <div class="library-layout{% if not has_folder_tree %} library-layout--single{% endif %}">
+    {% if has_folder_tree %}
+    <aside class="rcms-card rcms-library-folder-tree" aria-label="{{ "Snippet folders" | translate(locale=LANG) }}">
+        <h3>{{ "Folders" | translate(locale=LANG) }}</h3>
+        {% for node in folder_tree %}
+            <a href="{{ url(name='rcms-admin:library:list') }}?type={{ active_type }}{% if node.path %}&folder={{ node.path }}{% endif %}"
+               class="{% if node.active %}active{% endif %}"
+               style="padding-left: {{ 8 + node.depth * 14 }}px;">
+                <span class="material-symbols-rounded sm">{% if node.active %}folder_open{% else %}folder{% endif %}</span>
+                {{ node.name }}
+            </a>
+        {% endfor %}
+    </aside>
+    {% endif %}
+
+    <div>
+    {# Search + filter form. GET so URL is shareable. #}
+    <form method="get" action="{{ url(name='rcms-admin:library:list') }}" class="rcms-list-filter-row rcms-mb-3">
+        <input type="hidden" name="type" value="{{ active_type }}">
+        <input type="hidden" name="folder" value="{{ folder }}">
+        <label class="rcms-search-input">
+            <span class="material-symbols-rounded">search</span>
+            <input type="search" name="q" value="{{ search_q }}" autocomplete="off"
+                   placeholder="{{ "Title, slug, or body…" | translate(locale=LANG) }}">
+        </label>
+        {% for fk in filter_keys %}
+            {% set opts = filter_options | get(key=fk, default=[]) %}
+            <select name="filter_{{ fk }}" aria-label="{{ fk }}">
+                <option value="">{{ fk }} {{ "— any —" | translate(locale=LANG) }}</option>
+                {% for o in opts %}
+                    {% set_global is_sel = false %}
+                    {% for af in active_filters %}
+                        {% if af.key == fk and af.value == o %}{% set_global is_sel = true %}{% endif %}
+                    {% endfor %}
+                    <option value="{{ o }}"{% if is_sel %} selected{% endif %}>{{ o }}</option>
+                {% endfor %}
+            </select>
+        {% endfor %}
+        <button type="submit" class="rcms-btn rcms-btn-small">{{ "Apply" | translate(locale=LANG) }}</button>
+        {% if search_q or active_filters | length > 0 %}
+            <a href="{{ url(name='rcms-admin:library:list') }}?type={{ active_type }}&folder={{ folder }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+                {{ "Clear" | translate(locale=LANG) }}
+            </a>
+        {% endif %}
+    </form>
+
+    {# Folder bar. #}
+    {% if child_folders | length > 0 %}
+    <div class="rcms-card rcms-mb-3" style="padding: 10px 14px;">
+        <strong class="rcms-text-sm rcms-text-muted">
+            <span class="material-symbols-rounded sm rcms-text-accent">folder</span>
+            {{ "Folders:" | translate(locale=LANG) }}
+        </strong>
+        {% for cf in child_folders %}
+            <a href="{{ url(name='rcms-admin:library:list') }}?type={{ active_type }}&folder={{ folder }}{{ cf }}/" class="rcms-btn rcms-btn-outlined rcms-btn-small rcms-ml-1">
+                <span class="material-symbols-rounded sm">folder_open</span>
+                {{ cf }}
+            </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {# Snippet table. #}
+    {% if rows | length == 0 %}
+        <div class="rcms-empty">
+            <p><em>{% if folder %}No snippets in <code>{{ folder }}</code>.{% else %}{{ "No snippets here." | translate(locale=LANG) }}{% endif %}</em></p>
+            <p class="rcms-hint rcms-mt-0">
+                {% if search_q or active_filters | length > 0 %}
+                    {{ "No results match the current search / filters." | translate(locale=LANG) }}
+                {% elif folder %}
+                    Drop one with <code>folder_path={{ folder }}</code> to add — or click <strong>+ New {{ active_type }}</strong>.
+                {% else %}
+                    Click <strong>+ New {{ active_type }}</strong> to add one.
+                {% endif %}
+            </p>
+        </div>
+    {% else %}
+        {# Bulk action bar (#21 phase 2). The bulk form lives OUTSIDE
+           the table so per-row delete forms can stay nested in their
+           own cells without nested-form issues. Multi-select
+           checkboxes use HTML5 `form="library-bulk-form"` to
+           associate themselves with the bulk form despite living
+           inside the table. #}
+        {% set has_handler_bulk = bulk_actions and bulk_actions | length > 0 %}
+        {% set has_plugin_bulk = plugin_bulk_actions and plugin_bulk_actions | length > 0 %}
+        {% if has_handler_bulk or has_plugin_bulk %}
+            <form method="post"
+                  action="{{ url(name='rcms-admin:library:bulk', type_name=active_type) }}"
+                  id="library-bulk-form"
+                  class="rcms-table-toolbar rcms-mb-4">
+                {{ csrf_token | csrf_input | safe }}
+                <label class="rcms-inline-flex rcms-items-center rcms-gap-2 rcms-text-xs rcms-text-muted">
+                    <input type="checkbox" id="lib-select-all"
+                           data-select-all="input[name=ids][form=library-bulk-form]">
+                    {{ "Select all" | translate(locale=LANG) }}
+                </label>
+                <span class="rcms-toolbar-spacer"></span>
+                {% if has_handler_bulk %}
+                    {% for a in bulk_actions %}
+                        <button type="submit" name="action" value="{{ a.name }}" class="{{ a.style_class }} rcms-btn-small"
+                                {% if a.confirm_message %}onclick="return confirm('{{ a.confirm_message }}');"{% endif %}>
+                            {% if a.icon %}<span class="material-symbols-rounded sm">{{ a.icon }}</span>{% endif %}
+                            {{ a.label }}
+                        </button>
+                    {% endfor %}
+                {% endif %}
+                {# #134 — plugin-contributed bulk actions targeting
+                   `cms_snippet`. Use `formaction=` to redirect this
+                   form's submission to the plugin's own URL while
+                   keeping the same `ids[]` field shape. #}
+                {% if has_plugin_bulk %}
+                    {% for pa in plugin_bulk_actions %}
+                        <button type="submit"
+                                formaction="{{ pa.action_url }}"
+                                name="action"
+                                value="{{ pa.key }}"
+                                class="rcms-btn {% if pa.danger %}rcms-btn-danger {% endif %}rcms-btn-small"
+                                {% if pa.confirm_message %}data-confirm="{{ pa.confirm_message }}"{% endif %}
+                                {% if pa.danger %}data-confirm-style="danger"{% endif %}>
+                            <span class="material-symbols-rounded sm">{{ pa.icon | default(value="bolt") }}</span>
+                            {{ pa.label }}
+                        </button>
+                    {% endfor %}
+                {% endif %}
+            </form>
+        {% endif %}
+
+        <div data-col-picker-mount-wrap>
+            <div class="rcms-library-list-toolbar" data-col-picker-mount></div>
+            <div class="rcms-table-wrap">
+            <table class="rcms-data" data-col-picker="library:{{ active_type }}">
+                <thead>
+                    <tr>
+                        {% if has_handler_bulk or has_plugin_bulk %}<th class="rcms-library-list-bulk-th"></th>{% endif %}
+                        {% for h in column_headers %}<th data-col-key="{{ h.key }}" data-col-label="{{ h.label }}">{{ h.label }}</th>{% endfor %}
+                        <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for r in rows %}
+                    <tr>
+                        {% if has_handler_bulk or has_plugin_bulk %}
+                            <td><input type="checkbox" name="ids" value="{{ r.id }}" form="library-bulk-form"></td>
+                        {% endif %}
+                        {% for c in r.cells %}<td data-col-key="{{ column_headers[loop.index0].key }}">{{ c | safe }}</td>{% endfor %}
+                        <td class="rcms-actions">
+                            <a href="{{ url(name='rcms-admin:library:edit', id=r.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+                                <span class="material-symbols-rounded sm">edit</span> {{ "Edit" | translate(locale=LANG) }}
+                            </a>
+                            <form method="post" action="{{ url(name='rcms-admin:library:delete', id=r.id) }}" onsubmit="return confirm('Delete snippet `{{ r.slug }}`?');" class="rcms-inline">
+                                {{ csrf_token | csrf_input | safe }}
+                                <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">
+                                    <span class="material-symbols-rounded sm">delete</span> {{ "Delete" | translate(locale=LANG) }}
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+
+        {% include "rcms_admin/_pagination.html" %}
+    {% endif %}
+    </div>{# /.library-layout > rhs column #}
+    </div>{# /.library-layout #}
+{% endif %}
+{% endblock %}

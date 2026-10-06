@@ -1,0 +1,666 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Upload" | translate(locale=LANG) }} — {{ kind_label }}{% endblock %}
+{% block heading %}{{ "Upload to {name}" | translate(locale=LANG, name=kind_label) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{% if upload_kind == "image" %}{{ url(name='rcms-admin:media:list') }}{% else %}{{ url(name='rcms-admin:documents:list') }}{% endif %}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+{% endblock %}
+
+{% block content %}
+{# Multipart form, submitted via fetch from the script below so the
+   CSRF token reaches the framework as an `X-CSRF-Token` header.
+   The framework's CSRF middleware only reads the `_csrf` form
+   field on `application/x-www-form-urlencoded` bodies — multipart
+   uploads must use the header instead (double-submit pattern). #}
+<form id="media-upload-form" method="post" action="{{ url(name='rcms-admin:media:upload') }}" enctype="multipart/form-data" data-multipart-no-hijack class="rcms-card rcms-maxw-600">
+    {{ csrf_token | csrf_input | safe }}
+    <div class="rcms-field">
+        <label>{{ "Files" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+        {# #57 — multi-file: `multiple` lets the OS picker select N
+           files at once, and the drop zone accepts a folder drag.
+           The queue UI below renders one row per file with its own
+           progress + alt-text. #}
+        <div id="upload-dropzone" class="rcms-upload-dropzone" data-media-list-url="{% if upload_kind == "image" %}{{ url(name='rcms-admin:media:list') }}{% else %}{{ url(name='rcms-admin:documents:list') }}{% endif %}">
+            {# `required` removed: our submit handler checks `queue.length > 0`.
+               Keeping `required` blocked submit because the JS clears
+               `fileInput.value` after staging files into the queue. #}
+            <input type="file" name="file" id="upload-file" multiple{% if upload_kind == "image" %} accept="image/*"{% endif %}>
+            <div class="rcms-upload-dropzone-hint">
+                <span class="material-symbols-rounded rcms-text-2xl rcms-opacity-60">cloud_upload</span>
+                <p class="rcms-mt-2 rcms-mx-0 rcms-mb-1">
+                    <strong>{{ "Drop files here" | translate(locale=LANG) }}</strong> {{ "or click to browse." | translate(locale=LANG) }}
+                </p>
+                <p class="rcms-hint rcms-m-0">
+                    {% if upload_kind == "image" %}
+                        {{ "PNG, JPEG, GIF, WebP, AVIF, SVG. Drop a single file or many." | translate(locale=LANG) }}
+                    {% else %}
+                        {{ "PDFs, archives, plain text — anything not <code>image/*</code> lands in Documents." | translate(locale=LANG) | safe }}
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    {# Queue — one row per file. Hidden until the user picks files. #}
+    <div class="rcms-field" id="upload-queue-section" hidden>
+        <label>{{ "Queue" | translate(locale=LANG) }} (<span id="upload-queue-count">0</span> {{ "files" | translate(locale=LANG) }})</label>
+        <ul id="upload-queue" class="rcms-upload-queue"></ul>
+    </div>
+
+    {% if upload_kind == "image" %}
+        {# #24 V2 — optional pre-upload crop. Hidden until a file
+           is picked. The four hidden inputs land in the POST when
+           the editor confirms a crop; absent otherwise. #}
+        <div class="rcms-field" id="upload-crop-section" hidden>
+            <label>{{ "Crop (optional)" | translate(locale=LANG) }}</label>
+            <div class="rcms-hint rcms-mb-2" id="upload-crop-status">{{ "Drag a rectangle on the preview to set a crop. Leave untouched to upload the full image." | translate(locale=LANG) }}</div>
+            <div class="rcms-flex rcms-gap-2 rcms-flex-wrap rcms-mb-2">
+                <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-crop-ratio="free">{{ "Free" | translate(locale=LANG) }}</button>
+                <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-crop-ratio="1:1">1:1</button>
+                <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-crop-ratio="4:3">4:3</button>
+                <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-crop-ratio="16:9">16:9</button>
+                <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-crop-ratio="3:2">3:2</button>
+                <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small" id="upload-crop-clear">{{ "Clear crop" | translate(locale=LANG) }}</button>
+            </div>
+            <div id="upload-crop-stage" class="rcms-relative rcms-maxw-full rcms-inline-block rcms-border rcms-rounded rcms-overflow-hidden rcms-select-none">
+                <img id="upload-crop-preview" alt="" class="rcms-block rcms-maxw-full rcms-upload-crop-preview">
+                <div id="upload-crop-rect" class="rcms-absolute rcms-upload-crop-rect"></div>
+            </div>
+            <input type="hidden" name="crop_x" id="upload-crop-x">
+            <input type="hidden" name="crop_y" id="upload-crop-y">
+            <input type="hidden" name="crop_w" id="upload-crop-w">
+            <input type="hidden" name="crop_h" id="upload-crop-h">
+        </div>
+    {% endif %}
+    {# Per-file title + alt-text live in the queue rows (rendered
+       by the JS below). Single-file mode kept compatible by
+       defaulting title to the filename minus extension. #}
+    <div class="rcms-form-actions">
+        <a href="{% if upload_kind == "image" %}{{ url(name='rcms-admin:media:list') }}{% else %}{{ url(name='rcms-admin:documents:list') }}{% endif %}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        {# #283 — initial state is disabled; refreshCount() flips
+           enabled/label once at least one file finishes staging. #}
+        <button type="submit" class="rcms-btn" id="upload-submit" disabled>{{ "Upload all" | translate(locale=LANG) }}</button>
+    </div>
+</form>
+
+<script>
+(function () {
+    const form = document.getElementById("media-upload-form");
+    if (!form) return;
+
+    // ---- #24 V2 — pre-upload crop overlay ----
+    const fileInput = document.getElementById("upload-file");
+    const cropSection = document.getElementById("upload-crop-section");
+    const preview = document.getElementById("upload-crop-preview");
+    const stage = document.getElementById("upload-crop-stage");
+    const rectEl = document.getElementById("upload-crop-rect");
+    const status = document.getElementById("upload-crop-status");
+    const fx = document.getElementById("upload-crop-x");
+    const fy = document.getElementById("upload-crop-y");
+    const fw = document.getElementById("upload-crop-w");
+    const fh = document.getElementById("upload-crop-h");
+    let aspectRatio = null; // null = free; otherwise w/h
+    let dragStart = null;
+    let cropDisplay = null; // {x, y, w, h} in display-pixel space
+    let naturalW = 0;
+    let naturalH = 0;
+
+    const clearCrop = () => {
+        cropDisplay = null;
+        rectEl.style.display = "none";
+        [fx, fy, fw, fh].forEach((el) => el && (el.value = ""));
+        if (status) status.textContent = "Drag a rectangle on the preview to set a crop. Leave untouched to upload the full image.";
+    };
+
+    const applyCropDisplay = (rect) => {
+        if (!rect) return;
+        cropDisplay = rect;
+        rectEl.style.display = "block";
+        rectEl.style.left = `${rect.x}px`;
+        rectEl.style.top = `${rect.y}px`;
+        rectEl.style.width = `${rect.w}px`;
+        rectEl.style.height = `${rect.h}px`;
+        // Convert display-px → source-px so the server crops the
+        // original bytes, not the scaled preview.
+        const scaleX = naturalW / preview.clientWidth;
+        const scaleY = naturalH / preview.clientHeight;
+        const sx = Math.max(0, Math.round(rect.x * scaleX));
+        const sy = Math.max(0, Math.round(rect.y * scaleY));
+        const sw = Math.max(1, Math.round(rect.w * scaleX));
+        const sh = Math.max(1, Math.round(rect.h * scaleY));
+        fx.value = sx;
+        fy.value = sy;
+        fw.value = sw;
+        fh.value = sh;
+        if (status) status.textContent = `Will crop to ${sw} × ${sh} px (source pixels).`;
+    };
+
+    if (fileInput && cropSection) {
+        // #282 — the per-file-input change listener that used to live
+        // here unconditionally showed the crop overlay for whatever
+        // the picker's first file was. That raced against the
+        // queue-based handler (line 329) for multi-file batches: the
+        // legacy listener queued `cropSection.hidden = false` on the
+        // image's onload, which fired AFTER refreshCount() had
+        // correctly hidden the overlay for `queue.length > 1`, so the
+        // crop UI flickered back into view for bulk uploads. The
+        // queue handler at line 329 already calls cropChangeHandler
+        // when (and only when) exactly one file is queued, so this
+        // listener is now redundant; removed.
+
+        // Drag-to-select on the preview.
+        preview.addEventListener("mousedown", (event) => {
+            const rect = preview.getBoundingClientRect();
+            dragStart = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+        });
+        document.addEventListener("mousemove", (event) => {
+            if (!dragStart) return;
+            const rect = preview.getBoundingClientRect();
+            const cx = Math.max(0, Math.min(preview.clientWidth, event.clientX - rect.left));
+            const cy = Math.max(0, Math.min(preview.clientHeight, event.clientY - rect.top));
+            let x = Math.min(dragStart.x, cx);
+            let y = Math.min(dragStart.y, cy);
+            let w = Math.abs(cx - dragStart.x);
+            let h = Math.abs(cy - dragStart.y);
+            if (aspectRatio) {
+                // Lock to ratio — shrink the longer side to fit.
+                if (w / h > aspectRatio) w = h * aspectRatio;
+                else h = w / aspectRatio;
+            }
+            applyCropDisplay({ x, y, w, h });
+        });
+        document.addEventListener("mouseup", () => { dragStart = null; });
+
+        document.querySelectorAll("[data-crop-ratio]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+                const r = btn.dataset.cropRatio;
+                if (r === "free") aspectRatio = null;
+                else {
+                    const [a, b] = r.split(":").map(Number);
+                    aspectRatio = a / b;
+                }
+                document.querySelectorAll("[data-crop-ratio]").forEach((b) => b.classList.remove("active"));
+                btn.classList.add("active");
+                // Re-apply current rect under the new ratio.
+                if (cropDisplay) applyCropDisplay(cropDisplay);
+            });
+        });
+        document.getElementById("upload-crop-clear")?.addEventListener("click", clearCrop);
+    }
+
+    // ---- #57 — multi-file queue + parallel-bounded upload ----
+    const queueSection = document.getElementById("upload-queue-section");
+    const queueEl = document.getElementById("upload-queue");
+    const queueCount = document.getElementById("upload-queue-count");
+    const dropzone = document.getElementById("upload-dropzone");
+    const submitBtn = document.getElementById("upload-submit");
+    const MAX_PARALLEL = 4;
+    // After all uploads settle we redirect here. Built in HTML
+    // (where Tera's auto-escape doesn't corrupt the URL the way it
+    // does inside a <script> block) and parked on a data attribute
+    // so the script can read it back.
+    const mediaListUrl = dropzone?.dataset.mediaListUrl || "/cms-admin/media";
+
+    // Each queue item: { file, row, titleInput, altInput, statusEl, status }
+    let queue = [];
+
+    function filenameWithoutExt(name) {
+        const i = name.lastIndexOf(".");
+        return i > 0 ? name.slice(0, i) : name;
+    }
+    function fmtSize(bytes) {
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    // #188 — collection picker options, baked in from server context.
+    const COLLECTION_OPTIONS = {{ collections | default(value=[]) | json_script }};
+
+    function addToQueue(file) {
+        const row = document.createElement("li");
+        row.className = "rcms-upload-queue-row";
+        row.dataset.status = "pending";
+
+        // Preview thumb — blob URL for images, generic icon otherwise.
+        const thumb = document.createElement("div");
+        thumb.className = "rcms-upload-queue-thumb";
+        if (file.type.startsWith("image/") && file.type !== "image/svg+xml") {
+            const img = document.createElement("img");
+            img.src = URL.createObjectURL(file);
+            img.alt = "";
+            thumb.appendChild(img);
+        } else {
+            const icon = document.createElement("span");
+            icon.className = "material-symbols-rounded";
+            icon.textContent = "description";
+            thumb.appendChild(icon);
+        }
+
+        const body = document.createElement("div");
+        body.className = "rcms-upload-queue-body";
+
+        const titleInput = document.createElement("input");
+        titleInput.type = "text";
+        titleInput.placeholder = "Title (defaults to filename)";
+        titleInput.value = filenameWithoutExt(file.name);
+
+        const altInput = document.createElement("input");
+        altInput.type = "text";
+        altInput.placeholder = "Alt text (for screen readers — required for content images)";
+
+        // #188 — per-file collection picker. Empty option = root /
+        // uncategorized, matching the cms_media.collection_id NULL state.
+        const collectionInput = document.createElement("select");
+        collectionInput.className = "rcms-upload-queue-collection";
+        const rootOpt = document.createElement("option");
+        rootOpt.value = "";
+        rootOpt.textContent = "Root collection";
+        collectionInput.appendChild(rootOpt);
+        for (const col of COLLECTION_OPTIONS) {
+            const opt = document.createElement("option");
+            opt.value = String(col.id);
+            opt.textContent = col.name;
+            collectionInput.appendChild(opt);
+        }
+
+        const meta = document.createElement("div");
+        meta.className = "rcms-upload-queue-meta";
+        meta.textContent = `${file.name} · ${fmtSize(file.size)}`;
+
+        body.appendChild(titleInput);
+        if (file.type.startsWith("image/")) body.appendChild(altInput);
+        if (COLLECTION_OPTIONS.length > 0) body.appendChild(collectionInput);
+        body.appendChild(meta);
+
+        const statusEl = document.createElement("div");
+        statusEl.className = "rcms-upload-queue-status";
+        statusEl.textContent = "Pending";
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "rcms-btn-icon rcms-btn rcms-btn-small";
+        remove.title = "Remove from queue";
+        remove.innerHTML = '<span class="material-symbols-rounded sm">close</span>';
+        const item = { file, row, titleInput, altInput, collectionInput, statusEl, status: "pending", scratchId: null };
+        remove.addEventListener("click", async () => {
+            // #188 — if bytes are already in scratch, ask the server
+            // to drop the scratch row + unlink the file so we don't
+            // leave orphans for the sweep to GC later.
+            if (item.scratchId) {
+                try {
+                    await fetch(`/cms-admin/media/upload-staged/${item.scratchId}/cancel`, {
+                        method: "POST",
+                        headers: { "X-CSRF-Token": csrfTokenValue() },
+                        credentials: "same-origin",
+                    });
+                } catch (_e) {
+                    // best-effort; row goes away regardless
+                }
+            }
+            const idx = queue.findIndex((q) => q.row === row);
+            if (idx >= 0) {
+                queue.splice(idx, 1);
+                row.remove();
+                refreshCount();
+            }
+        });
+
+        row.appendChild(thumb);
+        row.appendChild(body);
+        row.appendChild(statusEl);
+        row.appendChild(remove);
+        queueEl.appendChild(row);
+
+        queue.push(item);
+    }
+
+    function refreshCount() {
+        queueSection.hidden = queue.length === 0;
+        if (cropSection && queue.length !== 1) {
+            cropSection.hidden = true;
+        }
+        // #283 — explicit per-status breakdown so editors can see at a
+        // glance what the queue is doing instead of a single ambiguous
+        // count + a "wait N more" toast when they click Submit too
+        // early. Counts roll up the per-row item.status values that
+        // stageBytes + the commit handler maintain.
+        const counts = { pending: 0, uploading: 0, staged: 0, done: 0, failed: 0, skipped: 0 };
+        for (const q of queue) {
+            counts[q.status] = (counts[q.status] || 0) + 1;
+        }
+        // Composite summary — show counts only for non-zero buckets to
+        // keep the header tight on a small queue. `skipped` (#284 —
+        // dedup-by-content-hash) is its own bucket so editors can tell
+        // it apart from `done` (genuinely uploaded) and `failed`
+        // (something broke).
+        const total = queue.length;
+        const settled = counts.done + counts.failed + counts.skipped;
+        const parts = [`${total} file${total === 1 ? "" : "s"}`];
+        if (counts.uploading > 0) parts.push(`${counts.uploading} uploading`);
+        if (counts.staged > 0) parts.push(`${counts.staged} ready`);
+        if (counts.done > 0) parts.push(`${counts.done} ✓`);
+        if (counts.skipped > 0) parts.push(`${counts.skipped} duplicate`);
+        if (counts.failed > 0) parts.push(`${counts.failed} ✗`);
+        queueCount.textContent = parts.join(" · ");
+
+        // Submit button reflects "what would happen if I click now":
+        // - Nothing to commit → "Upload all" disabled (no files)
+        // - Still staging some bytes → "Uploading… (N left)" disabled
+        // - Everything staged → "Upload all (N ready)" enabled
+        // - Everything settled → "Done" disabled (next pick re-enables)
+        if (submitBtn) {
+            const hasReady = counts.staged > 0;
+            const stillUploading = counts.uploading > 0 || counts.pending > 0;
+            const allSettled = total > 0 && settled === total;
+            if (allSettled) {
+                submitBtn.disabled = true;
+                // Compose a short multi-clause summary so editors see
+                // every outcome at once. Skips (#284 — dedup) are
+                // their own clause separate from done/failed.
+                const clauses = [];
+                if (counts.done > 0) clauses.push(`${counts.done} uploaded`);
+                if (counts.skipped > 0) clauses.push(`${counts.skipped} duplicate`);
+                if (counts.failed > 0) clauses.push(`${counts.failed} failed`);
+                submitBtn.textContent =
+                    clauses.length === 0
+                        ? "Done"
+                        : `Done — ${clauses.join(" · ")}`;
+            } else if (stillUploading) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = `Uploading bytes… (${counts.uploading + counts.pending} left)`;
+            } else if (hasReady) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = `Upload all (${counts.staged} ready)`;
+            } else {
+                submitBtn.disabled = true;
+                submitBtn.textContent = "Upload all";
+            }
+        }
+    }
+
+    // Surface file-picker selections into the queue.
+    fileInput?.addEventListener("change", () => {
+        Array.from(fileInput.files || []).forEach(addToQueue);
+        fileInput.value = ""; // allow re-selecting the same file later
+        refreshCount();
+        // Single-file mode reactivates the crop overlay path.
+        if (queue.length === 1) cropChangeHandler(queue[0].file);
+    });
+
+    // Drop zone — accept files dragged in.
+    if (dropzone) {
+        ["dragenter", "dragover"].forEach((evt) =>
+            dropzone.addEventListener(evt, (e) => {
+                e.preventDefault();
+                dropzone.classList.add("rcms-upload-dropzone--active");
+            }),
+        );
+        ["dragleave", "drop"].forEach((evt) =>
+            dropzone.addEventListener(evt, (e) => {
+                e.preventDefault();
+                dropzone.classList.remove("rcms-upload-dropzone--active");
+            }),
+        );
+        dropzone.addEventListener("drop", (event) => {
+            const files = Array.from(event.dataTransfer?.files || []);
+            files.forEach(addToQueue);
+            refreshCount();
+            if (queue.length === 1) cropChangeHandler(queue[0].file);
+        });
+        // "Click to browse". A bare <input type=file> only opens the picker
+        // when its native button sub-region is clicked, so the transparent
+        // full-cover overlay leaves most of the dropzone dead. Neutralise the
+        // input (set here in JS too, so it works even if the CSS is cached
+        // stale) and drive the picker programmatically from any dropzone click.
+        if (fileInput) fileInput.style.pointerEvents = "none";
+        dropzone.addEventListener("click", () => fileInput?.click());
+    }
+
+    // Crop-section re-init when a single file lands in the queue
+    // (multi-file uploads skip the crop overlay — V2 territory).
+    function cropChangeHandler(file) {
+        clearCrop();
+        if (!cropSection) return;
+        if (!file.type.startsWith("image/") || file.type === "image/svg+xml") {
+            cropSection.hidden = true;
+            return;
+        }
+        const url = URL.createObjectURL(file);
+        preview.onload = () => {
+            naturalW = preview.naturalWidth;
+            naturalH = preview.naturalHeight;
+            cropSection.hidden = false;
+        };
+        preview.src = url;
+    }
+
+    // CSRF cookie helper — same token reused for every staged call.
+    function csrfTokenValue() {
+        const cookieMatch = document.cookie
+            .split("; ")
+            .find((c) => c.startsWith("rustango_csrf="));
+        return cookieMatch ? decodeURIComponent(cookieMatch.split("=")[1]) : "";
+    }
+
+    // #188 — upload bytes to scratch storage as soon as the editor
+    // picks a file. The scratch_id stays on the queue row so the
+    // commit step can promote it to cms_media with metadata, and
+    // per-row Remove can call /cancel.
+    async function stageBytes(item) {
+        item.status = "uploading";
+        item.row.dataset.status = "uploading";
+        item.statusEl.textContent = "Uploading…";
+        refreshCount();
+        const fd = new FormData();
+        fd.append("file", item.file);
+        try {
+            const resp = await fetch("/cms-admin/media/upload-staged", {
+                method: "POST",
+                // #285 — Accept: application/json so the server's
+                // session-expired 401 returns JSON instead of HTML
+                // that gets stuffed into a toast as garbage.
+                headers: {
+                    "X-CSRF-Token": csrfTokenValue(),
+                    "Accept": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                body: fd,
+                credentials: "same-origin",
+            });
+            if (!resp.ok) {
+                // #285 — JSON-aware error handling. On 401 with
+                // {error: "session_expired"} surface a clean banner
+                // pointing the editor at /login instead of dumping
+                // the raw HTML body into the row's status field.
+                if (resp.status === 401) {
+                    let loginUrl = "/login?next=/cms-admin/";
+                    let message = "Your session expired — sign in again to keep uploading.";
+                    try {
+                        const j = await resp.json();
+                        if (j && j.error === "session_expired") {
+                            loginUrl = j.login_url || loginUrl;
+                            message = j.message || message;
+                        }
+                    } catch (_) { /* non-JSON 401 — keep defaults */ }
+                    item.status = "failed";
+                    item.row.dataset.status = "failed";
+                    item.statusEl.innerHTML = "";
+                    item.statusEl.appendChild(document.createTextNode(message + " "));
+                    const a = document.createElement("a");
+                    a.href = loginUrl;
+                    a.textContent = "Sign in →";
+                    item.statusEl.appendChild(a);
+                    // Show a session-expired toast once per session
+                    // expiry burst so 10 in-flight items don't fire
+                    // 10 toasts. Window flag is reset by a successful
+                    // request.
+                    if (!window.__rcmsSessionExpiredToast) {
+                        window.__rcmsSessionExpiredToast = true;
+                        window.rcmsToast?.({ level: "error", body: message });
+                    }
+                    return false;
+                }
+                const body = await resp.text();
+                throw new Error(`HTTP ${resp.status}: ${body.slice(0, 160)}`);
+            }
+            // Clear the once-per-burst session-expired guard now that
+            // we know the session is alive again.
+            window.__rcmsSessionExpiredToast = false;
+            const payload = await resp.json();
+            // #284 — dedup by content hash. The server returns a
+            // duplicate marker (`{ id: null, duplicate_of: <media_id>, ... }`)
+            // when an existing media row already carries the same
+            // sha256 of the uploaded bytes; no scratch write, no
+            // UploadedFile row. Treat that as "skipped" — the editor
+            // sees what happened and the commit step ignores it.
+            if (payload && payload.duplicate_of) {
+                item.status = "skipped";
+                item.row.dataset.status = "skipped";
+                item.scratchId = null;
+                const title = payload.duplicate_title || payload.duplicate_filename || "an existing row";
+                item.statusEl.textContent = `Already in library: ${title} — skipped`;
+                item.duplicateOf = payload.duplicate_of;
+                return true;
+            }
+            item.scratchId = payload.id;
+            item.status = "staged";
+            item.row.dataset.status = "staged";
+            item.statusEl.textContent = "Staged — ready to commit";
+            return true;
+        } catch (err) {
+            item.status = "failed";
+            item.row.dataset.status = "failed";
+            item.statusEl.textContent = `Failed: ${err.message}`;
+            return false;
+        } finally {
+            // Re-render the queue summary + Submit button label so the
+            // editor sees the bucket they moved out of (uploading) and
+            // into (staged / failed). Without this the header sat on
+            // stale counts until the next addToQueue tick.
+            refreshCount();
+        }
+    }
+
+    // Bounded-parallel staging — kick off as soon as a row is added.
+    let stagingCursor = 0;
+    let stagingInFlight = 0;
+    function pumpStaging() {
+        while (stagingInFlight < MAX_PARALLEL && stagingCursor < queue.length) {
+            const item = queue[stagingCursor++];
+            if (item.scratchId || item.status !== "pending") continue;
+            stagingInFlight++;
+            stageBytes(item).finally(() => {
+                stagingInFlight--;
+                pumpStaging();
+            });
+        }
+    }
+
+    // Kick the staging pump after any addToQueue-driven count refresh.
+    // refreshCount() runs after every file-picker / drop batch; we
+    // observe the queue length changing and pump from there. Mutation
+    // observer is cheap and doesn't require touching refreshCount.
+    new MutationObserver(() => pumpStaging()).observe(queueEl, { childList: true });
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const pending = queue.filter((q) => q.status === "staged");
+        // #283 — refreshCount() now keeps the Submit button disabled
+        // whenever there's nothing staged or staging is still
+        // in-flight, so this defensive bail is purely for the keyboard
+        // path (Enter on a focused field could fire submit before the
+        // button-disabled state catches up).
+        if (pending.length === 0) {
+            return;
+        }
+        submitBtn.disabled = true;
+        submitBtn.textContent = `Committing ${pending.length}…`;
+
+        const items = pending.map((q) => ({
+            uploaded_file_id: q.scratchId,
+            title: q.titleInput.value,
+            alt_text: q.altInput?.value || "",
+            collection_id: q.collectionInput?.value ? parseInt(q.collectionInput.value, 10) : null,
+        }));
+        try {
+            const resp = await fetch("/cms-admin/media/upload-staged/commit", {
+                method: "POST",
+                headers: {
+                    "X-CSRF-Token": csrfTokenValue(),
+                    "Content-Type": "application/json",
+                    // #285 — Accept JSON 401 so a session that expired
+                    // during a long staging phase returns a clean
+                    // banner instead of an HTML page.
+                    "Accept": "application/json",
+                    "X-Requested-With": "XMLHttpRequest",
+                },
+                body: JSON.stringify({ items }),
+                credentials: "same-origin",
+            });
+            if (!resp.ok) {
+                if (resp.status === 401) {
+                    let loginUrl = "/login?next=/cms-admin/";
+                    let message = "Your session expired — sign in again to commit the upload.";
+                    try {
+                        const j = await resp.json();
+                        if (j && j.error === "session_expired") {
+                            loginUrl = j.login_url || loginUrl;
+                            message = j.message || message;
+                        }
+                    } catch (_) { /* keep defaults */ }
+                    window.rcmsToast?.({ level: "error", body: `${message} Then return here and Retry.` });
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = "Retry after sign-in";
+                    return;
+                }
+                const body = await resp.text();
+                throw new Error(`HTTP ${resp.status}: ${body.slice(0, 160)}`);
+            }
+            const payload = await resp.json();
+            const committed = payload.committed || [];
+            const failed = payload.failed || [];
+            // Mark per-row status.
+            for (const item of pending) {
+                const fail = failed.find((f) => f.uploaded_file_id === item.scratchId);
+                if (fail) {
+                    item.status = "failed";
+                    item.row.dataset.status = "failed";
+                    item.statusEl.textContent = `Commit failed: ${fail.error}`;
+                } else {
+                    item.status = "done";
+                    item.row.dataset.status = "done";
+                    item.statusEl.textContent = "✓ Done";
+                }
+            }
+            refreshCount();
+            if (failed.length === 0) {
+                window.rcmsToast?.({
+                    level: "success",
+                    body: `${committed.length} file${committed.length === 1 ? "" : "s"} uploaded — opening library…`,
+                });
+                setTimeout(() => {
+                    window.location.href = mediaListUrl;
+                }, 800);
+            } else {
+                window.rcmsToast?.({
+                    level: "warning",
+                    body: `${committed.length} uploaded, ${failed.length} failed. Check each failed row for details, then click Retry.`,
+                });
+                // refreshCount() above already set the button to the
+                // "Done — N uploaded / M failed" summary; override
+                // back to a retry affordance so the editor can fix
+                // metadata + commit again without re-staging.
+                submitBtn.disabled = false;
+                submitBtn.textContent = `Retry failed (${failed.length})`;
+            }
+        } catch (err) {
+            window.rcmsToast?.({ level: "error", body: `Commit failed: ${err.message}` });
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Retry";
+        }
+    });
+
+})();
+</script>
+{% endblock %}

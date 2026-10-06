@@ -1,0 +1,18 @@
+<figure class="rcms-block-image">
+    {%- if value.media_id -%}
+        {#- The enrichment pass stamps `_url` / `_title` / `_alt_text` /
+            `_width` / `_height` from `cms_media`. `value.alt` (author
+            override) wins over `_alt_text` (default from upload).
+            `rcms_image_url(media_id, filter='width-1600')` resolves
+            both `i64` ids (post-save shape) and stringified ids
+            (live-preview / stream-storage shape) — see #253. -#}
+        <img src="{{ rcms_image_url(media_id=value.media_id, filter='width-1600') }}"
+             alt="{{ value.alt | default(value=value._alt_text | default(value='')) }}"
+             {%- if value._width %} width="{{ value._width }}"{% endif -%}
+             {%- if value._height %} height="{{ value._height }}"{% endif %}
+             loading="lazy">
+    {%- endif -%}
+    {%- if value.caption -%}
+        <figcaption>{{ value.caption }}</figcaption>
+    {%- endif -%}
+</figure>

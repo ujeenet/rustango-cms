@@ -1,0 +1,87 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block heading %}{{ "Forms" | translate(locale=LANG) }}{% endblock %}
+{% block content %}
+<div class="rcms-form-builder" id="form-builder-root"
+     data-build-url="{{ build_url }}">
+
+  {# Hidden save form — the JS serializes the whole schema into #form-schema. #}
+  <form method="post" action="{{ build_url }}" id="form-builder-form">
+    {{ csrf_token | csrf_input | safe }}
+    <input type="hidden" name="schema" id="form-schema" value="{{ schema_json }}">
+  </form>
+
+  <div class="rcms-fb-topbar">
+    <div class="rcms-fb-topbar-left">
+      <a href="{{ list_url }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "Forms" | translate(locale=LANG) }}
+      </a>
+      <h1 class="rcms-fb-form-title">{{ title }}</h1>
+    </div>
+    <div class="rcms-fb-topbar-right">
+      <a href="{{ url(name='rcms-admin:forms:submissions', id=form_id) }}" class="rcms-btn rcms-btn-outlined">
+        <span class="material-symbols-rounded sm">inbox</span> {{ "Submissions" | translate(locale=LANG) }}
+      </a>
+      {% if locales and locales | length > 0 %}
+      <details class="rcms-fb-translate-menu">
+        <summary class="rcms-btn rcms-btn-outlined"><span class="material-symbols-rounded sm">translate</span> {{ "Translate" | translate(locale=LANG) }}</summary>
+        <div class="rcms-fb-translate-list">
+          {% for loc in locales %}
+          <a href="{{ build_url }}?locale={{ loc.code }}">{{ loc.name }}</a>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+      <button type="button" class="rcms-btn rcms-btn-outlined" id="fb-settings-toggle">
+        <span class="material-symbols-rounded sm">settings</span> {{ "Settings" | translate(locale=LANG) }}
+      </button>
+      {# Shares `[data-preview-toggle]` with the page editor — the same
+         driver reads it. #}
+      <button type="button" class="rcms-btn rcms-btn-outlined" data-preview-toggle
+              title="{{ "Show / hide preview" | translate(locale=LANG) }}">
+        <span class="material-symbols-rounded rcms-preview-toggle-icon">visibility</span>
+        <span class="rcms-preview-toggle-label">{{ "Preview" | translate(locale=LANG) }}</span>
+      </button>
+      {% if has_unpublished %}<span class="rcms-fb-badge" title="{{ "The live form differs from this draft" | translate(locale=LANG) }}">{{ "Unpublished changes" | translate(locale=LANG) }}</span>{% endif %}
+      <button type="submit" form="form-builder-form" class="rcms-btn rcms-btn-outlined">
+        <span class="material-symbols-rounded sm">save</span> {{ "Save draft" | translate(locale=LANG) }}
+      </button>
+      <button type="submit" form="form-builder-form" formaction="{{ publish_url }}" class="rcms-btn">
+        <span class="material-symbols-rounded sm">publish</span> {{ "Publish" | translate(locale=LANG) }}
+      </button>
+    </div>
+  </div>
+
+  <div class="rcms-fb-pagetabs" id="fb-pagetabs"></div>
+
+  {# Split layout — the shared preview driver keys off these classes, and
+     resizes / remembers the divider exactly as it does for pages. #}
+  <div class="rcms-edit-with-preview">
+    <div class="rcms-edit-pane">
+      <div class="rcms-fb-workspace">
+        <div class="rcms-fb-canvas" id="fb-canvas"></div>
+        <aside class="rcms-fb-inspector" id="fb-inspector"></aside>
+      </div>
+      {# Settings lives INSIDE the edit pane, as a sibling of the workspace
+         it replaces. Left outside the split container it rendered below the
+         whole thing while the emptied pane still held its column open, so
+         the panel appeared adrift beside a blank editor. #}
+      <div class="rcms-fb-settings" id="fb-settings" hidden></div>
+    </div>
+    <div class="rcms-split-handle" role="separator" aria-orientation="vertical"
+         tabindex="0" aria-label="{{ "Resize preview" | translate(locale=LANG) }}"></div>
+    {# Rendered by the real public form renderer, POSTing the builder's
+       live `#form-schema`, so what is shown is what a visitor gets. #}
+    {% set preview_label = "Form preview" | translate(locale=LANG) %}
+    {% set preview_url = url(name='rcms-admin:forms:preview', id=form_id) %}
+    {% set preview_form = "form-builder-form" %}
+    {% set preview_scope = "forms" %}
+    {% set preview_variant = form_id %}
+    {% include "rcms_admin/_preview_pane.html" %}
+  </div>
+
+</div>
+
+<script src="/cms-admin/static/form_builder.js?v={{ cms_asset_version() }}"></script>
+<script src="/cms-admin/static/cms-preview.js?v={{ cms_asset_version() }}" defer></script>
+{% endblock %}

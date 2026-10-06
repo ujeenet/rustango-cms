@@ -1,0 +1,110 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Users" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Users" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:users:new') }}" class="rcms-btn rcms-btn-small">{{ "+ New user" | translate(locale=LANG) }}</a>
+    <a href="/admin/rustango_users" class="rcms-btn rcms-btn-outlined rcms-btn-small" title="{{ "Open in the framework admin for raw DB-CRUD." | translate(locale=LANG) }}">
+        <span class="material-symbols-rounded sm">open_in_new</span> {{ "Framework" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block description %}
+        {{ "<strong>{total}</strong> users · <strong>{active}</strong> active." | translate(locale=LANG, total=total_users, active=active_users) | safe }}
+{% endblock %}
+
+{% block body %}
+
+    {% if users | length == 0 %}
+        <div class="rcms-empty">
+            <p>{{ "No users yet. Create one via" | translate(locale=LANG) }} <code>tang-cms create-user acme &lt;username&gt;</code>.</p>
+        </div>
+    {% else %}
+        {# #435 — bulk enable/disable. Per-row checkboxes POST every
+           selected `user_id` + the clicked button's `action`. #}
+        <form method="post" action="/cms-admin/users/bulk" class="rcms-table-panel">
+            {{ csrf_token | csrf_input | safe }}
+            <div class="rcms-table-toolbar">
+                <label class="rcms-text-xs rcms-text-muted rcms-inline-flex rcms-items-center rcms-gap-2">
+                    <input type="checkbox" data-select-all="#users-table input[name=user_id]">
+                    {{ "Select all" | translate(locale=LANG) }}
+                </label>
+                <span class="rcms-toolbar-spacer"></span>
+                <button type="submit" name="action" value="enable" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+                    <span class="material-symbols-rounded sm">check_circle</span> {{ "Enable selected" | translate(locale=LANG) }}
+                </button>
+                <button type="submit" name="action" value="disable" class="rcms-btn rcms-btn-outlined rcms-btn-small"
+                        data-confirm="{{ "Disable the selected users? They lose admin access immediately." | translate(locale=LANG) }}"
+                        data-confirm-style="danger">
+                    <span class="material-symbols-rounded sm">block</span> {{ "Disable selected" | translate(locale=LANG) }}
+                </button>
+            </div>
+        <div class="rcms-table-wrap">
+        <table class="rcms-data" id="users-table">
+            <thead>
+                <tr>
+                    <th class="rcms-w-1"></th>
+                    <th>{{ "Username" | translate(locale=LANG) }}</th>
+                    <th>{{ "Email" | translate(locale=LANG) }}</th>
+                    <th>{{ "Roles" | translate(locale=LANG) }}</th>
+                    <th>{{ "Status" | translate(locale=LANG) }}</th>
+                    <th>{{ "Last password change" | translate(locale=LANG) }}</th>
+                    <th>{{ "Created" | translate(locale=LANG) }}</th>
+                    <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                    <tr>
+                        <td><input type="checkbox" name="user_id" value="{{ u.id }}" aria-label="{{ "Select" | translate(locale=LANG) }} {{ u.username }}"></td>
+                        <td>
+                            <strong>{{ u.username }}</strong>
+                            {% if u.is_superuser %}
+                                <span class="rcms-tag scheduled rcms-text-3xs rcms-ml-1" title="{{ "Tenant superuser — every permission check returns true." | translate(locale=LANG) }}">{{ "superuser" | translate(locale=LANG) }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if u.email %}{{ u.email }}{% else %}<span class="rcms-hint">—</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if u.roles | length > 0 %}
+                                {% for r in u.roles %}
+                                    <span class="rcms-tag rcms-text-2xs">{{ r }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="rcms-hint">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if u.active %}
+                                <span class="rcms-tag published">{{ "active" | translate(locale=LANG) }}</span>
+                            {% else %}
+                                <span class="rcms-tag archived">{{ "disabled" | translate(locale=LANG) }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="rcms-text-muted rcms-text-xs">
+                            {% if u.password_changed_at %}
+                                {{ u.password_changed_at | naturaltime }}
+                                <br>
+                                <time class="rcms-hint rcms-text-2xs" data-utc="{{ u.password_changed_at | date(format='%+') }}">{{ u.password_changed_at }}</time>
+                            {% else %}
+                                <span class="rcms-hint">{{ "— (initial)" | translate(locale=LANG) }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="rcms-text-muted rcms-text-xs">
+                            {{ u.created_at | naturaltime }}
+                            <br>
+                            <time class="rcms-hint rcms-text-2xs" data-utc="{{ u.created_at | date(format='%+') }}">{{ u.created_at }}</time>
+                        </td>
+                        <td class="rcms-actions">
+                            <a href="{{ url(name='rcms-admin:users:edit', id=u.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit" | translate(locale=LANG) }}</a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        </form>
+    {% endif %}
+
+{% endblock %}

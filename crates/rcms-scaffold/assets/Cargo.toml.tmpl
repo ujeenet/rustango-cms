@@ -1,0 +1,37 @@
+[package]
+name = "__NAME__"
+version = "0.1.0"
+edition = "2021"
+
+# Standalone workspace so a parent directory's workspace can't adopt this
+# project by accident.
+[workspace]
+
+[features]
+default = ["postgres"]
+postgres = ["rustango-cms/postgres", "rustango/postgres"]
+sqlite = ["rustango-cms/sqlite", "rustango/sqlite"]
+mysql = ["rustango-cms/mysql", "rustango/mysql"]
+
+[dependencies]
+# rustango-cms isn't on crates.io yet: this points at the checkout `rcms` was
+# built from. Once it is published, change it to `rustango-cms = "0.1"`.
+rustango-cms = { path = "__RCMS_PATH__", default-features = false }
+rustango = { version = "__RUSTANGO_REQ__", default-features = false, features = [
+    "admin", "auth_flows", "cache", "cache-page", "config", "email", "forms", "manage", "passwords", "runtime", "signals", "signed_url", "tenancy", "template_views",
+] }
+tera = { version = "1.20", default-features = false, features = ["builtins"] }
+async-trait = "0.1"
+# Used by typed extension models (#[derive(Model)] + JSON load/save).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+
+# Non-incremental dev/test builds: smaller, deterministic target/ trees
+# that match what CI / Docker layer caches want (mirrors the rustango-cms
+# workspace's own profile).
+[profile.dev]
+incremental = false
+
+[profile.test]
+incremental = false

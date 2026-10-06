@@ -1,0 +1,82 @@
+{
+  "Archived {count} page(s).": {
+    "one": "{count} Seite archiviert.",
+    "other": "{count} Seiten archiviert."
+  },
+  "Can't delete “{title}” — it has {count} child page(s). Delete or move them first.": {
+    "one": "„{title}“ kann nicht gelöscht werden — es hat {count} Unterseite. Löschen oder verschieben Sie sie zuerst.",
+    "other": "„{title}“ kann nicht gelöscht werden — es hat {count} Unterseiten. Löschen oder verschieben Sie sie zuerst."
+  },
+  "Can't delete “{title}” — {count} page(s) have history under it. Toggle Active off instead.": {
+    "one": "„{title}“ kann nicht gelöscht werden — {count} Seite hat Verlauf darunter. Schalten Sie stattdessen Aktiv aus.",
+    "other": "„{title}“ kann nicht gelöscht werden — {count} Seiten haben Verlauf darunter. Schalten Sie stattdessen Aktiv aus."
+  },
+  "Deleted {count} page(s).": {
+    "one": "{count} Seite gelöscht.",
+    "other": "{count} Seiten gelöscht."
+  },
+  "Deleted {count} unused media item(s).": {
+    "one": "{count} ungenutztes Medienelement gelöscht.",
+    "other": "{count} ungenutzte Medienelemente gelöscht."
+  },
+  "Deleted “{title}”. Promoted {count} alias(es) to standalone page(s) with the source's last content.": {
+    "one": "„{title}“ gelöscht. {count} Alias mit dem letzten Inhalt der Quelle zu einer eigenständigen Seite hochgestuft.",
+    "other": "„{title}“ gelöscht. {count} Aliasse mit dem letzten Inhalt der Quelle zu eigenständigen Seiten hochgestuft."
+  },
+  "Moved {count} item(s) {dest}.": {
+    "one": "{count} Element {dest} verschoben.",
+    "other": "{count} Elemente {dest} verschoben."
+  },
+  "Moved {count} page(s) under “{parent}”.": {
+    "one": "{count} Seite unter „{parent}“ verschoben.",
+    "other": "{count} Seiten unter „{parent}“ verschoben."
+  },
+  "Published {count} page(s) ({already} already in the target state).": {
+    "one": "{count} Seite veröffentlicht ({already} bereits im Zielzustand).",
+    "other": "{count} Seiten veröffentlicht ({already} bereits im Zielzustand)."
+  },
+  "Saved {count} pinned result(s).": {
+    "one": "{count} angepinntes Ergebnis gespeichert.",
+    "other": "{count} angepinnte Ergebnisse gespeichert."
+  },
+  "Saved “{title}”. Auto-created {count} redirect(s) from the old URL(s).": {
+    "one": "„{title}“ gespeichert. {count} Weiterleitung von der alten URL automatisch erstellt.",
+    "other": "„{title}“ gespeichert. {count} Weiterleitungen von den alten URLs automatisch erstellt."
+  },
+  "Seeded “{name}” with {count} item(s) from pages marked Show in menus.": {
+    "one": "„{name}“ mit {count} Eintrag aus Seiten angelegt, die mit „In Menüs anzeigen“ markiert sind.",
+    "other": "„{name}“ mit {count} Einträgen aus Seiten angelegt, die mit „In Menüs anzeigen“ markiert sind."
+  },
+  "Unarchived {count} page(s).": {
+    "one": "{count} Seite entarchiviert.",
+    "other": "{count} Seiten entarchiviert."
+  },
+  "Unpublished {count} page(s) ({already} already in the target state).": {
+    "one": "{count} Seite zurückgezogen ({already} bereits im Zielzustand).",
+    "other": "{count} Seiten zurückgezogen ({already} bereits im Zielzustand)."
+  },
+  "{action}: touched {count} row(s) in `{type_name}`.": {
+    "one": "{action}: {count} Zeile in `{type_name}` bearbeitet.",
+    "other": "{action}: {count} Zeilen in `{type_name}` bearbeitet."
+  },
+  "{count} extra permission(s) preserved on save": {
+    "one": "{count} zusätzliche Berechtigung beim Speichern erhalten",
+    "other": "{count} zusätzliche Berechtigungen beim Speichern erhalten"
+  },
+  "{count} field(s)": {
+    "one": "{count} Feld",
+    "other": "{count} Felder"
+  },
+  "{count} page(s)": {
+    "one": "{count} Seite",
+    "other": "{count} Seiten"
+  },
+  "{count} revision(s)": {
+    "one": "{count} Revision",
+    "other": "{count} Revisionen"
+  },
+  "{count} row(s).": {
+    "one": "{count} Zeile.",
+    "other": "{count} Zeilen."
+  }
+}

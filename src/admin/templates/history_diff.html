@@ -1,0 +1,148 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Compare revisions" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Compare revisions" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:pages:edit', id=page.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "Back to editor" | translate(locale=LANG) }}
+    </a>
+    <a href="{{ url(name='rcms-admin:history') }}?page_id={{ page.id }}" class="rcms-btn rcms-btn-text rcms-btn-small">
+        {{ "Full history" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="rcms-breadcrumbs">
+    <a href="{{ url(name='rcms-admin:history') }}">{{ "History" | translate(locale=LANG) }}</a>
+    <span class="rcms-sep">›</span>
+    <a href="{{ url(name='rcms-admin:pages:edit', id=page.id) }}">{{ page.title }}</a>
+    <span class="rcms-sep">›</span>
+    <span>#{{ rev_a.sequence }} ↔ #{{ rev_b.sequence }}</span>
+</nav>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .diff-summary { padding: 12px 16px; margin-bottom: 16px; }
+    .rcms-diff-grid {
+        display: grid;
+        grid-template-columns: 140px 1fr 1fr;
+        gap: 0;
+        border: 1px solid var(--md-sys-color-outline-variant);
+        border-radius: var(--md-sys-radius-lg);
+        overflow: hidden;
+        background: var(--md-sys-color-surface-container-lowest);
+    }
+    .rcms-diff-grid > div {
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--md-sys-color-outline-variant);
+    }
+    .rcms-diff-grid .rcms-head {
+        background: var(--md-sys-color-surface-container);
+        font: var(--md-sys-typescale-ui-label);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--md-sys-color-on-surface-variant);
+    }
+    .rcms-diff-grid .field-name {
+        font-weight: 500;
+        color: var(--md-sys-color-on-surface-variant);
+        font-size: 13px;
+        background: var(--md-sys-color-surface-container-low);
+    }
+    .rcms-diff-grid pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    .diff-row.changed .cell-a { background: color-mix(in srgb, var(--md-sys-color-error-container) 60%, transparent); }
+    .diff-row.changed .cell-b { background: color-mix(in srgb, #d1fae5 60%, transparent); }
+    .diff-row.added .cell-b { background: color-mix(in srgb, #d1fae5 60%, transparent); }
+    .diff-row.removed .cell-a { background: color-mix(in srgb, var(--md-sys-color-error-container) 60%, transparent); }
+    .diff-row.unchanged .field-name,
+    .diff-row.unchanged .cell-a,
+    .diff-row.unchanged .cell-b {
+        color: var(--md-sys-color-on-surface-variant);
+    }
+    .rcms-rev-header h3 { margin: 0 0 4px; font-size: 13px; font-weight: 600; }
+    .rcms-rev-header .rcms-hint { font-size: 11px; }
+    .rcms-diff-toolbar {
+        display: flex; align-items: center; gap: 12px;
+        padding: 12px 16px;
+        background: var(--md-sys-color-surface-container-low);
+        border-radius: var(--md-sys-radius-lg);
+        margin-bottom: 16px;
+        flex-wrap: wrap;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="rcms-diff-toolbar">
+    <span>
+        <strong>{{ changed_count }}</strong> field{% if changed_count != 1 %}s{% endif %} changed
+    </span>
+    <span class="rcms-spacer rcms-flex-1"></span>
+    {% if only_changes %}
+        <a href="?a={{ rev_a.id }}&b={{ rev_b.id }}&all=1" class="rcms-btn rcms-btn-text rcms-btn-small">{{ "Show unchanged fields too" | translate(locale=LANG) }}</a>
+    {% else %}
+        <a href="?a={{ rev_a.id }}&b={{ rev_b.id }}" class="rcms-btn rcms-btn-text rcms-btn-small">{{ "Hide unchanged fields" | translate(locale=LANG) }}</a>
+    {% endif %}
+    {% if rev_a.sequence < rev_b.sequence %}
+        <form method="post" action="{{ url(name='rcms-admin:pages:revert', id=page.id, rev_id=rev_a.id) }}"
+              data-confirm="{{ "Revert this page to revision #" | translate(locale=LANG) }}{{ rev_a.sequence }}{{ "? Tree placement is preserved." | translate(locale=LANG) }}"
+              data-confirm-style="danger"
+              class="rcms-inline rcms-m-0">
+            {{ csrf_token | csrf_input | safe }}
+            <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+                <span class="material-symbols-rounded sm">restore</span> {{ "Revert to #" | translate(locale=LANG) }}{{ rev_a.sequence }}
+            </button>
+        </form>
+    {% endif %}
+</div>
+
+<div class="rcms-diff-grid">
+    <div class="rcms-head">{{ "Field" | translate(locale=LANG) }}</div>
+    <div class="rcms-head rcms-rev-header">
+        <h3>#{{ rev_a.sequence }}</h3>
+        <span class="rcms-hint">
+            {% if rev_a.created_at %}<time data-utc="{{ rev_a.created_at | date(format='%+') }}">{{ rev_a.created_at | naturaltime }}</time>{% endif %}
+            {% if rev_a.username %} · by <strong>{{ rev_a.username }}</strong>{% endif %}
+        </span>
+    </div>
+    <div class="rcms-head rcms-rev-header">
+        <h3>#{{ rev_b.sequence }}</h3>
+        <span class="rcms-hint">
+            {% if rev_b.created_at %}<time data-utc="{{ rev_b.created_at | date(format='%+') }}">{{ rev_b.created_at | naturaltime }}</time>{% endif %}
+            {% if rev_b.username %} · by <strong>{{ rev_b.username }}</strong>{% endif %}
+        </span>
+    </div>
+
+    {% for d in diffs %}
+        {% if not only_changes or d.kind != "unchanged" %}
+            <div class="diff-row {{ d.kind }} field-name">{{ d.field }}</div>
+            <div class="diff-row {{ d.kind }} cell-a">
+                {% if d.kind == "changed" %}<pre>{{ d.a }}</pre>
+                {% elif d.kind == "removed" %}<pre>{{ d.a }}</pre>
+                {% elif d.kind == "added" %}<span class="rcms-text-muted-2">{{ "(not set)" | translate(locale=LANG) }}</span>
+                {% else %}<pre>{{ d.value }}</pre>{% endif %}
+            </div>
+            <div class="diff-row {{ d.kind }} cell-b">
+                {% if d.kind == "changed" %}<pre>{{ d.b }}</pre>
+                {% elif d.kind == "added" %}<pre>{{ d.b }}</pre>
+                {% elif d.kind == "removed" %}<span class="rcms-text-muted-2">{{ "(not set)" | translate(locale=LANG) }}</span>
+                {% else %}<pre>{{ d.value }}</pre>{% endif %}
+            </div>
+        {% endif %}
+    {% endfor %}
+</div>
+
+{% if changed_count == 0 %}
+    <p class="rcms-hint rcms-mt-4 rcms-text-center">
+        {{ "No surfaced fields differ between these revisions. Tree-shape columns and audit-stamp columns are excluded from the comparison by design." | translate(locale=LANG) }}
+    </p>
+{% endif %}
+{% endblock %}

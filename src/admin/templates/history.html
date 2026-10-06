@@ -1,0 +1,126 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "History" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Revision history" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    {% if filter_page_id or filter_user_id %}
+        <a href="{{ url(name='rcms-admin:history') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+            <span class="material-symbols-rounded sm">filter_alt_off</span>
+            {{ "Clear filters" | translate(locale=LANG) }}
+        </a>
+    {% endif %}
+{% endblock %}
+
+{% block description %}
+    {% if filter_page_id or filter_user_id %}
+        {{ "Filtered view —" | translate(locale=LANG) }}
+        {% if filter_page_id %}{{ "page" | translate(locale=LANG) }} <code>#{{ filter_page_id }}</code>{% endif %}
+        {% if filter_user_id %}{% if filter_page_id %} ·{% endif %} {{ "user" | translate(locale=LANG) }} <code>#{{ filter_user_id }}</code>{% endif %}
+        · <a href="{{ url(name='rcms-admin:history') }}">{{ "clear" | translate(locale=LANG) }}</a>
+    {% else %}
+        {{ "Cross-page edit log. Every page save captures a snapshot in <code>cms_revision</code>; this view aggregates them tenant-wide. Click <strong>Page</strong> or <strong>Author</strong> to filter down." | translate(locale=LANG) | safe }}
+    {% endif %}
+{% endblock %}
+
+{% block body %}
+
+    {% if rows | length == 0 %}
+        <div class="rcms-empty">
+            <p>{{ "No revisions match the current filters." | translate(locale=LANG) }}</p>
+        </div>
+    {% else %}
+        <div class="rcms-table-wrap">
+        <table class="rcms-data">
+            <thead>
+                <tr>
+                    <th>{{ "When" | translate(locale=LANG) }}</th>
+                    <th>{{ "Page" | translate(locale=LANG) }}</th>
+                    <th>{{ "Revision" | translate(locale=LANG) }}</th>
+                    <th>{{ "Author" | translate(locale=LANG) }}</th>
+                    <th>{{ "Status" | translate(locale=LANG) }}</th>
+                    <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr>
+                        <td>
+                            {% if row.created_at %}
+                                <span>{{ row.created_at | naturaltime }}</span>
+                                <br>
+                                <time class="rcms-hint rcms-text-2xs" data-utc="{{ row.created_at | date(format='%+') }}">{{ row.created_at }}</time>
+                            {% else %}
+                                <span class="rcms-hint">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.page_title %}
+                                <a href="{{ url(name='rcms-admin:pages:edit', id=row.page_id) }}">{{ row.page_title }}</a>
+                                {% if row.page_url_path %}
+                                    <br><code class="rcms-text-2xs rcms-text-muted">{{ row.page_url_path }}</code>
+                                {% endif %}
+                            {% else %}
+                                <em class="rcms-hint">{{ "page #{id} (deleted)" | translate(locale=LANG, id=row.page_id) }}</em>
+                            {% endif %}
+                            <br>
+                            <a class="rcms-hint rcms-text-2xs" href="?page_id={{ row.page_id }}">
+                                <span class="material-symbols-rounded sm">filter_alt</span> {{ "only this page" | translate(locale=LANG) }}
+                            </a>
+                        </td>
+                        <td>
+                            <code>#{{ row.sequence }}</code>
+                            {% if row.is_latest %}
+                                <span class="rcms-tag published rcms-text-3xs rcms-ml-1">{{ "latest" | translate(locale=LANG) }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.system_user %}
+                                <em class="rcms-hint">{{ "system" | translate(locale=LANG) }}</em>
+                            {% elif row.username %}
+                                {{ row.username }}
+                            {% else %}
+                                <em class="rcms-hint">{{ "user #—" | translate(locale=LANG) }}</em>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.page_status %}
+                                <span class="rcms-tag {{ row.page_status }}">{{ row.page_status }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="rcms-actions">
+                            {% if row.page_title %}
+                                <a class="rcms-btn rcms-btn-outlined rcms-btn-small"
+                                   href="{{ url(name='rcms-admin:pages:edit', id=row.page_id) }}">
+                                    {{ "Edit page" | translate(locale=LANG) }}
+                                </a>
+                                {% if row.prev_id %}
+                                    <a class="rcms-btn rcms-btn-text rcms-btn-small"
+                                       href="{{ url(name='rcms-admin:pages:history-diff', id=row.page_id) }}?a={{ row.prev_id }}&b={{ row.id }}"
+                                       title="{{ "Compare revision #" | translate(locale=LANG) }}{{ row.sequence }}{{ " against #" | translate(locale=LANG) }}{{ row.prev_sequence }}">
+                                        <span class="material-symbols-rounded sm">compare_arrows</span> {{ "Compare" | translate(locale=LANG) }}
+                                    </a>
+                                {% endif %}
+                                {% if not row.is_latest %}
+                                    <form method="post"
+                                          action="{{ url(name='rcms-admin:pages:revert', id=row.page_id, rev_id=row.id) }}"
+                                          data-confirm="{{ "Revert this page to revision #" | translate(locale=LANG) }}{{ row.sequence }}{{ "? Tree placement is preserved." | translate(locale=LANG) }}"
+                                          data-confirm-style="danger"
+                                          class="rcms-inline rcms-m-0">
+                                        {{ csrf_token | csrf_input | safe }}
+                                        <button type="submit" class="rcms-btn rcms-btn-text rcms-btn-small">
+                                            <span class="material-symbols-rounded sm">restore</span> {{ "Revert" | translate(locale=LANG) }}
+                                        </button>
+                                    </form>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+
+        {% include "rcms_admin/_pagination.html" %}
+    {% endif %}
+
+{% endblock %}

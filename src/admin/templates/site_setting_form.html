@@ -1,0 +1,105 @@
+{% extends "rcms_admin/_base.html" %}
+{% import "rcms_admin/_widget.html" as widget %}
+{% block title %}{% if is_new %}{{ "New site setting" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} {{ scope }}{% endif %} — CMS Admin{% endblock %}
+{% block heading %}{% if typed %}{{ schema_label }}{% elif is_new %}{{ "New site setting" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} “{{ scope }}”{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:site-settings:list') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "All site settings" | translate(locale=LANG) }}
+    </a>
+    {#- The language buttons: the default one edits the setting, another
+        one translates its text fields. -#}
+    {% if typed and not is_new and locales and locales | length > 1 %}
+        {% set edit_url = url(name='rcms-admin:site-settings:edit', scope=scope) %}
+        {% for l in locales %}
+            {% if l.is_default %}
+                <a href="{{ edit_url }}" class="rcms-btn rcms-btn-small{% if not translation_mode %} rcms-btn-outlined{% else %} rcms-btn-text{% endif %}"
+                   title="{{ "Canonical" | translate(locale=LANG) }} ({{ l.name }})">{{ l.code }}</a>
+            {% else %}
+                <a href="{{ edit_url }}?locale={{ l.code }}" class="rcms-btn rcms-btn-small{% if editing_locale and editing_locale.code == l.code %} rcms-btn-outlined{% else %} rcms-btn-text{% endif %}"
+                   title="{{ "Translate to" | translate(locale=LANG) }} {{ l.name }}">{{ l.code }}</a>
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+{% if translation_mode %}
+<form method="post" action="{{ url(name='rcms-admin:site-settings:translate', scope=scope) }}?locale={{ editing_locale.code }}"
+      class="rcms-card rcms-maxw-720">
+    {{ csrf_token | csrf_input | safe }}
+    <div class="rcms-page-form-notice rcms-page-form-notice--translation">
+        <strong><span class="material-symbols-rounded sm">info</span> {{ "Translation mode." | translate(locale=LANG) }}</strong>
+        {% set locname = editing_locale.name | escape %}
+        {{ "The left column is the original text; the right column is the <strong>{name}</strong> text. Leave a box empty to show the original." | translate(locale=LANG, name=locname) | safe }}
+    </div>
+    {% for r in tr_rows %}
+    <div class="rcms-tr-row">
+        <div class="rcms-canonical">
+            <div class="rcms-lbl"><span class="material-symbols-rounded sm">subject</span> {{ r.label }} {{ "(canonical)" | translate(locale=LANG) }}</div>
+            <div class="rcms-canonical-text">{%- if r.canonical %}{{ r.canonical }}{% else %}<span class="rcms-placeholder">{{ "(empty)" | translate(locale=LANG) }}</span>{% endif -%}</div>
+        </div>
+        <div>
+            <label class="rcms-tr-lbl" for="tr-{{ r.name }}"><span class="material-symbols-rounded sm">translate</span> {{ r.label }} ({{ editing_locale.code }})</label>
+            {% if r.multiline %}
+            <textarea id="tr-{{ r.name }}" name="tr__{{ r.name }}" rows="3" placeholder="{{ r.canonical }}">{{ r.value }}</textarea>
+            {% else %}
+            <input type="text" id="tr-{{ r.name }}" name="tr__{{ r.name }}" value="{{ r.value }}" placeholder="{{ r.canonical }}">
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <p class="rcms-empty">{{ "This setting has no text to translate." | translate(locale=LANG) }}</p>
+    {% endfor %}
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:site-settings:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn"><span class="material-symbols-rounded sm">save</span> {{ "Save translations" | translate(locale=LANG) }}</button>
+    </div>
+</form>
+{% else %}
+<form method="post" action="{{ url(name='rcms-admin:site-settings:edit', scope=scope) }}"
+      class="rcms-card rcms-maxw-720" data-primary-save>
+    {{ csrf_token | csrf_input | safe }}
+
+    <div class="rcms-field">
+        <label>{{ "Scope" | translate(locale=LANG) }}</label>
+        {% if is_new and scope == "new" %}
+            {# Special "new" pseudo-scope — let editors set the
+               actual scope via a follow-up edit after creating
+               the row. For v1 simplicity, the form just edits
+               the JSON; scope rename is delete+recreate. #}
+            <p class="rcms-hint">{{ "Open this page with a real scope in the address, for example <code>/cms-admin/site-settings/footer/edit</code>, to create it." | translate(locale=LANG) | safe }}</p>
+        {% else %}
+            <input type="text" value="{{ scope }}" readonly disabled>
+            <div class="rcms-hint">{{ "Scope is immutable. To rename, delete this row and create a new one." | translate(locale=LANG) }}</div>
+        {% endif %}
+    </div>
+
+    {% if typed %}
+        {# #406 — a host crate registered a typed schema for this scope,
+           so we render real inputs via the shared widget macro instead
+           of a raw-JSON textarea. The server coerces each value back
+           into value_json by widget kind on submit. #}
+        {% for w in widgets %}
+            {{ widget::render(w=w) }}
+        {% endfor %}
+    {% else %}
+        <div class="rcms-field">
+            <label>{{ "Value (JSON)" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+            <textarea name="value_json" required rows="14" class="rcms-text-sm rcms-w-full rcms-font-mono">{{ value_pretty }}</textarea>
+            <div class="rcms-hint">
+                {{ "A JSON object. Templates read a field with" | translate(locale=LANG) }}
+                <code>{{"{{"}} site_setting(scope='{{ scope }}').your_field {{"}}"}}</code>.
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:site-settings:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">
+            <span class="material-symbols-rounded sm">save</span> {{ "Save" | translate(locale=LANG) }}
+        </button>
+    </div>
+</form>
+{% endif %}
+{% endblock %}

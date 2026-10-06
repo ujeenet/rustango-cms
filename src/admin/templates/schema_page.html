@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="{{ LANG | default(value="en") }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page.seo_title | default(value=page.title) }}</title>
+    {% if page.seo_description %}<meta name="description" content="{{ page.seo_description }}">{% endif %}
+    {% if not page.robots_index %}<meta name="robots" content="noindex">{% endif %}
+    {# A readable default; a per-type template replaces all of it. #}
+    <style>
+        body { margin: 0; padding: 32px 16px; font: 17px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; color: #1d1d20; background: #fff; }
+        .rcms-schema-page { max-width: 720px; margin: 0 auto; }
+        .rcms-schema-page img { max-width: 100%; height: auto; border-radius: 8px; }
+        .pb-field { margin: 0 0 16px; }
+        .pb-label { font-weight: 600; margin-right: 6px; }
+        .pb-row { display: flex; flex-wrap: wrap; gap: 24px; }
+        .pb-group h3 { margin: 32px 0 12px; }
+        figure { margin: 0; }
+    </style>
+</head>
+<body>
+    {# #566 — generic fallback template for UI-created page types. A host
+       app can override it per type by setting the row's `default_template`
+       to its own template; `builder.*` + `stream_render(name="<zone>")`
+       stay available there for a fully custom layout. #}
+    <main class="rcms-schema-page">
+        <h1>{{ page.title }}</h1>
+        {{ builder_html | default(value="") | safe }}
+    </main>
+</body>
+</html>

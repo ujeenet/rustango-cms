@@ -1,0 +1,19 @@
+{% extends "_base.html" %}
+{% block content %}
+<article class="grid gap-10 md:grid-cols-5">
+    <div class="md:col-span-3">
+        {% if extension.photo %}<img src="{{ rcms_image_url(media_id=extension.photo, filter="fill-1400x1000") }}" alt="" class="w-full rounded-3xl object-cover">{% endif %}
+        <h1 class="mt-8 font-display text-5xl text-ink">{{ page.title }}</h1>
+        {% if extension.description %}<div class="prose-shop mt-6 text-lg">{{ extension.description | markdown | safe }}</div>{% endif %}
+    </div>
+    <aside class="md:col-span-2">
+        <div class="sticky top-28 rounded-3xl bg-white p-8 ring-1 ring-clay-100">
+            <p class="text-sm uppercase tracking-[0.2em] text-ink/70">Workshop</p>
+            <dl class="mt-6 space-y-4">
+                {% if extension.date %}<div><dt class="text-sm text-ink/70">Date</dt><dd class="font-display text-2xl">{{ extension.date | format_date }}</dd></div>{% endif %}
+                {% if extension.seats %}<div><dt class="text-sm text-ink/70">Seats</dt><dd class="font-display text-2xl">{{ extension.seats }}</dd></div>{% endif %}
+            </dl>
+        </div>
+    </aside>
+</article>
+{% endblock %}

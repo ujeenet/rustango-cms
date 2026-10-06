@@ -1,0 +1,5 @@
+{#- Wagtail RichTextBlock parity. Render() pre-sanitises
+    `value.body` through ammonia — script / iframe / on* handlers
+    are stripped before this template sees the string, so the
+    `| safe` marker is sound. -#}
+<div class="rcms-block-rich-text">{{ value.body | default(value="") | safe }}</div>

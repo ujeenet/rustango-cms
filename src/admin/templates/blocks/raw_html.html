@@ -1,0 +1,5 @@
+{#- Wagtail RawHTMLBlock parity. The Rust render() pre-sanitises
+    `value.html` through ammonia — script / iframe / on* handlers
+    are stripped before this template sees the string, so the
+    `| safe` marker is sound. -#}
+<div class="rcms-block-raw-html">{{ value.html | default(value="") | safe }}</div>

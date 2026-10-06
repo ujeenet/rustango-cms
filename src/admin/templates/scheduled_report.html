@@ -1,0 +1,70 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Scheduled pages" | translate(locale=LANG) }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Scheduled pages" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:reports:scheduled-csv') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">download</span> {{ "CSV" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block description %}
+    {{ "Every page queued to publish (status <code>scheduled</code> with a future <code>go_live_at</code>) or queued to archive (status <code>published</code> with a future <code>expire_at</code>). The background sweep runs on every admin list view so flips land without manual intervention." | translate(locale=LANG) | safe }}
+{% endblock %}
+
+{% block body %}
+
+{% if rows | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "Nothing scheduled." | translate(locale=LANG) }}</p>
+        <p class="rcms-hint">{{ "Set <strong>Go live at</strong> on a draft page with status <code>scheduled</code> to queue a publish; set <strong>Expire at</strong> on a published page to queue an archive." | translate(locale=LANG) | safe }}</p>
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Action" | translate(locale=LANG) }}</th>
+                <th>{{ "Page" | translate(locale=LANG) }}</th>
+                <th>{{ "URL" | translate(locale=LANG) }}</th>
+                <th>{{ "When" | translate(locale=LANG) }}</th>
+                <th>{{ "Countdown" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rows %}
+                <tr>
+                    <td>
+                        {% if r.kind == "publish" %}
+                            <span class="rcms-tag scheduled"><span class="material-symbols-rounded sm">publish</span> {{ "Publish" | translate(locale=LANG) }}</span>
+                        {% else %}
+                            <span class="rcms-tag archived"><span class="material-symbols-rounded sm">archive</span> {{ "Archive" | translate(locale=LANG) }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url(name='rcms-admin:pages:edit', id=r.page_id) }}">
+                            <strong>{{ r.title }}</strong>
+                        </a>
+                    </td>
+                    <td><code class="rcms-text-2xs">{{ r.url_path }}</code></td>
+                    <td>
+                        <time data-utc="{{ r.when | date(format='%+') }}">{{ r.when | naturaltime }}</time>
+                    </td>
+                    <td>
+                        {% if r.countdown_secs < 60 %}
+                            <span class="rcms-hint">&lt; 1m</span>
+                        {% elif r.countdown_secs < 3600 %}
+                            {{ (r.countdown_secs / 60) | int }}m
+                        {% elif r.countdown_secs < 86400 %}
+                            {{ (r.countdown_secs / 3600) | int }}h
+                        {% else %}
+                            {{ (r.countdown_secs / 86400) | int }}d
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+{% endblock %}

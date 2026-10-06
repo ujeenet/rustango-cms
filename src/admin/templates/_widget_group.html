@@ -1,0 +1,9 @@
+{# `_widget_group.html` — server-side helper used by the custom-tab
+   renderer (#20) to materialize a `Vec<Widget>` into the same HTML
+   the Content tab's main stack emits. Authors who want a tab full
+   of declarative form fields supply `TabBody::Widgets(...)`; the
+   page-editor handler routes that variant through this template
+   so widget visuals + behavior stay identical wherever they appear.
+   Context: `widgets` — list of Widget JSON values. #}
+{% import "rcms_admin/_widget.html" as widget %}
+{% for w in widgets %}{{ widget::render(w=w) }}{% endfor %}

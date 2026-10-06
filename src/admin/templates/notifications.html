@@ -1,0 +1,175 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Notifications" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}<h1>{{ "Notifications" | translate(locale=LANG) }}</h1>{% endblock %}
+{% block content %}
+<div class="rcms-card-stack">
+
+  <div class="rcms-card rcms-maxw-760">
+    <h2 class="rcms-m-0 rcms-mb-1 rcms-text-lg">{{ "Destinations" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint rcms-m-0 rcms-mb-3 rcms-text-2xs">
+      {{ "Where this site sends notifications. A destination receives every event it subscribes to." | translate(locale=LANG) }}
+    </p>
+
+    {% if targets and targets | length > 0 %}
+    <div class="rcms-table-wrap rcms-mb-3">
+      <table class="rcms-data">
+        <thead>
+          <tr>
+            <th>{{ "Destination" | translate(locale=LANG) }}</th>
+            <th>{{ "Channel" | translate(locale=LANG) }}</th>
+            <th>{{ "Events" | translate(locale=LANG) }}</th>
+            <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in targets %}
+          <tr>
+            <td>
+              <strong>{{ t.label }}</strong>
+              {% if t.summary %}<div class="rcms-hint rcms-text-2xs">{{ t.summary }}</div>{% endif %}
+              {# Managed rows mirror a form's settings; saying so stops
+                 someone editing here and losing it on the next form save. #}
+              {% if t.managed %}<span class="rcms-tag rcms-tag--small">{{ "from form settings" | translate(locale=LANG) }}</span>{% endif %}
+            </td>
+            <td>{{ t.kind_label }}</td>
+            <td><code>{{ t.events }}</code></td>
+            <td class="rcms-actions">
+              <form method="post" action="/cms-admin/notifications/{{ t.id }}/toggle" class="rcms-inline">
+                {{ csrf_token | csrf_input | safe }}
+                <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+                  {% if t.enabled %}{{ "Disable" | translate(locale=LANG) }}{% else %}{{ "Enable" | translate(locale=LANG) }}{% endif %}
+                </button>
+              </form>
+              {% if not t.managed %}
+              <form method="post" action="/cms-admin/notifications/{{ t.id }}/delete" class="rcms-inline"
+                    onsubmit="return confirm({{ "Delete this destination?" | translate(locale=LANG) | json_encode() }});">
+                {{ csrf_token | csrf_input | safe }}
+                <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Delete" | translate(locale=LANG) }}</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="rcms-hint rcms-mb-3">{{ "No destinations yet." | translate(locale=LANG) }}</p>
+    {% endif %}
+
+    <h3 class="rcms-text-sm rcms-mb-2">{{ "Add a destination" | translate(locale=LANG) }}</h3>
+    <form method="post" action="/cms-admin/notifications/new" id="notify-new">
+      {{ csrf_token | csrf_input | safe }}
+      <div class="rcms-field rcms-mb-2">
+        <label for="nt-label">{{ "Name" | translate(locale=LANG) }}</label>
+        <input type="text" id="nt-label" name="label" maxlength="150" required
+               placeholder="{{ "e.g. #leads in Slack" | translate(locale=LANG) }}">
+      </div>
+      <div class="rcms-field rcms-mb-2">
+        <label for="nt-kind">{{ "Channel" | translate(locale=LANG) }}</label>
+        <select id="nt-kind" name="kind" data-notify-kind>
+          {% for c in channels %}<option value="{{ c.kind }}">{{ c.label }}</option>{% endfor %}
+        </select>
+      </div>
+      {# One fieldset per channel, all rendered, only the selected one shown.
+         Server-side rendering keeps every channel's fields translatable and
+         means the picker works before any JS runs. #}
+      {% for c in channels %}
+      <div data-notify-fields="{{ c.kind }}" hidden>
+        {% if c.help %}<p class="rcms-hint rcms-text-2xs rcms-mb-2">{{ c.help }}</p>{% endif %}
+        {% for f in c.fields %}
+        <div class="rcms-field rcms-mb-2">
+          <label for="nt-{{ c.kind }}-{{ f.name }}">{{ f.label }}</label>
+          <input type="{% if f.secret %}password{% else %}text{% endif %}"
+                 id="nt-{{ c.kind }}-{{ f.name }}"
+                 {# The secret always posts as `secret`: one encrypted column,
+                    so the channel does not have to know where it is kept. #}
+                 name="{% if f.secret %}secret{% else %}{{ f.name }}{% endif %}"
+                 data-notify-input="{{ c.kind }}" disabled
+                 {% if f.help %}placeholder="{{ f.help }}"{% endif %}>
+          {% if f.help %}<div class="rcms-hint rcms-text-2xs">{{ f.help }}</div>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+      <div class="rcms-field rcms-mb-3">
+        <label for="nt-events">{{ "Events" | translate(locale=LANG) }}</label>
+        <input type="text" id="nt-events" name="events" value="form.submitted"
+               placeholder="form.submitted">
+        <div class="rcms-hint rcms-text-2xs">
+          {{ "Comma-separated. Leave empty to receive everything." | translate(locale=LANG) }}
+        </div>
+      </div>
+      <div class="rcms-form-actions">
+        <button type="submit" class="rcms-btn">{{ "Add destination" | translate(locale=LANG) }}</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="rcms-card rcms-maxw-760">
+    <h2 class="rcms-m-0 rcms-mb-1 rcms-text-lg">{{ "Recent deliveries" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint rcms-m-0 rcms-mb-3 rcms-text-2xs">
+      {{ "Every notification is queued and retried. A failed delivery stays here so it can be sent again once the destination is fixed." | translate(locale=LANG) }}
+    </p>
+    {% if deliveries and deliveries | length > 0 %}
+    <div class="rcms-table-wrap">
+      <table class="rcms-data">
+        <thead>
+          <tr>
+            <th>{{ "When" | translate(locale=LANG) }}</th>
+            <th>{{ "Event" | translate(locale=LANG) }}</th>
+            <th>{{ "Destination" | translate(locale=LANG) }}</th>
+            <th>{{ "Status" | translate(locale=LANG) }}</th>
+            <th class="rcms-actions"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in deliveries %}
+          <tr>
+            <td class="rcms-text-2xs">{{ d.created_at }}</td>
+            <td><code>{{ d.event }}</code></td>
+            <td>{{ d.target }}</td>
+            <td>
+              <span class="rcms-tag {% if d.status == "sent" %}published{% elif d.status == "failed" %}expired{% else %}draft{% endif %}">{{ d.status }}</span>
+              {% if d.attempts > 1 %}<span class="rcms-hint rcms-text-2xs">×{{ d.attempts }}</span>{% endif %}
+              {% if d.last_error %}<div class="rcms-hint rcms-text-2xs">{{ d.last_error }}</div>{% endif %}
+            </td>
+            <td class="rcms-actions">
+              {% if d.retryable %}
+              <form method="post" action="/cms-admin/notifications/deliveries/{{ d.id }}/retry" class="rcms-inline">
+                {{ csrf_token | csrf_input | safe }}
+                <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Retry" | translate(locale=LANG) }}</button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="rcms-hint">{{ "Nothing sent yet." | translate(locale=LANG) }}</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+(function () {
+    "use strict";
+    const sel = document.querySelector("[data-notify-kind]");
+    if (!sel) return;
+    function sync() {
+        for (const box of document.querySelectorAll("[data-notify-fields]")) {
+            const on = box.dataset.notifyFields === sel.value;
+            box.hidden = !on;
+            // Disabled inputs are not submitted — that is the point. Without
+            // it every channel's fields would post at once and a required
+            // check on the hidden ones would reject a valid form.
+            for (const i of box.querySelectorAll("[data-notify-input]")) i.disabled = !on;
+        }
+    }
+    sel.addEventListener("change", sync);
+    sync();
+})();
+</script>
+{% endblock %}

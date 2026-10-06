@@ -1,0 +1,2311 @@
+{% extends "rcms_admin/_base.html" %}
+{% import "rcms_admin/_widget.html" as widget %}
+{% block title %}{% if mode == "new" %}{{ "New Page" | translate(locale=LANG) }}{% else %}{{ "Edit Page" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+
+{# The page editor folds breadcrumbs + heading + status + display-
+   field chips into the topbar so the chrome stays at two sticky
+   rows. The {% block heading %} default fires "Pages › Title"
+   in compact form. #}
+{# #532 — the full ancestor trail moved to a dedicated breadcrumbs row
+   below the topbar (see {% block breadcrumbs %}); the heading now holds
+   just the current title so it no longer competes with search + actions. #}
+{% block heading %}
+{# The current page title already lives in the breadcrumb row below (edit mode),
+   so the topbar heading only carries it where there's no breadcrumb for it: a
+   new page, or a translation (where the locale badge adds context). This frees
+   the top bar so the title no longer competes with search + actions. #}
+{% if mode == "new" %}
+<span class="rcms-crumb here">{% if parent %}{{ "Add under" | translate(locale=LANG) }} “{{ parent.title }}”{% else %}{{ "New root page" | translate(locale=LANG) }}{% endif %}</span>
+{% elif translation_mode %}
+<span class="rcms-crumb here">
+    <span class="material-symbols-rounded sm rcms-icon-tertiary">translate</span>
+    {{ page.title }}
+    <span class="rcms-locale-badge">{{ editing_locale.code }}</span>
+</span>
+{% endif %}
+
+{# Status + display-field chips — the densest payload of the
+   action bar. Hidden on narrow viewports via the .chip-cluster
+   media query. #}
+{% if mode == "edit" and not translation_mode %}
+<div class="rcms-chip-cluster" aria-label="{{ "Page status" | translate(locale=LANG) }}">
+    {% set s = page.status | default(value="draft") %}
+    <span class="rcms-tag {{ s }}">
+        <span class="material-symbols-rounded sm">
+            {% if s == "published" %}check_circle
+            {% elif s == "scheduled" %}schedule
+            {% elif s == "archived" %}inventory_2
+            {% else %}edit_note{% endif %}
+        </span>
+        {{ s | capitalize }}
+    </span>
+    {% if display_fields and display_fields | length > 0 %}
+        {% for d in display_fields %}
+        <span class="rcms-display-chip" {% if d.help %}title="{{ d.help }}"{% endif %}>
+            {% if d.icon %}<span class="material-symbols-rounded sm">{{ d.icon }}</span>{% endif %}
+            <span class="rcms-display-chip-label">{{ d.label }}</span>
+            <span class="rcms-display-chip-value">{{ d.html | safe }}</span>
+        </span>
+        {% endfor %}
+    {% endif %}
+    {# #416 — content metrics from the editable body, no preview needed. #}
+    {% if content_metrics and content_metrics.words > 0 %}
+        <span class="rcms-display-chip" title="{{ "Flesch reading ease" | translate(locale=LANG) }} {{ content_metrics.flesch_reading_ease }} ({{ content_metrics.reading_ease_label }})">
+            <span class="material-symbols-rounded sm">article</span>
+            <span class="rcms-display-chip-label">{{ "Content" | translate(locale=LANG) }}</span>
+            <span class="rcms-display-chip-value">{{ content_metrics.words }} word{% if content_metrics.words != 1 %}s{% endif %} · {{ content_metrics.reading_time_min }} min · {{ content_metrics.reading_ease_label }}</span>
+        </span>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{# #532 — dedicated breadcrumb row: the full ancestor trail (each level
+   links to its children list) + an explicit back-to-parent control, on its
+   own slim row so it no longer competes with the search box + actions. #}
+{% block breadcrumbs %}
+{% if mode == "edit" %}
+<nav class="rcms-page-editor-crumbs" aria-label="{{ "Breadcrumb" | translate(locale=LANG) }}">
+    {% if parent_crumb %}
+    <a class="rcms-crumb-back" href="{{ url(name='rcms-admin:pages:list') }}?parent={{ parent_crumb.id }}"
+       title="{{ "Back to" | translate(locale=LANG) }} “{{ parent_crumb.title }}”">
+        <span class="material-symbols-rounded sm">arrow_back</span>
+        <span class="rcms-crumb-back-label">{{ parent_crumb.title }}</span>
+    </a>
+    {% else %}
+    <a class="rcms-crumb-back" href="{{ url(name='rcms-admin:pages:list') }}" title="{{ "Back to Pages" | translate(locale=LANG) }}">
+        <span class="material-symbols-rounded sm">arrow_back</span>
+        <span class="rcms-crumb-back-label">{{ "Pages" | translate(locale=LANG) }}</span>
+    </a>
+    {% endif %}
+    <div class="rcms-crumb-trail">
+        <a class="rcms-crumb" href="{{ url(name='rcms-admin:pages:list') }}">
+            <span class="material-symbols-rounded sm">folder</span><span class="rcms-crumb-label">{{ "Pages" | translate(locale=LANG) }}</span>
+        </a>
+        {% for a in ancestors %}
+        <span class="rcms-crumb-sep" aria-hidden="true">›</span>
+        <a class="rcms-crumb" href="{{ url(name='rcms-admin:pages:list') }}?parent={{ a.id }}">{{ a.title }}</a>
+        {% endfor %}
+        <span class="rcms-crumb-sep" aria-hidden="true">›</span>
+        <span class="rcms-crumb here">{{ page.title }}</span>
+    </div>
+</nav>
+{% endif %}
+{% endblock %}
+
+{% block topbar_actions %}
+    {# Locale switcher pill — only shown when multiple active
+       locales exist. Replaces the old standalone locale-picker
+       card so the chrome stays at two rows. #}
+    {% if mode == "edit" and locales and locales | length > 1 %}
+    <details class="rcms-locale-menu">
+        <summary class="rcms-btn rcms-btn-outlined rcms-btn-small" aria-haspopup="menu">
+            <span class="material-symbols-rounded sm">language</span>
+            {% if translation_mode %}{{ editing_locale.code }}{% else %}{% for l in locales %}{% if l.is_default %}{{ l.code }}{% endif %}{% endfor %}{% endif %}
+            <span class="material-symbols-rounded sm">expand_more</span>
+        </summary>
+        <div class="rcms-locale-menu-panel" role="menu">
+            {% for l in locales %}
+                {% if l.is_default %}
+                    <a role="menuitem" href="{{ url(name='rcms-admin:pages:edit', id=page.id) }}">
+                        <span class="material-symbols-rounded sm">edit</span>
+                        {{ l.name }} ({{ l.code }})
+                        <span class="rcms-canonical-tag">{{ "canonical" | translate(locale=LANG) }}</span>
+                    </a>
+                {% else %}
+                    <a role="menuitem" href="{{ url(name='rcms-admin:pages:edit', id=page.id) }}?locale={{ l.code }}">
+                        <span class="material-symbols-rounded sm">translate</span>
+                        {{ l.name }} ({{ l.code }})
+                    </a>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </details>
+    {% endif %}
+
+    {% if mode == "edit" %}
+    {# Preview toggle — shares `[data-preview-toggle]` with the
+       in-pane close button so both stay in sync via JS. #}
+    <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small" data-preview-toggle title="{{ "Show / hide preview" | translate(locale=LANG) }}">
+        <span class="material-symbols-rounded rcms-preview-toggle-icon">visibility</span>
+        <span class="rcms-preview-toggle-label">{{ "Preview" | translate(locale=LANG) }}</span>
+    </button>
+    {% endif %}
+
+    {# Primary save — uses HTML5 `form=` association so the button
+       can live outside the form element. Translation mode targets
+       the translation form via a different id. #}
+    {% if translation_mode %}
+        <button type="submit" form="page-translate-form" class="rcms-btn rcms-btn-small">
+            <span class="material-symbols-rounded">save</span>
+            {{ "Save translations" | translate(locale=LANG) }}
+        </button>
+    {% else %}
+        {# #318 — three-action save footer (Django/Wagtail ModelForm
+           parity). The submit button's `_action` value tells the handler
+           where to go next: list / keep editing this page / add a sibling
+           under the same parent. The primary stays first so an Enter
+           keypress saves and returns to the list. #}
+        {# Small like the rest of this row. It was the only 40px button
+           among 32px neighbours, so it sat a tier taller with larger
+           text; emphasis comes from the accent border, not the size. #}
+        <button type="submit" form="page-edit-form" name="_action" value="save" class="rcms-btn rcms-btn-small"{% if workflow_locked %} disabled title="{{ "The page is under review — wait for the reviewer's decision." | translate(locale=LANG) }}"{% endif %}>
+            <span class="material-symbols-rounded sm">save</span>
+            {% if mode == "new" %}{{ "Create page" | translate(locale=LANG) }}{% else %}{{ "Save" | translate(locale=LANG) }}{% endif %}
+        </button>
+        <button type="submit" form="page-edit-form" name="_action" value="continue" class="rcms-btn rcms-btn-outlined rcms-btn-small"{% if workflow_locked %} disabled title="{{ "The page is under review — wait for the reviewer's decision." | translate(locale=LANG) }}"{% endif %}>
+            {% if mode == "new" %}{{ "Create & keep editing" | translate(locale=LANG) }}{% else %}{{ "Save & keep editing" | translate(locale=LANG) }}{% endif %}
+        </button>
+        <button type="submit" form="page-edit-form" name="_action" value="addanother" class="rcms-btn rcms-btn-outlined rcms-btn-small"{% if workflow_locked %} disabled title="{{ "The page is under review — wait for the reviewer's decision." | translate(locale=LANG) }}"{% endif %}>
+            {% if mode == "new" %}{{ "Create & add another" | translate(locale=LANG) }}{% else %}{{ "Save & add another" | translate(locale=LANG) }}{% endif %}
+        </button>
+    {% endif %}
+
+    {# #140 — plugin-contributed header buttons. Render between Save
+       and the kebab. `{page_id}` is server-substituted in the href.
+       `style` maps to a btn variant class with `outlined` as fallback. #}
+    {% if mode == "edit" and plugin_page_header_buttons and plugin_page_header_buttons | length > 0 %}
+        {% for hb in plugin_page_header_buttons %}
+            {% if hb.style == "primary" %}{% set _btn = "rcms-btn" %}
+            {% elif hb.style == "tonal" %}{% set _btn = "rcms-btn rcms-btn-tonal" %}
+            {% elif hb.style == "danger" %}{% set _btn = "rcms-btn rcms-btn-danger" %}
+            {% else %}{% set _btn = "rcms-btn rcms-btn-outlined" %}
+            {% endif %}
+            <a href="{{ hb.href }}" class="{{ _btn }}">
+                <span class="material-symbols-rounded">{{ hb.icon | default(value="bolt") }}</span>
+                {{ hb.label }}
+            </a>
+        {% endfor %}
+    {% endif %}
+
+    {# Kebab menu — overflow controls (View live, Open preview in
+       new tab, Cancel). <details>/<summary> gives us a native,
+       a11y-friendly disclosure without extra JS. #}
+    <details class="rcms-kebab-menu">
+        <summary class="rcms-btn rcms-btn-outlined rcms-btn-small" aria-label="{{ "More actions" | translate(locale=LANG) }}">
+            <span class="material-symbols-rounded">more_vert</span>
+        </summary>
+        <div class="rcms-kebab-panel" role="menu">
+            {% if mode == "edit" and live_url and page.status == "published" %}
+            <a role="menuitem" href="{{ live_url }}{% if translation_mode %}?lang={{ editing_locale.code }}{% endif %}" target="_blank" rel="noopener">
+                <span class="material-symbols-rounded sm">open_in_new</span> {{ "View live" | translate(locale=LANG) }}
+            </a>
+            {% endif %}
+            {% if mode == "edit" %}
+            <a role="menuitem" target="_blank" rel="noopener" href="{{ url(name='rcms-admin:pages:preview', id=page.id) }}">
+                <span class="material-symbols-rounded sm">open_in_new</span> {{ "Open preview in new tab" | translate(locale=LANG) }}
+            </a>
+            {% endif %}
+            {# Headless preview — shown only when the tenant has pointed
+               "Headless preview" at a frontend under Site settings. The
+               link already carries a short-lived, page-scoped token. #}
+            {% if mode == "edit" and headless_preview_url %}
+            <a role="menuitem" target="_blank" rel="noopener" href="{{ headless_preview_url }}">
+                <span class="material-symbols-rounded sm">public</span> {{ "Preview on site" | translate(locale=LANG) }}
+            </a>
+            {% endif %}
+            {% if translation_mode %}
+            <a role="menuitem" href="{{ url(name='rcms-admin:pages:edit', id=page.id) }}">
+                <span class="material-symbols-rounded sm">arrow_back</span> {{ "Back to canonical" | translate(locale=LANG) }}
+            </a>
+            {% else %}
+            <a role="menuitem" href="{{ url(name='rcms-admin:pages:list') }}">
+                <span class="material-symbols-rounded sm">close</span> {{ "Cancel" | translate(locale=LANG) }}
+            </a>
+            {% endif %}
+            {# #107 — runtime-hook page action menu entries (Wagtail's
+               `register_page_action_menu_item`). Renders below the
+               built-in entries; href_template is rendered with the
+               page id pre-substituted server-side. #}
+            {% if plugin_page_action_menu_items and plugin_page_action_menu_items | length > 0 %}
+                {% for it in plugin_page_action_menu_items %}
+                    <a role="menuitem" href="{{ it.href }}">
+                        <span class="material-symbols-rounded sm">{{ it.icon | default(value="extension") }}</span> {{ it.label }}
+                    </a>
+                {% endfor %}
+            {% endif %}
+            {# Sign out — POST form styled as a menu item. CSRF token
+               comes from the page-edit form's render_with_csrf context. #}
+            <form method="post" action="{{ url(name='rcms-admin:logout') }}" class="rcms-m-0">
+                {{ csrf_token | csrf_input | safe }}
+                <button type="submit" role="menuitem" class="rcms-kebab-logout">
+                    <span class="material-symbols-rounded sm">logout</span> {{ "Sign out" | translate(locale=LANG) }}
+                </button>
+            </form>
+        </div>
+    </details>
+{% endblock %}
+
+{# Action bar — Row 2. Tab strip on the left, preview controls
+   on the right (the latter collapses with `[data-preview-hidden]`).
+   Translation mode is a single-pane editor with no tabs, so the
+   bar's contents are skipped there. The `{% block %}` itself must
+   sit at the template's top level for Tera to register the
+   override — the conditional lives INSIDE the block. #}
+{% block action_bar %}
+{% if not translation_mode %}
+<div class="rcms-action-bar" data-action-bar>
+    <nav class="rcms-tab-strip" role="tablist" aria-label="{{ "Page editor sections" | translate(locale=LANG) }}" data-tab-strip>
+        <button type="button" class="rcms-tab-tab" role="tab" data-tab-trigger="content" aria-controls="tab-content" aria-selected="true">
+            <span class="material-symbols-rounded sm">edit_note</span> <span class="rcms-tab-label"><span>{{ "Content" | translate(locale=LANG) }}</span></span>
+        </button>
+        <button type="button" class="rcms-tab-tab" role="tab" data-tab-trigger="promote" aria-controls="tab-promote" aria-selected="false">
+            <span class="material-symbols-rounded sm">share</span> <span class="rcms-tab-label"><span>{{ "Promote" | translate(locale=LANG) }}</span></span>
+        </button>
+        {# #167 — Privacy + Comments live in dedicated tabs instead
+           of floating cards above the form. #}
+        {% if mode == "edit" %}
+        <button type="button" class="rcms-tab-tab" role="tab" data-tab-trigger="privacy" aria-controls="tab-privacy" aria-selected="false">
+            <span class="material-symbols-rounded sm">lock</span> <span class="rcms-tab-label"><span>{{ "Privacy" | translate(locale=LANG) }}</span></span>
+        </button>
+        <button type="button" class="rcms-tab-tab" role="tab" data-tab-trigger="comments" aria-controls="tab-comments" aria-selected="false">
+            <span class="material-symbols-rounded sm">comment</span> <span class="rcms-tab-label"><span>{{ "Comments" | translate(locale=LANG) }}</span></span>
+            {% if comment_open_count and comment_open_count > 0 %}
+                <span class="rcms-tab-count">{{ comment_open_count }}</span>
+            {% endif %}
+        </button>
+        <button type="button" class="rcms-tab-tab" role="tab" data-tab-trigger="references" aria-controls="tab-references" aria-selected="false">
+            <span class="material-symbols-rounded sm">link</span> <span class="rcms-tab-label"><span>{{ "References" | translate(locale=LANG) }}</span></span>
+            {% if usage and usage | length > 0 %}
+                <span class="rcms-tab-count">{{ usage | length }}</span>
+            {% endif %}
+        </button>
+        {# #167-style: Accessibility + Content/SEO checks live in dedicated
+           tabs instead of floating cards shown on every tab. #}
+        <button type="button" class="rcms-tab-tab" role="tab" data-tab-trigger="a11y" aria-controls="tab-a11y" aria-selected="false">
+            <span class="material-symbols-rounded sm">accessibility_new</span> <span class="rcms-tab-label"><span>{{ "Accessibility" | translate(locale=LANG) }}</span></span>
+            {% if a11y_errors and a11y_errors > 0 %}<span class="rcms-tab-count">{{ a11y_errors }}</span>{% endif %}
+        </button>
+        <button type="button" class="rcms-tab-tab" role="tab" data-tab-trigger="seo" aria-controls="tab-seo" aria-selected="false">
+            <span class="material-symbols-rounded sm">fact_check</span> <span class="rcms-tab-label"><span>{{ "SEO" | translate(locale=LANG) }}</span></span>
+            {% if content_warnings and content_warnings > 0 %}<span class="rcms-tab-count">{{ content_warnings }}</span>{% endif %}
+        </button>
+        {% endif %}
+        {# #174 — per-page Theme tab removed. Admin theme picker
+           moved to /cms-admin/me. #}
+        {% if extra_tabs and extra_tabs | length > 0 %}
+            {% for t in extra_tabs %}
+            <button type="button" class="rcms-tab-tab" role="tab"
+                    data-tab-trigger="{{ t.name }}"
+                    aria-controls="tab-{{ t.name }}" aria-selected="false">
+                {% if t.icon %}<span class="material-symbols-rounded sm">{{ t.icon }}</span>{% endif %}
+                <span class="rcms-tab-label"><span>{{ t.label }}</span></span>
+                {% if t.badge %}<span class="rcms-tab-count">{{ t.badge }}</span>{% endif %}
+            </button>
+            {% endfor %}
+        {% endif %}
+        {% if revisions and revisions | length > 0 %}
+        <button type="button" class="rcms-tab-tab" role="tab" data-tab-trigger="revisions" aria-controls="tab-revisions" aria-selected="false">
+            <span class="material-symbols-rounded sm">history</span> <span class="rcms-tab-label"><span>{{ "Revisions" | translate(locale=LANG) }}</span></span>
+            <span class="rcms-tab-count">{{ revisions | length }}</span>
+        </button>
+        {% endif %}
+    </nav>
+
+    {% if mode == "edit" %}
+    {# Viewport buttons — clamp the iframe wrapper to a fixed width
+       so authors can sanity-check responsive layouts without
+       resizing the browser. The `data-viewport` attr drives the
+       width via JS (sets a CSS variable on the wrapper) and toggles
+       `aria-pressed` on the active button. Persisted to
+       localStorage per tenant. #}
+    <div class="rcms-preview-controls" data-preview-controls role="group" aria-label="{{ "Preview viewport" | translate(locale=LANG) }}">
+        {# Which representation the pane shows. Every page has an API
+           shape, so JSON is always offered; the HTML side is disabled
+           when the type has no template that renders. #}
+        <div class="rcms-viewport-buttons" role="radiogroup" aria-label="{{ "Preview surface" | translate(locale=LANG) }}">
+            <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small rcms-viewport-btn"
+                    data-preview-surface="html"
+                    {% if preview_mode | default(value="html") != "html" %}disabled title="{{ "Preview is not available" | translate(locale=LANG) }}"{% else %}title="{{ "Rendered HTML" | translate(locale=LANG) }}"{% endif %}
+                    aria-pressed="{% if preview_mode | default(value="html") == "html" %}true{% else %}false{% endif %}">
+                <span class="material-symbols-rounded sm">web</span>
+            </button>
+            <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small rcms-viewport-btn"
+                    data-preview-surface="json" title="{{ "API response (JSON)" | translate(locale=LANG) }}"
+                    aria-pressed="{% if preview_mode | default(value="html") != "html" %}true{% else %}false{% endif %}">
+                <span class="material-symbols-rounded sm">data_object</span>
+            </button>
+            {# The decoupled frontend, when the tenant has pointed one at
+               itself under Settings → Headless preview. Absent otherwise,
+               rather than a button that leads nowhere. #}
+            {% if headless_preview_url %}
+            <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small rcms-viewport-btn"
+                    data-preview-surface="site" title="{{ "Your frontend" | translate(locale=LANG) }}"
+                    aria-pressed="false">
+                <span class="material-symbols-rounded sm">public</span>
+            </button>
+            {% endif %}
+        </div>
+        <div class="rcms-viewport-buttons" role="radiogroup" data-viewport-group aria-label="{{ "Viewport width" | translate(locale=LANG) }}">
+            <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small rcms-viewport-btn" data-viewport="375" aria-pressed="false" title="{{ "Mobile (375px)" | translate(locale=LANG) }}">
+                <span class="material-symbols-rounded sm">smartphone</span>
+            </button>
+            <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small rcms-viewport-btn" data-viewport="768" aria-pressed="false" title="{{ "Tablet (768px)" | translate(locale=LANG) }}">
+                <span class="material-symbols-rounded sm">tablet</span>
+            </button>
+            <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small rcms-viewport-btn" data-viewport="1280" aria-pressed="false" title="{{ "Desktop (1280px)" | translate(locale=LANG) }}">
+                <span class="material-symbols-rounded sm">desktop_windows</span>
+            </button>
+            <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small rcms-viewport-btn" data-viewport="full" aria-pressed="true" title="{{ "Fill the preview pane" | translate(locale=LANG) }}">
+                <span class="material-symbols-rounded sm">fit_screen</span>
+            </button>
+        </div>
+        <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small" data-preview-refresh title="{{ "Reload the preview" | translate(locale=LANG) }}">
+            <span class="material-symbols-rounded sm">refresh</span>
+        </button>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+
+
+<div class="rcms-edit-with-preview" data-mode="{{ mode }}">
+<div class="rcms-edit-pane">
+
+
+
+{# ============================================================
+   Canonical edit form — tabbed layout. Content / Promote / Theme
+   live inside the same <form> so a single submit persists every
+   tab; switching tabs only toggles which `.tab-panel` is visible.
+   Hidden panels keep their inputs in the DOM, so editors can flip
+   tabs freely without losing pending values.
+
+   Revisions live in their own tab OUTSIDE the form (each row has
+   a per-revert sub-form). The tab strip itself can scroll
+   horizontally on narrow viewports so adding more tabs later
+   doesn't constrain the layout.
+   ============================================================ #}
+{% if not translation_mode %}
+{# #72 — Editor-lock banner. Surfaces when another editor holds
+   an unexpired lock on this page. Force-unlock posts a separate
+   form so accidental clobbers stay impossible. Heartbeat refresh
+   handled by the page-lock-heartbeat JS at the bottom of the file. #}
+{% if mode == "edit" and lock_banner %}
+<div class="rcms-alert rcms-alert--error" role="alert">
+    <span class="material-symbols-rounded">lock</span>
+    <div class="rcms-alert-body">
+        <strong>{{ "Locked by" | translate(locale=LANG) }} {{ lock_banner.holder_username }}</strong>
+        <span class="rcms-hint rcms-block rcms-text-xs">
+            {{ "They started editing" | translate(locale=LANG) }}
+            {% if lock_banner.acquired_at %}<time data-utc="{{ lock_banner.acquired_at | date(format='%+') }}">{{ lock_banner.acquired_at | naturaltime }}</time>{% else %}{{ "recently" | translate(locale=LANG) }}{% endif %}.
+            {{ "Saving will be rejected until the lock is released." | translate(locale=LANG) }}
+        </span>
+    </div>
+    <form method="post" action="{{ url(name='rcms-admin:pages:unlock', id=page.id) }}"
+          data-confirm="{{ "Force-release the lock held by" | translate(locale=LANG) }} {{ lock_banner.holder_username }}? {{ "Any unsaved work they have will be lost." | translate(locale=LANG) }}"
+          data-confirm-style="danger"
+          class="rcms-m-0">
+        {{ csrf_token | csrf_input | safe }}
+        <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">
+            <span class="material-symbols-rounded sm">lock_open</span> {{ "Force-unlock" | translate(locale=LANG) }}
+        </button>
+    </form>
+</div>
+{% endif %}
+
+{# #73 PR 2 — Workflow action bar + history.
+   Surfaces when the page type opted into a workflow via
+   PageTypeHandler::workflow_slug(). Three states:
+     * no active state          → Submit-for-review CTA
+     * status=in_progress       → reviewer Approve / Reject (when in-role) + author Cancel
+     * status=needs_changes     → Resubmit CTA + last-rejection note #}
+{# #73 PR 3 — workflow-driven lock banner. When the page is
+   in_progress AND the viewer can't decide (not a reviewer of the
+   current step, not a superuser), the form is read-only and we
+   surface the reason. The action-bar Cancel button is still
+   reachable; everything else inside #page-edit-form is disabled
+   below via fieldset. #}
+{% if mode == "edit" and workflow_locked and workflow_current_task %}
+<div class="rcms-page-lock-banner rcms-flex rcms-items-center rcms-gap-3 rcms-py-3 rcms-px-4 rcms-mb-3" role="alert">
+    <span class="material-symbols-rounded">hourglass_top</span>
+    <div class="rcms-flex-1">
+        <strong>{{ "Page is under review on" | translate(locale=LANG) }} “{{ workflow_current_task.name }}”.</strong>
+        <span class="rcms-hint rcms-block rcms-text-xs">
+            {{ "Only reviewers of this step can edit during review. Saving will be rejected — wait for the reviewer's decision." | translate(locale=LANG) }}
+        </span>
+    </div>
+</div>
+{% endif %}
+{% if mode == "edit" and pending_change %}
+<div class="rcms-page-lock-banner rcms-flex rcms-items-center rcms-gap-3 rcms-py-3 rcms-px-4 rcms-mb-3" role="status" data-pending-change>
+    <span class="material-symbols-rounded">edit_note</span>
+    <div class="rcms-flex-1">
+        <strong>{% if pending_change.by %}{{ "Changes by {name} are waiting for review." | translate(locale=LANG, name=pending_change.by) }}{% else %}{{ "Changes are waiting for review." | translate(locale=LANG) }}{% endif %}</strong>
+        <span class="rcms-hint rcms-block rcms-text-xs">
+            {{ "The form shows the proposed version. Visitors see the live page until the changes are approved." | translate(locale=LANG) }}
+        </span>
+    </div>
+</div>
+{% endif %}
+
+{# #76 + #167 — Privacy panel. Lives in a dedicated tab so the
+   editor's vertical scroll isn't consumed by config the user
+   touches once. Standalone form so toggling restriction kind
+   doesn't have to wait for a full page save. #}
+{% if mode == "edit" %}
+<section class="rcms-tab-panel" data-tab-panel="privacy" id="tab-privacy" role="tabpanel" hidden>
+<form method="post" action="{{ url(name='rcms-admin:pages:privacy', id=page.id) }}"
+      class="rcms-card rcms-p-bar">
+    {{ csrf_token | csrf_input | safe }}
+    <h3 class="rcms-m-0 rcms-mb-2 rcms-text-base">
+        <span class="material-symbols-rounded sm">{% if restriction_kind == "none" %}public{% else %}lock{% endif %}</span>
+        {{ "Privacy" | translate(locale=LANG) }}
+        {% if restriction_kind != "none" %}
+            <span class="rcms-tag scheduled rcms-text-3xs rcms-ml-1">{% if restriction_kind == "login" %}{{ "Logged-in users only" | translate(locale=LANG) }}{% elif restriction_kind == "groups" %}{{ "Members of specific roles" | translate(locale=LANG) }}{% elif restriction_kind == "permission" %}{{ "Members with a permission" | translate(locale=LANG) }}{% else %}{{ "Password-protected" | translate(locale=LANG) }}{% endif %}</span>
+        {% endif %}
+    </h3>
+    <p class="rcms-hint rcms-m-0 rcms-mb-3 rcms-text-xs">
+        {{ "Choose who can see this page. The pages under it follow the same rule, unless they have their own." | translate(locale=LANG) }}
+    </p>
+    <div class="rcms-field rcms-maxw-600">
+        <label for="privacy-kind">{{ "Who can see this page" | translate(locale=LANG) }}</label>
+        <select name="kind" id="privacy-kind" data-privacy-kind>
+            <option value="none"{% if restriction_kind == "none" %} selected{% endif %}>{{ "Public — no restriction" | translate(locale=LANG) }}</option>
+            <option value="login"{% if restriction_kind == "login" %} selected{% endif %}>{{ "Logged-in users only" | translate(locale=LANG) }}</option>
+            <option value="groups"{% if restriction_kind == "groups" %} selected{% endif %}>{{ "Members of specific roles" | translate(locale=LANG) }}</option>
+            <option value="permission"{% if restriction_kind == "permission" %} selected{% endif %}>{{ "Members with a permission" | translate(locale=LANG) }}</option>
+            <option value="password"{% if restriction_kind == "password" %} selected{% endif %}>{{ "Password-protected" | translate(locale=LANG) }}</option>
+        </select>
+    </div>
+    {#- Each extra field shows only for its kind (script below); without
+        JavaScript they all stay visible and the handler ignores the rest. -#}
+    <div class="rcms-field rcms-maxw-600" data-privacy-for="password">
+        <label for="privacy-password">{{ "Password" | translate(locale=LANG) }}</label>
+        <input type="password" id="privacy-password" name="password" autocomplete="new-password">
+        <div class="rcms-hint">{% if restriction_has_password %}{{ "Leave empty to keep the current password." | translate(locale=LANG) }}{% else %}{{ "Visitors type it once to open the page." | translate(locale=LANG) }}{% endif %}</div>
+    </div>
+    {% if restriction_role_choices and restriction_role_choices | length > 0 %}
+        <div class="rcms-field" data-privacy-for="groups">
+            <label>{{ "Allowed roles" | translate(locale=LANG) }}</label>
+            <div class="rcms-checkbox-group">
+                {% for r in restriction_role_choices %}
+                    <label class="rcms-checkbox-option">
+                        <input type="checkbox" name="_role_choice" value="{{ r.id }}" data-role-id="{{ r.id }}"{% if r.checked %} checked{% endif %}>
+                        {{ r.name }}
+                    </label>
+                {% endfor %}
+            </div>
+            <div class="rcms-hint">{{ "Signed-in people with one of these roles can see the page. Give roles under Management → Users." | translate(locale=LANG) }}</div>
+            <input type="hidden" name="group_ids" id="restriction-group-ids" value="{{ restriction_groups_str }}">
+        </div>
+    {% endif %}
+    {% if restriction_codename_choices and restriction_codename_choices | length > 0 %}
+        <div class="rcms-field" data-privacy-for="permission">
+            <label>{{ "Required permission" | translate(locale=LANG) }}</label>
+            <div class="rcms-checkbox-group">
+                {% for c in restriction_codename_choices %}
+                    <label class="rcms-checkbox-option">
+                        <input type="checkbox" name="_codename_choice" value="{{ c.codename }}"{% if c.checked %} checked{% endif %}>
+                        {{ c.label }}
+                    </label>
+                {% endfor %}
+            </div>
+            <div class="rcms-hint">{{ "Signed-in people whose roles include one of these permissions can see the page." | translate(locale=LANG) }}</div>
+            <input type="hidden" name="codenames" id="restriction-codenames" value="{{ restriction_codenames_str }}">
+        </div>
+    {% endif %}
+    <div class="rcms-form-actions rcms-mt-3">
+        <button type="submit" class="rcms-btn rcms-btn-tonal rcms-btn-small" data-confirm="{{ "Update this page's privacy setting?" | translate(locale=LANG) }}">
+            <span class="material-symbols-rounded sm">save</span> {{ "Save privacy" | translate(locale=LANG) }}
+        </button>
+    </div>
+</form>
+<script>
+(() => {
+    // Mirror the checked role-choice checkboxes into the hidden
+    // `group_ids` field so the form posts a single comma-separated
+    // string instead of N repeated names.
+    const hidden = document.getElementById("restriction-group-ids");
+    if (hidden) {
+        const sync = () => {
+            const checked = Array.from(document.querySelectorAll('input[name="_role_choice"]:checked'))
+                .map((cb) => cb.value);
+            hidden.value = checked.join(",");
+        };
+        document.querySelectorAll('input[name="_role_choice"]').forEach((cb) => {
+            cb.addEventListener("change", sync);
+        });
+        sync();
+    }
+    // Show only the field the chosen kind uses.
+    const kind = document.querySelector("[data-privacy-kind]");
+    if (kind) {
+        const show = () => {
+            document.querySelectorAll("[data-privacy-for]").forEach((el) => {
+                el.hidden = el.dataset.privacyFor !== kind.value;
+            });
+        };
+        kind.addEventListener("change", show);
+        show();
+    }
+    // #members — mirror the checked permission codenames into the hidden
+    // `codenames` field the privacy handler parses.
+    const codeHidden = document.getElementById("restriction-codenames");
+    if (codeHidden) {
+        const syncCodes = () => {
+            const checked = Array.from(document.querySelectorAll('input[name="_codename_choice"]:checked'))
+                .map((cb) => cb.value);
+            codeHidden.value = checked.join(",");
+        };
+        document.querySelectorAll('input[name="_codename_choice"]').forEach((cb) => {
+            cb.addEventListener("change", syncCodes);
+        });
+        syncCodes();
+    }
+})();
+</script>
+</section>
+{% endif %}
+
+{# #81 PR 1 + #167 — Comments tab panel. Open threads first, then
+   collapsible Resolved bucket. Reply + Resolve / Reopen actions
+   inline per thread. PR 2 will pin per-field anchors next to each
+   field so editors can click-to-comment in context. #}
+{% if mode == "edit" %}
+<section class="rcms-tab-panel" data-tab-panel="comments" id="tab-comments" role="tabpanel" hidden>
+<div class="rcms-card rcms-py-3 rcms-px-4" id="side-panel-comments" data-side-panel-target="comments">
+    <div class="rcms-flex rcms-items-center rcms-gap-2 rcms-fw-medium rcms-mb-2">
+        <span class="material-symbols-rounded sm">comment</span>
+        {{ "Comments" | translate(locale=LANG) }}
+        {% if comment_open_count > 0 %}
+            <span class="rcms-tag scheduled rcms-text-3xs">{{ comment_open_count }} {{ "open" | translate(locale=LANG) }}</span>
+        {% endif %}
+        {% if comment_resolved_count > 0 %}
+            <span class="rcms-tag draft rcms-text-3xs">{{ comment_resolved_count }} {{ "resolved" | translate(locale=LANG) }}</span>
+        {% endif %}
+    </div>
+
+    {# Open threads #}
+    <ul class="rcms-list-none rcms-p-0 rcms-mt-3 rcms-mb-3 rcms-mx-0">
+        {% for t in comment_threads %}
+            {% if not t.resolved_at %}
+                <li class="rcms-border-top rcms-comment">
+                    <div class="rcms-flex rcms-items-center rcms-gap-2 rcms-text-xs">
+                        <code class="rcms-hint">{{ t.field_path }}</code>
+                        <span class="rcms-spacer rcms-flex-1"></span>
+                        <form method="post" action="{{ url(name='rcms-admin:pages:comments:resolve', id=page.id, comment_id=t.id) }}"
+                              class="rcms-inline rcms-m-0">
+                            {{ csrf_token | csrf_input | safe }}
+                            <button type="submit" class="rcms-btn rcms-btn-text rcms-btn-small" title="{{ "Mark resolved" | translate(locale=LANG) }}">
+                                <span class="material-symbols-rounded sm">task_alt</span> {{ "Resolve" | translate(locale=LANG) }}
+                            </button>
+                        </form>
+                    </div>
+                    <p class="rcms-mx-0 rcms-mb-0 rcms-pre-wrap rcms-comment-body">{{ t.body }}</p>
+                    <p class="rcms-hint rcms-text-2xs rcms-mt-1 rcms-mx-0 rcms-mb-0">
+                        {% if t.author_username %}<strong>{{ t.author_username }}</strong>{% endif %}
+                        {% if t.created_at %} · {{ t.created_at | naturaltime }}{% endif %}
+                    </p>
+                    {% for r in t.replies %}
+                        <div class="rcms-mt-2 rcms-mb-0 rcms-comment-reply">
+                            <p class="rcms-m-0 rcms-pre-wrap rcms-text-sm">{{ r.body }}</p>
+                            <p class="rcms-hint rcms-text-2xs rcms-mx-0 rcms-mb-0">
+                                {% if r.author_username %}<strong>{{ r.author_username }}</strong>{% endif %}
+                                {% if r.created_at %} · {{ r.created_at | naturaltime }}{% endif %}
+                            </p>
+                        </div>
+                    {% endfor %}
+                    <form method="post" action="{{ url(name='rcms-admin:pages:comments:reply', id=page.id, comment_id=t.id) }}"
+                          class="rcms-flex rcms-gap-2 rcms-mt-2 rcms-mb-0 rcms-comment-reply-form">
+                        {{ csrf_token | csrf_input | safe }}
+                        <input type="text" name="body" placeholder="{{ "Reply…" | translate(locale=LANG) }}" required
+                               class="rcms-flex-1 rcms-border rcms-rounded rcms-comment-input">
+                        <button type="submit" class="rcms-btn rcms-btn-text rcms-btn-small">{{ "Reply" | translate(locale=LANG) }}</button>
+                    </form>
+                </li>
+            {% endif %}
+        {% endfor %}
+    </ul>
+
+    {# New-thread form #}
+    <form method="post" action="{{ url(name='rcms-admin:pages:comments:new', id=page.id) }}"
+          class="rcms-p-3 rcms-rounded rcms-comment-new">
+        {{ csrf_token | csrf_input | safe }}
+        <div class="rcms-field-row rcms-gap-2">
+            <div class="rcms-field">
+                <label class="rcms-text-2xs">{{ "Field" | translate(locale=LANG) }}</label>
+                <select name="field_path" required>
+                    {% for c in comment_field_choices %}
+                        <option value="{{ c.value }}">{{ c.label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="rcms-field rcms-flex-3">
+                <label class="rcms-text-2xs">{{ "New comment" | translate(locale=LANG) }}</label>
+                <input type="text" name="body" placeholder="{{ "Leave a note…" | translate(locale=LANG) }}" required maxlength="2000">
+            </div>
+            <button type="submit" class="rcms-btn rcms-btn-tonal rcms-btn-small">
+                <span class="material-symbols-rounded sm">send</span> {{ "Post" | translate(locale=LANG) }}
+            </button>
+        </div>
+    </form>
+
+    {# Resolved bucket #}
+    {% if comment_resolved_count > 0 %}
+    <details class="rcms-mt-3">
+        <summary class="rcms-cursor-pointer rcms-text-sm rcms-text-muted">
+            {{ "Show" | translate(locale=LANG) }} {{ comment_resolved_count }} {{ "resolved" | translate(locale=LANG) }}
+        </summary>
+        <ul class="rcms-list-none rcms-p-0 rcms-mt-2 rcms-mx-0 rcms-mb-0">
+            {% for t in comment_threads %}
+                {% if t.resolved_at %}
+                    <li class="rcms-py-2 rcms-px-0 rcms-border-top rcms-opacity-70">
+                        <div class="rcms-flex rcms-items-center rcms-gap-2 rcms-text-xs">
+                            <code class="rcms-hint">{{ t.field_path }}</code>
+                            <span class="rcms-tag published rcms-text-3xs">{{ "resolved" | translate(locale=LANG) }}</span>
+                            <span class="rcms-spacer rcms-flex-1"></span>
+                            <form method="post" action="{{ url(name='rcms-admin:pages:comments:reopen', id=page.id, comment_id=t.id) }}"
+                                  class="rcms-inline rcms-m-0">
+                                {{ csrf_token | csrf_input | safe }}
+                                <button type="submit" class="rcms-btn rcms-btn-text rcms-btn-small">{{ "Reopen" | translate(locale=LANG) }}</button>
+                            </form>
+                        </div>
+                        <p class="rcms-mt-1 rcms-mx-0 rcms-mb-0 rcms-pre-wrap rcms-text-sm">{{ t.body }}</p>
+                    </li>
+                {% endif %}
+            {% endfor %}
+        </ul>
+    </details>
+    {% endif %}
+</div>
+</section>
+{% endif %}
+
+{# #146 — References tab. Inbound \"what links here\" rows. #}
+{% if mode == "edit" %}
+<section class="rcms-tab-panel" data-tab-panel="references" id="tab-references" role="tabpanel" hidden>
+    <div class="rcms-card rcms-py-3 rcms-px-4">
+        <h2 class="rcms-m-0 rcms-mb-3 rcms-text-base">
+            <span class="material-symbols-rounded sm">link</span>
+            {{ "What links here" | translate(locale=LANG) }}
+        </h2>
+        {% if usage and usage | length > 0 %}
+            <p class="rcms-hint rcms-m-0 rcms-mb-3">
+                {% set usage_count = usage | length %}
+                {% if usage_count != 1 %}
+                    {{ "Used in <strong>{n}</strong> places — deleting this page breaks these references." | translate(locale=LANG, n=usage_count) | safe }}
+                {% else %}
+                    {{ "Used in <strong>{n}</strong> place — deleting this page breaks this reference." | translate(locale=LANG, n=usage_count) | safe }}
+                {% endif %}
+            </p>
+            <table class="rcms-data">
+                <thead>
+                    <tr>
+                        <th>{{ "Referenced by" | translate(locale=LANG) }}</th>
+                        <th>{{ "Field" | translate(locale=LANG) }}{% if usage | length %}s{% endif %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in usage %}
+                        <tr>
+                            <td>
+                                {% if r.from_kind == "cms_page" %}
+                                    <a href="{{ url(name='rcms-admin:pages:edit', id=r.from_id) }}">{{ r.title }}</a>
+                                {% elif r.from_kind == "cms_snippet" %}
+                                    <a href="/cms-admin/library/{{ r.from_id }}/edit">{{ r.title }}</a>
+                                {% else %}
+                                    {{ r.title }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if r.fields and r.fields | length > 0 %}
+                                    {% for f in r.fields %}<code class="rcms-text-2xs">{{ f }}</code>{% if not loop.last %} {% endif %}{% endfor %}
+                                {% else %}
+                                    <span class="rcms-hint">—</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="rcms-hint">{{ "No references — nothing links to this page yet." | translate(locale=LANG) }}</p>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
+{# #116 + #208 — accessibility checker side panel. Phase 1
+   surfaces server-side heuristic violations stamped into context
+   as `a11y_violations`; Phase 2 (#208) adds client-side axe-core
+   findings via a `cms-axe-results` postMessage from the preview
+   iframe. The card always renders in edit mode so axe results
+   have a home even on pages with zero server-side findings. #}
+{% if mode == "edit" %}
+<section class="rcms-tab-panel" id="tab-a11y" data-tab-panel="a11y" role="tabpanel" hidden>
+<details class="rcms-card rcms-a11y-card" id="side-panel-a11y" data-side-panel-target="a11y" open>
+    <summary class="rcms-a11y-summary">
+        <span class="material-symbols-rounded sm">accessibility_new</span>
+        {{ "Accessibility" | translate(locale=LANG) }}
+        <span class="rcms-tag rcms-a11y-tag-error" data-a11y-error-tag hidden>{{ "0 errors" | translate(locale=LANG) }}</span>
+        <span class="rcms-tag rcms-a11y-tag-warning" data-a11y-warning-tag hidden>{{ "0 warnings" | translate(locale=LANG) }}</span>
+        <span class="rcms-tag rcms-a11y-tag-info" data-a11y-info-tag hidden>{{ "0 info" | translate(locale=LANG) }}</span>
+        {# Initial server-side counts; the JS below merges axe
+           counts in and re-renders these spans. #}
+        {% if a11y_errors and a11y_errors > 0 %}
+            <span class="rcms-tag rcms-a11y-tag-error" data-a11y-initial-error>{{ a11y_errors }} {{ "error" | translate(locale=LANG) }}{% if a11y_errors != 1 %}s{% endif %}</span>
+        {% endif %}
+        {% if a11y_warnings and a11y_warnings > 0 %}
+            <span class="rcms-tag rcms-a11y-tag-warning" data-a11y-initial-warning>{{ a11y_warnings }} {{ "warning" | translate(locale=LANG) }}{% if a11y_warnings != 1 %}s{% endif %}</span>
+        {% endif %}
+        {% if a11y_infos and a11y_infos > 0 %}
+            <span class="rcms-tag rcms-a11y-tag-info" data-a11y-initial-info>{{ a11y_infos }} {{ "info" | translate(locale=LANG) }}</span>
+        {% endif %}
+    </summary>
+    <ul class="rcms-a11y-list" data-a11y-list>
+        {% if a11y_violations and a11y_violations | length > 0 %}
+            {% for v in a11y_violations %}
+                <li class="rcms-a11y-row rcms-a11y-row--{{ v.severity }}" data-a11y-source="heuristic">
+                    <span class="material-symbols-rounded sm" title="{{ "Server-side heuristic (#116)" | translate(locale=LANG) }}">
+                        {% if v.severity == "error" %}error
+                        {% elif v.severity == "warning" %}warning
+                        {% else %}info
+                        {% endif %}
+                    </span>
+                    <span class="rcms-a11y-msg">{{ v.message }}</span>
+                    {% if v.field %}
+                        <code class="rcms-a11y-field">{{ v.field }}</code>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        {% endif %}
+    </ul>
+    {# Placeholder when both lists are empty. JS swaps in/out
+       based on combined count. #}
+    <p class="rcms-hint rcms-a11y-empty"{% if a11y_violations and a11y_violations | length > 0 %} hidden{% endif %} data-a11y-empty>
+        {{ "No accessibility issues detected. Server-side heuristics + client-side <code>axe-core</code> over the preview iframe both came back clean." | translate(locale=LANG) | safe }}
+    </p>
+    <p class="rcms-hint rcms-a11y-footer">
+        <span class="material-symbols-rounded sm">accessibility_new</span>
+        <strong data-a11y-heuristic-icon title="{{ "Server-side heuristic" | translate(locale=LANG) }}">⚙</strong> = {{ "server-side heuristic (#116)." | translate(locale=LANG) }}
+        <strong data-a11y-axe-icon title="{{ "Client-side axe-core" | translate(locale=LANG) }}">🛠</strong> = {{ "client-side axe-core over the rendered preview (#208)." | translate(locale=LANG) }}
+    </p>
+</details>
+</section>
+
+{# #417 — extensible content / SEO checks. Registry-driven
+   (`register_content_check!`); ships the empty-meta-description SEO
+   check + thin-description + missing-og-image. Reuses the a11y panel's
+   row styling so the two read consistently. Server-rendered on open
+   (reflects the saved / last-autosaved page). #}
+<section class="rcms-tab-panel" id="tab-seo" data-tab-panel="seo" role="tabpanel" hidden>
+<details class="rcms-card rcms-a11y-card" id="side-panel-content-checks" open>
+    <summary class="rcms-a11y-summary">
+        <span class="material-symbols-rounded sm">fact_check</span>
+        {{ "Content & SEO" | translate(locale=LANG) }}
+        {% if content_errors and content_errors > 0 %}
+            <span class="rcms-tag rcms-a11y-tag-error">{{ content_errors }} {{ "error" | translate(locale=LANG) }}{% if content_errors != 1 %}s{% endif %}</span>
+        {% endif %}
+        {% if content_warnings and content_warnings > 0 %}
+            <span class="rcms-tag rcms-a11y-tag-warning">{{ content_warnings }} {{ "warning" | translate(locale=LANG) }}{% if content_warnings != 1 %}s{% endif %}</span>
+        {% endif %}
+        {% if content_infos and content_infos > 0 %}
+            <span class="rcms-tag rcms-a11y-tag-info">{{ content_infos }} {{ "info" | translate(locale=LANG) }}</span>
+        {% endif %}
+    </summary>
+    <ul class="rcms-a11y-list">
+        {% for f in content_findings | default(value=[]) %}
+            <li class="rcms-a11y-row rcms-a11y-row--{{ f.severity }}">
+                <span class="material-symbols-rounded sm">
+                    {% if f.severity == "error" %}error
+                    {% elif f.severity == "warning" %}warning
+                    {% else %}info
+                    {% endif %}
+                </span>
+                <span class="rcms-tag rcms-a11y-tag-info rcms-text-2xs">{{ f.category | translate(locale=LANG) }}</span>
+                <span class="rcms-a11y-msg">{{ f.message | translate(locale=LANG) }}</span>
+                {% if f.field %}
+                    <code class="rcms-a11y-field">{{ f.field }}</code>
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+    {% if not content_findings or content_findings | length == 0 %}
+        <p class="rcms-hint rcms-a11y-empty">{{ "No content or SEO issues detected." | translate(locale=LANG) }}</p>
+    {% endif %}
+</details>
+</section>
+{% endif %}
+
+{% if mode == "edit" and workflow_slug %}
+    {% if not workflow %}
+        <div class="rcms-card rcms-mb-4 rcms-card--error">
+            <strong>{{ "Workflow misconfigured." | translate(locale=LANG) }}</strong>
+            {% set wf_slug = workflow_slug | escape %}
+            {{ "This page type is bound to workflow <code>{slug}</code> but no active workflow with that name exists. Ask an admin to create or activate it under <a href='{url}'>Workflows</a>." | translate(locale=LANG, slug=wf_slug, url=url(name='rcms-admin:workflows:list')) | safe }}
+        </div>
+    {% else %}
+        <div class="rcms-card rcms-workflow-bar rcms-mb-4 rcms-flex rcms-items-center rcms-gap-4 rcms-flex-wrap rcms-p-bar">
+            <span class="material-symbols-rounded rcms-text-primary rcms-text-2xl">approval</span>
+            <div class="rcms-flex-1 rcms-minw-200">
+                <strong class="rcms-block rcms-text-base">{{ workflow.name }}</strong>
+                <span class="rcms-hint rcms-text-xs">
+                    {% if workflow_state %}
+                        {{ "Status:" | translate(locale=LANG) }} <strong>{% if workflow_state.status == "in_progress" %}{{ "In review" | translate(locale=LANG) }}{% elif workflow_state.status == "needs_changes" %}{{ "Changes requested" | translate(locale=LANG) }}{% elif workflow_state.status == "approved" %}{{ "Approved" | translate(locale=LANG) }}{% elif workflow_state.status == "cancelled" %}{{ "Cancelled" | translate(locale=LANG) }}{% else %}{{ workflow_state.status }}{% endif %}</strong>
+                        {% if workflow_current_task %} · {{ "Current step:" | translate(locale=LANG) }} <strong>{{ workflow_current_task.name }}</strong>{% endif %}
+                    {% else %}
+                        {{ "Not yet submitted —" | translate(locale=LANG) }} {{ workflow.task_count }} {{ "review step" | translate(locale=LANG) }}{% if workflow.task_count != 1 %}s{% endif %} {{ "pending." | translate(locale=LANG) }}
+                    {% endif %}
+                </span>
+            </div>
+            <div class="rcms-row-actions rcms-flex rcms-gap-2 rcms-flex-wrap">
+                {% if not workflow_state or workflow_state.status != "in_progress" %}
+                    {# Submit / Resubmit CTA #}
+                    <form method="post" action="{{ url(name='rcms-admin:pages:workflow-submit', id=page.id) }}"
+                          data-confirm="{{ "Submit this page for review? It will enter the first task of" | translate(locale=LANG) }} “{{ workflow.name }}”."
+                          class="rcms-m-0 rcms-inline">
+                        {{ csrf_token | csrf_input | safe }}
+                        <button type="submit" class="rcms-btn">
+                            <span class="material-symbols-rounded sm">send</span>
+                            {% if workflow_state and workflow_state.status == "needs_changes" %}{{ "Resubmit for review" | translate(locale=LANG) }}{% else %}{{ "Submit for review" | translate(locale=LANG) }}{% endif %}
+                        </button>
+                    </form>
+                {% elif workflow_state.status == "in_progress" %}
+                    {% if workflow_viewer_can_decide %}
+                        <form method="post" action="{{ url(name='rcms-admin:pages:workflow-approve', id=page.id) }}"
+                              data-confirm="{{ "Approve" | translate(locale=LANG) }} “{{ workflow_current_task.name }}” {{ "and advance the workflow?" | translate(locale=LANG) }}"
+                              class="rcms-m-0 rcms-inline">
+                            {{ csrf_token | csrf_input | safe }}
+                            <input type="hidden" name="task_id" value="{{ workflow_current_task.id }}">
+                            <button type="submit" class="rcms-btn">
+                                <span class="material-symbols-rounded sm">check_circle</span> {{ "Approve" | translate(locale=LANG) }}
+                            </button>
+                        </form>
+                        {#- The author needs to know what to change: the reason is
+                            asked for, and shown in the review history. -#}
+                        <details class="rcms-reject-box">
+                            <summary class="rcms-btn rcms-btn-danger">
+                                <span class="material-symbols-rounded sm">cancel</span> {{ "Reject" | translate(locale=LANG) }}
+                            </summary>
+                            <form method="post" action="{{ url(name='rcms-admin:pages:workflow-reject', id=page.id) }}" class="rcms-reject-form">
+                                {{ csrf_token | csrf_input | safe }}
+                                <input type="hidden" name="task_id" value="{{ workflow_current_task.id }}">
+                                <div class="rcms-field rcms-m-0">
+                                    <label for="reject-comment">{{ "What should change?" | translate(locale=LANG) }}</label>
+                                    <textarea id="reject-comment" name="comment" rows="3" required></textarea>
+                                    <div class="rcms-hint">{{ "The page returns to the author for changes." | translate(locale=LANG) }}</div>
+                                </div>
+                                <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">{{ "Send back for changes" | translate(locale=LANG) }}</button>
+                            </form>
+                        </details>
+                    {% else %}
+                        <span class="rcms-hint rcms-italic rcms-text-muted">
+                            {{ "Waiting for a reviewer on" | translate(locale=LANG) }} “{{ workflow_current_task.name }}”.
+                        </span>
+                    {% endif %}
+                    <form method="post" action="{{ url(name='rcms-admin:pages:workflow-cancel', id=page.id) }}"
+                          data-confirm="{{ "Cancel this review entirely? The workflow ends and the page returns to Draft handling." | translate(locale=LANG) }}"
+                          data-confirm-style="danger"
+                          class="rcms-m-0 rcms-inline">
+                        {{ csrf_token | csrf_input | safe }}
+                        <button type="submit" class="rcms-btn rcms-btn-outlined">
+                            <span class="material-symbols-rounded sm">close</span> {{ "Cancel review" | translate(locale=LANG) }}
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if workflow_history and workflow_history | length > 0 %}
+        <details class="rcms-card rcms-mb-4 rcms-py-3 rcms-px-4">
+            <summary class="rcms-cursor-pointer rcms-fw-medium">
+                {{ "Review history" | translate(locale=LANG) }} ({{ workflow_history | length }})
+            </summary>
+            <ul class="rcms-list-none rcms-p-0 rcms-mt-3 rcms-mx-0 rcms-mb-0">
+                {% for h in workflow_history %}
+                    <li class="rcms-py-2 rcms-px-0 rcms-border-bottom rcms-text-sm">
+                        <strong>{{ h.task_name }}</strong> —
+                        <span class="rcms-tag {% if h.status == 'approved' %}published{% elif h.status == 'rejected' %}archived{% else %}draft{% endif %}">{% if h.status == "approved" %}{{ "Approved" | translate(locale=LANG) }}{% elif h.status == "rejected" %}{{ "Changes requested" | translate(locale=LANG) }}{% else %}{{ h.status }}{% endif %}</span>
+                        {% if h.decided_by_username %}
+                            {{ "by" | translate(locale=LANG) }} <strong>{{ h.decided_by_username }}</strong>
+                        {% endif %}
+                        {% if h.decided_at %}
+                            <span class="rcms-hint rcms-text-2xs">· {{ h.decided_at | naturaltime }}</span>
+                        {% endif %}
+                        {% if h.comment %}
+                            <div class="rcms-mt-1 rcms-rounded rcms-text-xs rcms-chip">
+                                {{ h.comment }}
+                            </div>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </details>
+        {% endif %}
+    {% endif %}
+{% endif %}
+
+{# #106 — Concurrent-editor presence banner. Polls the sessions
+   endpoint every 30s; hidden by default + populated client-side
+   to avoid first-render flicker. #}
+{% if mode == "edit" %}
+<div class="rcms-page-presence-banner rcms-items-center rcms-gap-2 rcms-py-2 rcms-mb-3 rcms-rounded rcms-text-sm" data-presence-banner
+     data-presence-url="{{ url(name='rcms-admin:pages:sessions', id=page.id) }}">
+    <span class="material-symbols-rounded sm">visibility</span>
+    <span data-presence-text></span>
+</div>
+{% endif %}
+
+<form id="page-edit-form" method="post" action="{% if mode == "new" %}{{ url(name='rcms-admin:pages:new') }}{% else %}{{ url(name='rcms-admin:pages:edit', id=page.id) }}{% endif %}" class="rcms-card rcms-page-form-section" data-primary-save
+      {% if mode == "edit" and lock_owned_by_me %}data-lock-heartbeat-url="{{ url(name='rcms-admin:pages:lock-heartbeat', id=page.id) }}" data-lock-heartbeat-secs="{{ lock_heartbeat_secs }}" data-lock-release-url="{{ url(name='rcms-admin:pages:lock-release', id=page.id) }}"{% endif %}
+      {% if mode == "edit" %}data-autosave-url="{{ url(name='rcms-admin:pages:autosave', id=page.id) }}" data-autosave-secs="30"{% endif %}>
+    {{ csrf_token | csrf_input | safe }}
+    {% if mode == "new" and parent %}
+        <div class="rcms-page-form-notice">
+            <span class="material-symbols-rounded sm">arrow_downward</span>
+            {% set parent_title = parent.title | escape %}
+            {% set parent_slug = parent.slug | default(value="(root)") | escape %}
+            {{ "Creating as a child of <strong>{title}</strong> ({slug}). Page-type options are filtered to those permitted by both the parent's <code>allowed_child_types</code> and the candidate's <code>allowed_parent_types</code>." | translate(locale=LANG, title=parent_title, slug=parent_slug) | safe }}
+        </div>
+        <input type="hidden" name="parent_id" value="{{ parent.id }}">
+    {% endif %}
+
+    {# -------- Content tab -------- #}
+    <section class="rcms-tab-panel" id="tab-content" role="tabpanel" data-tab-panel="content">
+        {# #269 — page-type breadcrumb chip. Slim, muted, sits above
+           the title so the type reads as context (like Wagtail's
+           breadcrumb) instead of competing with the title field as
+           a same-weight form input. Hover reveals the machine-name
+           + "permanent" note so power users still have the detail
+           without it dominating the layout. #}
+        <div class="rcms-page-type-strip"
+             title="{{ chosen_type.type_name }} · {{ "set at create-time · permanent" | translate(locale=LANG) }}">
+            <span class="material-symbols-rounded sm">category</span>
+            <span class="rcms-page-type-strip-name">{{ chosen_type.verbose_name }}</span>
+        </div>
+        {% if mode == "new" %}
+            <input type="hidden" name="page_type_id" value="{{ chosen_type.id }}">
+        {% endif %}
+
+        <div class="rcms-field-row">
+            <div class="rcms-field">
+                <label>{{ "Title" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+                {# Phase 7 — Wagtail TitleFieldPanel parity. cms-ux.js
+                   reads `data-slug-source` on the slug input and listens
+                   for `input` events on the title input named there;
+                   slug auto-fills from the slugified title until the
+                   editor manually edits the slug (then auto-sync stops). #}
+                <input type="text" name="title" id="id_title" required
+                       value="{{ page.title | default(value="") }}">
+            </div>
+            <div class="rcms-field">
+                <label>{{ "Slug" | translate(locale=LANG) }} {% if parent %}<span class="rcms-req">*</span>{% endif %}</label>
+                <input type="text" name="slug" id="id_slug"
+                       value="{{ page.slug | default(value="") }}"
+                       pattern="[a-z0-9\-]*"
+                       data-slug-source="#id_title"
+                       {% if mode == "edit" %}data-slug-locked="1"{% endif %}
+                       {% if parent %}required{% endif %}>
+                <div class="rcms-hint">{{ "Lowercase, hyphens only. Leave empty for root." | translate(locale=LANG) }} {% if mode != "edit" %}{{ "Auto-fills from title until you edit it." | translate(locale=LANG) }}{% endif %}</div>
+            </div>
+        </div>
+
+        <div class="rcms-field-row">
+            <div class="rcms-field">
+                <label id="side-panel-status">{{ "Status" | translate(locale=LANG) }}</label>
+                <select name="status">
+                    <option value="draft"     {% if page.status == "draft" %}selected{% endif %}>{{ "Draft" | translate(locale=LANG) }}</option>
+                    {#- A type with a review workflow goes live through it: only a
+                        superuser may choose Published / Scheduled here. -#}
+                    {% if not review_required or page.status == "published" or page.status == "scheduled" %}
+                    <option value="published" {% if page.status == "published" %}selected{% endif %}>{{ "Published" | translate(locale=LANG) }}</option>
+                    <option value="scheduled" {% if page.status == "scheduled" %}selected{% endif %}>{{ "Scheduled" | translate(locale=LANG) }}</option>
+                    {% endif %}
+                    <option value="archived"  {% if page.status == "archived" %}selected{% endif %}>{{ "Archived" | translate(locale=LANG) }}</option>
+                    {# #556 — `expired` is sweep-set at expire_at (takedown), not
+                       an editor choice. Show it only when the page is already
+                       expired so the dropdown reflects reality; picking any
+                       other value revives it. #}
+                    {% if page.status == "expired" %}
+                        <option value="expired" selected>{{ "Expired (takedown)" | translate(locale=LANG) }}</option>
+                    {% endif %}
+                </select>
+                {% if page.status == "archived" %}
+                    <p class="rcms-hint rcms-mt-1 rcms-mb-0 rcms-mx-0 rcms-text-xs">
+                        {{ "Archived pages stay online and searchable. Set to Published to unarchive; delete is blocked until then." | translate(locale=LANG) }}
+                    </p>
+                {% endif %}
+                {% if review_required and page.status != "published" %}
+                    <p class="rcms-hint rcms-mt-1 rcms-mb-0 rcms-mx-0 rcms-text-xs">
+                        {{ "Pages of this type go live after review: save as a draft, then click Submit for review." | translate(locale=LANG) }}
+                    </p>
+                {% endif %}
+                {# #115 — notify-on-publish subscription. Visible only
+                   on existing pages. Pure button (NOT a nested form —
+                   that would close the outer page-edit form). JS in
+                   the script block at the bottom of this template
+                   posts to the subscribe / unsubscribe URLs. #}
+                {% if mode == "edit" %}
+                    <div class="rcms-page-form-subscribe">
+                        <button type="button"
+                                class="rcms-btn rcms-btn-outlined rcms-btn-small"
+                                data-page-subscribe
+                                data-subscribe-url="{{ url(name='rcms-admin:pages:subscribe', id=page.id) }}"
+                                data-unsubscribe-url="{{ url(name='rcms-admin:pages:unsubscribe', id=page.id) }}"
+                                data-subscribed="{% if is_subscribed %}1{% else %}0{% endif %}">
+                            {% if is_subscribed %}
+                                <span class="material-symbols-rounded sm">notifications_active</span>
+                                <span data-subscribe-label>{{ "Subscribed — unsubscribe" | translate(locale=LANG) }}</span>
+                            {% else %}
+                                <span class="material-symbols-rounded sm">notifications</span>
+                                <span data-subscribe-label>{{ "Subscribe to publish events" | translate(locale=LANG) }}</span>
+                            {% endif %}
+                        </button>
+                        <span class="rcms-hint" data-subscribe-hint>
+                            {% if is_subscribed %}
+                                {{ "You'll get an email when this page publishes." | translate(locale=LANG) }}
+                            {% else %}
+                                {{ "Get an email when this page publishes (single edit, bulk publish, or workflow finish)." | translate(locale=LANG) }}
+                            {% endif %}
+                        </span>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Typed fields contributed by the page-type handler (body,
+           hero, etc.). One widget per ExtensionField. #}
+        {% if extension_fields and extension_fields | length > 0 %}
+        <fieldset class="rcms-content-fieldset">
+            <legend>
+                <span class="material-symbols-rounded sm rcms-icon-bullet">article</span>
+                {{ "Body" | translate(locale=LANG) }}
+            </legend>
+            {% for w in extension_fields %}
+                {{ widget::render(w=w) }}
+            {% endfor %}
+        </fieldset>
+        {% endif %}
+
+        {# #564 — page-builder body: fixed fields/rows/groups + repeater /
+           flexible-content zones, pre-rendered server-side and prefilled.
+           Inputs are `pb__…`-namespaced and post with the page-edit form. #}
+        {% if builder_body_html %}
+        <fieldset class="rcms-content-fieldset">
+            <legend>
+                <span class="material-symbols-rounded sm rcms-icon-bullet">dashboard_customize</span>
+                {{ "Body" | translate(locale=LANG) }}
+            </legend>
+            {% if builder_upgraded %}
+            <p class="rcms-hint rcms-mb-2">
+                <span class="material-symbols-rounded sm">upgrade</span>
+                {{ "This page's structure was updated. New fields show their defaults; content from removed fields is kept and will save when you save this page." | translate(locale=LANG) }}
+            </p>
+            {% endif %}
+            <div id="ptb-body" data-rules="{{ builder_rules_json }}">
+                {{ builder_body_html | safe }}
+            </div>
+        </fieldset>
+        <script src="/cms-admin/static/page_builder_rules.js?v={{ cms_asset_version() }}"></script>
+        {% endif %}
+
+        {# #117 — InlinePanel: 1-N sub-row collections declared by the
+           page-type handler. Phase 1 ships a stacked layout (no drag
+           reorder yet) with Add / Remove buttons. Form keys land as
+           `inline__<panel>__<idx>__<field>`. Removed rows post a
+           `__deleted=1` sentinel so the server-side extractor skips
+           them. #}
+        {% if inline_panels and inline_panels | length > 0 %}
+            <fieldset class="rcms-content-fieldset rcms-inline-panel-card">
+                <legend>
+                    <span class="material-symbols-rounded sm rcms-icon-bullet">view_list</span>
+                    {{ "Related" | translate(locale=LANG) }}
+                </legend>
+                <ul class="rcms-inline-panel-list" role="list">
+                    {% for panel in inline_panels %}
+                        <li class="rcms-inline-panel-list-item" data-inline-panel="{{ panel.spec.name }}">
+                            <div class="rcms-inline-panel-list-head">
+                                <span class="material-symbols-rounded sm">{{ panel.spec.icon | default(value="view_list") }}</span>
+                                <strong>{{ panel.spec.label }}</strong>
+                                {% if panel.spec.max_num %}
+                                    <span class="rcms-hint rcms-inline-panel-cap">{{ "max" | translate(locale=LANG) }} {{ panel.spec.max_num }}</span>
+                                {% endif %}
+                            </div>
+                            {% if panel.spec.help %}
+                                <p class="rcms-hint rcms-inline-panel-help">{{ panel.spec.help }}</p>
+                            {% endif %}
+                            <div class="rcms-inline-panel-rows" data-inline-rows>
+                                {% for row in panel.rows %}
+                                    <div class="rcms-inline-panel-row" data-inline-row data-row-idx="{{ loop.index0 }}">
+                                        <div class="rcms-inline-panel-row-header">
+                                            <strong>#{{ loop.index }}</strong>
+                                            <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small rcms-inline-panel-remove" data-inline-remove>
+                                                <span class="material-symbols-rounded sm">delete</span> {{ "Remove" | translate(locale=LANG) }}
+                                            </button>
+                                        </div>
+                                        {% for f in panel.spec.fields %}
+                                            <div class="rcms-field">
+                                                <label>{{ f.label }}</label>
+                                                <input type="text"
+                                                       name="inline__{{ panel.spec.name }}__{{ loop.index0 }}__{{ f.name }}"
+                                                       value="{{ row[f.name] | default(value='') }}">
+                                                {% if f.help %}<div class="rcms-hint">{{ f.help }}</div>{% endif %}
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <button type="button" class="rcms-btn rcms-btn-tonal rcms-btn-small rcms-inline-panel-add" data-inline-add
+                                    data-panel-name="{{ panel.spec.name }}"
+                                    data-fields="{% for f in panel.spec.fields %}{{ f.name }}{% if not loop.last %},{% endif %}{% endfor %}">
+                                <span class="material-symbols-rounded sm">add</span> {{ "Add row" | translate(locale=LANG) }}
+                            </button>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </fieldset>
+        {% endif %}
+    </section>
+
+    {# -------- Promote / SEO tab -------- #}
+    <section class="rcms-tab-panel" id="tab-promote" role="tabpanel" data-tab-panel="promote" hidden>
+        <div class="rcms-field">
+            <label>{{ "SEO title" | translate(locale=LANG) }}</label>
+            <input type="text" name="seo_title" value="{{ page.seo_title | default(value="") }}" maxlength="70">
+            <div class="rcms-hint">{{ "Overrides <title>. Leave empty to fall back to the page title." | translate(locale=LANG) }}</div>
+        </div>
+
+        <div class="rcms-field">
+            <label>{{ "SEO description" | translate(locale=LANG) }}</label>
+            <textarea name="seo_description" maxlength="200">{{ page.seo_description | default(value="") }}</textarea>
+            <div class="rcms-hint">{{ "Shown in search results. Max 200 chars." | translate(locale=LANG) }}</div>
+        </div>
+
+        <div class="rcms-field-row">
+            <div class="rcms-field rcms-checkbox-field">
+                <input type="checkbox" id="robots_index" name="robots_index" {% if page.robots_index %}checked{% endif %}>
+                <label for="robots_index">{{ "Allow search engines to index this page" | translate(locale=LANG) }}</label>
+            </div>
+            <div class="rcms-field">
+                <label>{{ "Sitemap priority" | translate(locale=LANG) }}</label>
+                <input type="number" name="sitemap_priority" step="0.1" min="0" max="1" value="{{ page.sitemap_priority | default(value=0.5) }}">
+                <div class="rcms-hint">{{ "0.0–1.0 per sitemaps.org spec." | translate(locale=LANG) }}</div>
+            </div>
+        </div>
+
+        <div class="rcms-field rcms-checkbox-field">
+            <input type="checkbox" id="show_in_menus" name="show_in_menus" {% if page.show_in_menus %}checked{% endif %}>
+            <label for="show_in_menus">{{ "Show in menus" | translate(locale=LANG) }}</label>
+        </div>
+        <p class="rcms-hint rcms-page-form-subhint rcms-mt-0">
+            {{ "Flag this page so it appears in the <a href='{url}'>navigation editor</a>'s page picker as a suggested entry." | translate(locale=LANG, url=url(name='rcms-admin:navigation:list')) | safe }}
+        </p>
+
+        {# Per-page template. Sits with routing rather than in its own
+           section: like the fields above it decides how the request is
+           answered, not what the page says. #}
+        <h3 class="rcms-page-form-subheading">{{ "Template" | translate(locale=LANG) }}</h3>
+        <div class="rcms-field">
+            <label for="template_override">{{ "Template" | translate(locale=LANG) }}</label>
+            <input type="text" id="template_override" name="template_override"
+                   value="{{ page.template_override | default(value="") }}"
+                   maxlength="255"
+                   placeholder="{{ chosen_type.default_template | default(value="") }}">
+            <div class="rcms-hint">
+                {{ "Renders this page instead of the one its type uses. Leave empty to follow the type. A name that doesn't exist falls back to the type's template rather than breaking the page." | translate(locale=LANG) }}
+            </div>
+        </div>
+
+        {# Headless preview route. Only meaningful for a site rendered by
+           a separate frontend, so it sits with the other routing fields
+           rather than in its own section. #}
+        <h3 class="rcms-page-form-subheading">{{ "Headless preview" | translate(locale=LANG) }}</h3>
+        <div class="rcms-field">
+            <label for="preview_path">{{ "Frontend route" | translate(locale=LANG) }}</label>
+            <input type="text" id="preview_path" name="preview_path"
+                   value="{{ page.preview_path | default(value="") }}"
+                   maxlength="510"
+                   placeholder="{{ page.url_path | default(value="/") }}">
+            <div class="rcms-hint">
+                {{ "Where this page lives on your frontend, when that differs from its CMS path. Leave empty to use <code>{path}</code>. A path like <code>/product/ai-engine</code> replaces the path in the site-wide preview template; a full URL replaces the template outright, for a page another app renders." | translate(locale=LANG, path=page.url_path | default(value="/")) | safe }}
+            </div>
+        </div>
+
+        {# Scheduling — #12. Set the status dropdown above to
+           "scheduled" + a `go-live` date for editorial pre-publishing.
+           A background sweep on every admin list view flips the
+           status when the times pass. Times are treated as UTC for
+           now — per-user timezones land with #13. #}
+        <h3 class="rcms-page-form-subheading">{{ "Schedule" | translate(locale=LANG) }}</h3>
+        <p class="rcms-hint rcms-page-form-subhint">
+            {{ "Auto-flip the page status on a timer. Pair <strong>Go live at</strong> with status <code>scheduled</code> to publish later; set <strong>Expire at</strong> on a published page to auto-archive it. Both fields are treated as UTC until per-user timezones land." | translate(locale=LANG) | safe }}
+        </p>
+        <div class="rcms-field-row">
+            <div class="rcms-field">
+                <label>{{ "Go live at" | translate(locale=LANG) }}</label>
+                <input type="datetime-local" name="go_live_at"
+                       value="{% if page.go_live_at %}{{ page.go_live_at | date(format='%Y-%m-%dT%H:%M') }}{% endif %}">
+                <div class="rcms-hint">{{ "When <code>status = scheduled</code>, the sweep flips to <code>published</code> at this moment." | translate(locale=LANG) | safe }}</div>
+            </div>
+            <div class="rcms-field">
+                <label>{{ "Expire at" | translate(locale=LANG) }}</label>
+                <input type="datetime-local" name="expire_at"
+                       value="{% if page.expire_at %}{{ page.expire_at | date(format='%Y-%m-%dT%H:%M') }}{% endif %}">
+                <div class="rcms-hint">{{ "When <code>status = published</code>, the sweep flips to <code>archived</code> at this moment." | translate(locale=LANG) | safe }}</div>
+            </div>
+        </div>
+
+        {# #189 — Page tags. Stored in cms_page_tag (one row per
+           tag); the save handler splits the comma-separated form
+           field + normalizes + replaces the page's tag set. #}
+        <h3 class="rcms-page-form-subheading">{{ "Tags" | translate(locale=LANG) }}</h3>
+        <p class="rcms-hint rcms-page-form-subhint">
+            {{ "Comma-separated keywords for organizing this page on listings, feeds, and the public API's <code>?tag=…</code> filter. Tags are normalized (lowercased, whitespace → dashes)." | translate(locale=LANG) | safe }}
+        </p>
+        <div class="rcms-field">
+            <label>{{ "Tags" | translate(locale=LANG) }}</label>
+            <input type="text" name="tags" list="page-tag-suggestions"
+                   value="{{ page_tags_csv | default(value='') }}"
+                   placeholder="{{ "release, marketing, q4-launch" | translate(locale=LANG) }}">
+            <datalist id="page-tag-suggestions">
+                {% for t in all_tags %}
+                    <option value="{{ t.name }}">{{ t.count }} {{ "page" | translate(locale=LANG) }}{% if t.count != 1 %}s{% endif %}</option>
+                {% endfor %}
+            </datalist>
+            <div class="rcms-hint">
+                {{ "Existing tags surface as suggestions in the picker." | translate(locale=LANG) }}
+            </div>
+        </div>
+
+        {# #842 — Categories. One multi-value group across every
+           vocabulary: the hidden `categories` field carries the chosen
+           ids as a JSON array, kept in sync by cms-ux.js. #}
+        {% if category_groups %}
+        <h3 class="rcms-page-form-subheading">{{ "Categories" | translate(locale=LANG) }}</h3>
+        <p class="rcms-hint rcms-page-form-subhint">
+            {{ "File this page under one or more categories. Listing pages and templates can show pages by category." | translate(locale=LANG) }}
+        </p>
+        <div class="rcms-field">
+            <div class="rcms-checkbox-group" data-widget-multivalue="checkboxes" data-name="categories">
+                <input type="hidden" name="categories" value="{{ page_category_ids | default(value='[]') }}">
+                {% for g in category_groups %}
+                    {% if category_groups | length > 1 %}<label>{{ g.taxonomy }}</label>{% endif %}
+                    {% for opt in g.options %}
+                        <label class="rcms-checkbox-option{% if opt.depth == 2 %} rcms-ml-1{% elif opt.depth == 3 %} rcms-ml-2{% elif opt.depth > 3 %} rcms-ml-3{% endif %}">
+                            <input type="checkbox" value="{{ opt.id }}" data-multivalue-option{% if opt.checked %} checked{% endif %}>
+                            {{ opt.name }}
+                        </label>
+                    {% endfor %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# #183 — Social sharing (Open Graph + Twitter card). All
+           fields fall back to title / seo_description / first body
+           image when empty. #}
+        <h3 class="rcms-page-form-subheading">{{ "Social sharing" | translate(locale=LANG) }}</h3>
+        <p class="rcms-hint rcms-page-form-subhint">
+            {{ "Override the title / description / preview image shown when this page is shared on Facebook, X (Twitter), LinkedIn, Slack, etc. Leave any field empty to fall back to the page title / SEO description." | translate(locale=LANG) }}
+        </p>
+        <div class="rcms-field">
+            <label>{{ "OG title" | translate(locale=LANG) }}</label>
+            <input type="text" name="og_title" maxlength="120"
+                   value="{{ page.og_title | default(value='') }}">
+            <div class="rcms-hint">{{ "Falls back to the SEO title or page title." | translate(locale=LANG) }}</div>
+        </div>
+        <div class="rcms-field">
+            <label>{{ "OG description" | translate(locale=LANG) }}</label>
+            <textarea name="og_description" maxlength="300">{{ page.og_description | default(value='') }}</textarea>
+            <div class="rcms-hint">{{ "Falls back to the SEO description." | translate(locale=LANG) }}</div>
+        </div>
+        <div class="rcms-field-row">
+            <div class="rcms-field">
+                <label>{{ "OG image" | translate(locale=LANG) }}</label>
+                {# Standard media picker (upload or choose from the library) —
+                   the shared chooser overlay wired by cms-ux.js writes the
+                   selected media id into the hidden `og_image_media_id`. #}
+                <div class="rcms-chooser rcms-media-chooser" data-chooser data-chooser-kind="media">
+                    <input type="hidden" name="og_image_media_id"
+                           value="{{ page.og_image_media_id | default(value='') }}" data-chooser-input>
+                    <img class="rcms-media-preview" data-chooser-preview alt=""
+                         onerror="this.style.display='none'"
+                         {% if page.og_image_media_id %}src="/__media__/raw/{{ page.og_image_media_id }}"{% else %}hidden{% endif %}>
+                    <button type="button" class="rcms-btn rcms-btn-outlined" data-chooser-open>
+                        <span class="material-symbols-rounded sm">image</span>
+                        <span data-chooser-label>
+                            {%- if page.og_image_media_id -%}#{{ page.og_image_media_id }}{%- else -%}{{ "Choose an image…" | translate(locale=LANG) }}{%- endif -%}
+                        </span>
+                    </button>
+                    <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-chooser-clear
+                            {% if not page.og_image_media_id %}style="display:none"{% endif %}>
+                        {{ "Clear" | translate(locale=LANG) }}
+                    </button>
+                </div>
+                <div class="rcms-hint">{{ "Used for og:image + twitter:image. Falls back to the first image in the body." | translate(locale=LANG) }}</div>
+            </div>
+            <div class="rcms-field">
+                <label>{{ "Twitter card" | translate(locale=LANG) }}</label>
+                <select name="twitter_card">
+                    <option value="summary_large_image"{% if page.twitter_card == "summary_large_image" %} selected{% endif %}>{{ "Summary, large image" | translate(locale=LANG) }}</option>
+                    <option value="summary"{% if page.twitter_card == "summary" %} selected{% endif %}>{{ "Summary" | translate(locale=LANG) }}</option>
+                </select>
+                <div class="rcms-hint">{{ "Sets <code>twitter:card</code>. Default is <code>summary_large_image</code>." | translate(locale=LANG) | safe }}</div>
+            </div>
+        </div>
+    </section>
+
+    {# -------- Handler-contributed tabs --------
+       Each is the raw HTML the handler returned via
+       `extra_tabs()`. They sit inside the main <form> so any
+       `<input>` they declare submits with the canonical save and
+       lands in `PageTypeHandler::save_extension`'s HashMap. #}
+    {% if extra_tabs and extra_tabs | length > 0 %}
+        {% for t in extra_tabs %}
+        <section class="rcms-tab-panel" id="tab-{{ t.name }}" role="tabpanel" data-tab-panel="{{ t.name }}" hidden>
+            {{ t.html | safe }}
+        </section>
+        {% endfor %}
+    {% endif %}
+
+    {# #174 — per-page Theme tab removed. The page-edit POST still
+       accepts `theme_id` so host integrations that drive it
+       externally keep working, but the editor UI no longer surfaces
+       the picker. #}
+
+    {# No bottom form-actions — Save + Cancel live in the topbar's
+       action bar above (kebab + offscreen submit via `form=`). #}
+</form>
+
+{# ============================================================
+   Translation editor — only when ?locale=<non-default>.
+   ============================================================ #}
+{% else %}
+<form id="page-translate-form" method="post" action="{{ url(name='rcms-admin:pages:translate', id=page.id) }}?locale={{ editing_locale.code }}" class="rcms-card rcms-page-form-translate">
+    {{ csrf_token | csrf_input | safe }}
+    <div class="rcms-page-form-notice rcms-page-form-notice--translation">
+        <strong><span class="material-symbols-rounded sm">info</span> {{ "Translation mode." | translate(locale=LANG) }}</strong>
+        {% set locname = editing_locale.name | escape %}
+        {{ "The left column is the original text; the right column is the <strong>{name}</strong> text. Leave a box empty to show the original." | translate(locale=LANG, name=locname) | safe }}
+    </div>
+
+    {# Core fields: title, seo_title, seo_description. Always shown. #}
+    <h3 class="rcms-page-form-subheading">{{ "Core fields" | translate(locale=LANG) }}</h3>
+
+    <div class="rcms-tr-row">
+        <div class="rcms-canonical">
+            <div class="rcms-lbl"><span class="material-symbols-rounded sm">edit_note</span> {{ "Title (canonical)" | translate(locale=LANG) }}</div>
+            <div class="rcms-canonical-text">{%- if page.title %}{{ page.title }}{% else %}<span class="rcms-placeholder">{{ "(empty)" | translate(locale=LANG) }}</span>{% endif -%}</div>
+        </div>
+        <div>
+            <label class="rcms-tr-lbl"><span class="material-symbols-rounded sm">translate</span> {{ "Title" | translate(locale=LANG) }} ({{ editing_locale.code }})</label>
+            <input type="text" name="tr__title" value="{{ core_translations.title | default(value="") }}" placeholder="{{ page.title }}">
+        </div>
+    </div>
+
+    <div class="rcms-tr-row">
+        <div class="rcms-canonical">
+            <div class="rcms-lbl"><span class="material-symbols-rounded sm">edit_note</span> {{ "SEO title (canonical)" | translate(locale=LANG) }}</div>
+            <div class="rcms-canonical-text">{%- if page.seo_title %}{{ page.seo_title }}{% else %}<span class="rcms-placeholder">{{ "(empty, falls back to title)" | translate(locale=LANG) }}</span>{% endif -%}</div>
+        </div>
+        <div>
+            <label class="rcms-tr-lbl"><span class="material-symbols-rounded sm">translate</span> {{ "SEO title" | translate(locale=LANG) }} ({{ editing_locale.code }})</label>
+            <input type="text" name="tr__seo_title" value="{{ core_translations.seo_title | default(value="") }}" placeholder="{% if page.seo_title %}{{ page.seo_title }}{% elif core_translations.title %}{{ core_translations.title }}{% else %}{{ page.title }}{% endif %}">
+        </div>
+    </div>
+
+    <div class="rcms-tr-row">
+        <div class="rcms-canonical">
+            <div class="rcms-lbl"><span class="material-symbols-rounded sm">edit_note</span> {{ "SEO description (canonical)" | translate(locale=LANG) }}</div>
+            <div class="rcms-canonical-text">{%- if page.seo_description %}{{ page.seo_description }}{% else %}<span class="rcms-placeholder">{{ "(empty)" | translate(locale=LANG) }}</span>{% endif -%}</div>
+        </div>
+        <div>
+            <label class="rcms-tr-lbl"><span class="material-symbols-rounded sm">translate</span> {{ "SEO description" | translate(locale=LANG) }} ({{ editing_locale.code }})</label>
+            <textarea name="tr__seo_description" placeholder="{{ page.seo_description }}">{{ core_translations.seo_description | default(value="") }}</textarea>
+        </div>
+    </div>
+
+    {# #i18n — per-leaf StreamField translations, including nested blocks.
+       Each text field in the body is a row (canonical left, override
+       right), grouped per block instance and indented by nesting depth.
+       Inputs reuse the `tr__<path>` save convention; blank = fall back to
+       canonical. #}
+    {% if stream_translations and stream_translations | length > 0 %}
+    <h3 class="rcms-page-form-subheading">{{ "Body content" | translate(locale=LANG) }}</h3>
+    {% for sf in stream_translations %}
+    <div class="rcms-tr-stream">
+        <div class="rcms-tr-stream-field"><span class="material-symbols-rounded sm">view_stream</span> {{ sf.label | default(value=sf.field) }}</div>
+        {% for g in sf.groups %}
+        {% set tr_depth = g.depth %}{% if tr_depth > 6 %}{% set tr_depth = 6 %}{% endif %}
+        <div class="rcms-tr-block{% if tr_depth > 0 %} rcms-tr-block--d{{ tr_depth }}{% endif %}">
+            {% if g.block_label %}<div class="rcms-tr-block-head"><span class="material-symbols-rounded sm">widgets</span> {{ g.block_label }}</div>{% endif %}
+            {% for leaf in g.leaves %}
+            <div class="rcms-tr-row">
+                <div class="rcms-canonical">
+                    <div class="rcms-lbl"><span class="material-symbols-rounded sm">subject</span> {{ leaf.field_label }} {{ "(canonical)" | translate(locale=LANG) }}</div>
+                    {% if leaf.canonical_html %}<div class="rcms-canonical-rich">{{ leaf.canonical_html | safe }}</div>{% else %}<div class="rcms-canonical-text">{%- if leaf.canonical %}{{ leaf.canonical }}{% else %}<span class="rcms-placeholder">{{ "(empty)" | translate(locale=LANG) }}</span>{% endif -%}</div>{% endif %}
+                </div>
+                <div>
+                    <label class="rcms-tr-lbl"><span class="material-symbols-rounded sm">translate</span> {{ leaf.field_label }} ({{ editing_locale.code }})</label>
+                    {% if leaf.widget_kind == "text" %}
+                    <input type="text" name="tr__{{ leaf.path }}" value="{{ leaf.value }}">
+                    {% else %}
+                    <textarea name="tr__{{ leaf.path }}" rows="4"{% if leaf.widget_kind == "richtext" %} data-widget-mode="richtext"{% endif %}>{{ leaf.value }}</textarea>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {# Extra fields: anything else already in cms_translation for this page+locale. #}
+    {% if extra_translations | length > 0 %}
+    <h3 class="rcms-page-form-subheading">{{ "Custom keys (template fields)" | translate(locale=LANG) }}</h3>
+    <p class="rcms-hint rcms-page-form-subhint">{{ "These keys are referenced by the page-type template (e.g. <code>nav_about</code>, <code>intro</code>, <code>body</code>). Clear a value to remove the override." | translate(locale=LANG) | safe }}</p>
+
+    {% for pair in extra_translations %}
+    <div class="rcms-tr-row">
+        <div class="rcms-canonical">
+            <div class="rcms-lbl"><span class="material-symbols-rounded sm">code</span> {{ "field_path:" | translate(locale=LANG) }} {{ pair.0 }}</div>
+            <span class="rcms-placeholder">{{ "(template-defined string — no canonical source on cms_page)" | translate(locale=LANG) }}</span>
+        </div>
+        <div>
+            <label class="rcms-tr-lbl"><span class="material-symbols-rounded sm">translate</span> {{ pair.0 }} ({{ editing_locale.code }})</label>
+            <textarea name="tr__{{ pair.0 }}">{{ pair.1 }}</textarea>
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {# Add new translation key. #}
+    <h3 class="rcms-page-form-subheading">{{ "Add new key" | translate(locale=LANG) }}</h3>
+    <p class="rcms-hint rcms-page-form-subhint">{{ "For arbitrary <code>field_path</code> strings referenced by your templates that don't have a translation yet." | translate(locale=LANG) | safe }}</p>
+    <div class="rcms-tr-row">
+        <div>
+            <label class="rcms-tr-lbl"><span class="material-symbols-rounded sm">add</span> {{ "Field path" | translate(locale=LANG) }}</label>
+            <input type="text" name="new_field_path" placeholder="{{ "e.g. intro, hero_heading, nav_about" | translate(locale=LANG) }}" pattern="[A-Za-z0-9_.\-]*" maxlength="255">
+        </div>
+        <div>
+            <label class="rcms-tr-lbl"><span class="material-symbols-rounded sm">translate</span> {{ "Value" | translate(locale=LANG) }} ({{ editing_locale.code }})</label>
+            <textarea name="new_field_value" placeholder="{{ "Localized value…" | translate(locale=LANG) }}"></textarea>
+        </div>
+    </div>
+
+    {# No bottom form-actions — Save translations lives in the
+       topbar; Back-to-canonical lives in the kebab menu. #}
+</form>
+{% endif %}
+
+{# -------- Revisions tab (outside the main <form> — per-row
+   revert sub-forms own the POSTs). Always rendered when there
+   ARE revisions; the tab JS hides it until selected. -------- #}
+{% if mode == "edit" and not translation_mode and revisions and revisions | length > 0 %}
+<section class="rcms-tab-panel rcms-card rcms-revisions-card" data-tab-panel="revisions" id="tab-revisions" role="tabpanel" hidden>
+    {# #192 — audit log timeline (above the Revisions table). Lists
+       every meaningful action on the page (publish, edit, move,
+       copy, alias create, restore, lock / unlock, workflow events).
+       Revisions answer "what changed"; this answers "who did what
+       when". #}
+    {% if page_log and page_log | length > 0 %}
+        <h2>
+            <span class="material-symbols-rounded sm rcms-icon-primary">timeline</span>
+            {{ "Activity" | translate(locale=LANG) }}
+            <a href="{{ url(name='rcms-admin:pages:log-csv', id=page.id) }}"
+               class="rcms-btn rcms-btn-text rcms-btn-small rcms-ml-3"
+               title="{{ "Download every log entry for this page as CSV" | translate(locale=LANG) }}">
+                <span class="material-symbols-rounded sm">download</span> {{ "CSV" | translate(locale=LANG) }}
+            </a>
+        </h2>
+        <p class="rcms-hint rcms-page-form-subhint">
+            {{ "Most-recent first. Showing the latest" | translate(locale=LANG) }} {{ page_log | length }} {{ "entries." | translate(locale=LANG) }}
+        </p>
+        <table class="rcms-data rcms-mb-4">
+            <thead>
+                <tr>
+                    <th>{{ "When" | translate(locale=LANG) }}</th>
+                    <th>{{ "Action" | translate(locale=LANG) }}</th>
+                    <th>{{ "By" | translate(locale=LANG) }}</th>
+                    <th>{{ "Details" | translate(locale=LANG) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for entry in page_log %}
+                <tr>
+                    <td class="rcms-cell-meta" title="{{ entry.created_at }}">{{ entry.created_at | naturaltime }}</td>
+                    <td><span class="rcms-tag rcms-tag--small">{{ entry.action }}</span></td>
+                    <td>{% if entry.actor_username %}{{ entry.actor_username }}{% else %}<span class="rcms-text-muted-soft">{{ "system" | translate(locale=LANG) }}</span>{% endif %}</td>
+                    <td>{{ entry.message }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+    <h2>
+        <span class="material-symbols-rounded sm rcms-icon-primary">history</span>
+        {{ "Revisions" | translate(locale=LANG) }}
+    </h2>
+    <p class="rcms-hint rcms-page-form-subhint">{{ "Every save captures a snapshot. Revert restores the page's content + status to the chosen point; tree placement (parent, slug, URL) is preserved." | translate(locale=LANG) }}</p>
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>{{ "When" | translate(locale=LANG) }}</th>
+                <th>{{ "By" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for r in revisions %}
+            <tr>
+                <td>
+                    <strong>{{ r.sequence }}</strong>
+                    {# #147 — autosave-tag chip when the revision was
+                       captured by the silent autosave path. #}
+                    {% if r.snapshot and r.snapshot.__autosave %}
+                        <span class="rcms-tag draft rcms-tag--small" title="{{ "Silent autosave — page wasn't manually saved" | translate(locale=LANG) }}">{{ "auto" | translate(locale=LANG) }}</span>
+                    {% endif %}
+                </td>
+                <td class="rcms-cell-meta" title="{{ r.created_at }}">{{ r.created_at | naturaltime }}</td>
+                <td>{% if r.created_by %}#{{ r.created_by }}{% else %}<span class="rcms-text-muted-soft">{{ "system" | translate(locale=LANG) }}</span>{% endif %}</td>
+                <td class="rcms-actions">
+                    {% if loop.first %}
+                        <span class="rcms-tag published rcms-tag--small">{{ "current" | translate(locale=LANG) }}</span>
+                    {% else %}
+                        <form method="post" action="{{ url(name='rcms-admin:pages:revert', id=page.id, rev_id=r.id) }}" onsubmit="return confirm('{{ "Revert page to revision #" | translate(locale=LANG) }}{{ r.sequence }}? {{ "Tree placement (parent, slug, URL) is preserved; only content + status reset." | translate(locale=LANG) }}');">
+                            {{ csrf_token | csrf_input | safe }}
+                            <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+                                <span class="material-symbols-rounded sm">restart_alt</span> {{ "Revert" | translate(locale=LANG) }}
+                            </button>
+                        </form>
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+
+</div>{# /.edit-pane #}
+
+{% if mode == "edit" %}
+<div class="rcms-split-handle" data-resize-handle role="separator"
+     aria-label="{{ "Resize preview" | translate(locale=LANG) }}" aria-orientation="vertical"></div>
+{# Sidebar preview via the shared pane (`_preview_pane.html`) + driver
+   (`cms-preview.js`). Pages are the richest consumer: an HTML render, the
+   API surface, and optionally a decoupled frontend. #}
+{% set preview_label = "Page preview" | translate(locale=LANG) %}
+{% set preview_url = url(name='rcms-admin:pages:preview', id=page.id) %}
+{% if translation_mode %}{% set preview_url = preview_url ~ "?locale=" ~ editing_locale.code %}{% endif %}
+{% set preview_form = "page-edit-form" %}
+{% set preview_variant = page.page_type_id | default(value=0) %}
+{% set preview_json = true %}
+{% set preview_site_url = headless_preview_url | default(value="") %}
+{% set preview_unavailable_hint = "This page type has no template to render. Switch to the API response to see what this page returns." | translate(locale=LANG) %}
+{% include "rcms_admin/_preview_pane.html" %}
+{% endif %}
+
+</div>{# /.edit-with-preview #}
+
+{% endblock %}
+
+{% block scripts %}
+{# -- Tab switching JS — runs in both new + edit modes so the panels
+      are reachable everywhere the tab strip renders. -- #}
+<script>
+// -- Tab switching --
+// Tabs share one form across panels: switching only toggles the
+// `hidden` attribute on `.rcms-tab-panel` and `aria-selected` on triggers.
+// Active tab persists per page-type-id so editors return to where
+// they left off. Keyboard nav (left/right/Home/End) follows WAI-ARIA
+// tab pattern. URL hash (#tab=promote) takes precedence on load so
+// deep links work.
+(function () {
+    "use strict";
+    const strip = document.querySelector("[data-tab-strip]");
+    if (!strip) return;
+    const triggers = Array.from(strip.querySelectorAll("[data-tab-trigger]"));
+    const panels = Array.from(document.querySelectorAll("[data-tab-panel]"));
+    if (triggers.length === 0 || panels.length === 0) return;
+
+    const TAB_KEY = "rcms_edit_tab:{{ page.page_type_id | default(value=0) }}";
+
+    function activate(name, opts) {
+        opts = opts || {};
+        const found = triggers.find(t => t.dataset.tabTrigger === name);
+        if (!found) return false;
+        for (const t of triggers) {
+            const isActive = t.dataset.tabTrigger === name;
+            t.setAttribute("aria-selected", isActive ? "true" : "false");
+            t.tabIndex = isActive ? 0 : -1;
+        }
+        for (const p of panels) {
+            if (p.dataset.tabPanel === name) p.removeAttribute("hidden");
+            else p.setAttribute("hidden", "");
+        }
+        // The shared edit form (`#page-edit-form`, a `.rcms-card`) wraps only the
+        // Content + Promote panels. On auxiliary tabs (privacy / comments /
+        // references / a11y / seo / revisions — panels that live OUTSIDE the
+        // form) hide the form so its empty card chrome doesn't render as an
+        // orphan bar. Use inline display (not [hidden]) so a `.rcms-card` display
+        // rule can't override it; it stays in the DOM so the top Save button
+        // can still submit it.
+        const editForm = document.getElementById("page-edit-form");
+        if (editForm) {
+            const activePanel = panels.find(p => p.dataset.tabPanel === name);
+            editForm.style.display = activePanel && editForm.contains(activePanel) ? "" : "none";
+        }
+        try { localStorage.setItem(TAB_KEY, name); } catch (_) {}
+        if (opts.focus) found.focus();
+        // Bring the active tab into view when the strip is overflowing.
+        try { found.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (_) {}
+        return true;
+    }
+
+    // Initial activation: URL hash > localStorage > first tab.
+    const fromHash = (location.hash.match(/tab=([\w-]+)/) || [])[1];
+    const fromStore = (function () {
+        try { return localStorage.getItem(TAB_KEY); } catch (_) { return null; }
+    })();
+    if (!(fromHash && activate(fromHash)) && !(fromStore && activate(fromStore))) {
+        activate(triggers[0].dataset.tabTrigger);
+    }
+
+    // Click handler.
+    for (const t of triggers) {
+        t.addEventListener("click", function () { activate(t.dataset.tabTrigger); });
+    }
+
+    // Keyboard nav per WAI-ARIA tab pattern.
+    strip.addEventListener("keydown", function (e) {
+        const idx = triggers.findIndex(t => t === document.activeElement);
+        if (idx === -1) return;
+        let next = null;
+        if (e.key === "ArrowRight") next = triggers[(idx + 1) % triggers.length];
+        else if (e.key === "ArrowLeft") next = triggers[(idx - 1 + triggers.length) % triggers.length];
+        else if (e.key === "Home") next = triggers[0];
+        else if (e.key === "End") next = triggers[triggers.length - 1];
+        if (next) {
+            e.preventDefault();
+            activate(next.dataset.tabTrigger, { focus: true });
+        }
+    });
+})();
+</script>
+
+{# -- Preview-pane JS — only mounted in edit mode (the new-page
+      form has no preview pane). Handles drag-to-resize, the
+      hide/show toggle, the refresh-with-form-state submit, and
+      the viewport-width buttons. -- #}
+{% if mode == "edit" %}
+{# The preview driver is shared (`cms-preview.js`); it reads its whole
+   configuration off the pane's data attributes above. It used to live
+   inline here, which is why nothing else could reuse it. #}
+<script src="/cms-admin/static/cms-preview.js?v={{ cms_asset_version() }}" defer></script>
+{% endif %}
+
+{# -- Slug auto-fill JS — only on new-page form. Mirrors a slugified
+      title into the slug input on each keystroke until the user
+      manually edits the slug (then it stops). Server-side dedup
+      adds a `-copy` / `-copy-N` suffix at submit time if needed. -- #}
+{% if mode == "new" %}
+<script>
+(function () {
+    "use strict";
+    const titleEl = document.querySelector("input[name=\"title\"]");
+    const slugEl = document.querySelector("input[name=\"slug\"]");
+    if (!titleEl || !slugEl) return;
+
+    // Mirrors `slugify()` in src/admin/handlers.rs so client + server
+    // settle on the same value when the field is left untouched.
+    function slugify(raw) {
+        let out = "";
+        let lastHyphen = true;
+        for (const ch of raw.toLowerCase()) {
+            if (/[a-z0-9]/.test(ch)) {
+                out += ch;
+                lastHyphen = false;
+            } else if (!lastHyphen) {
+                out += "-";
+                lastHyphen = true;
+            }
+        }
+        while (out.endsWith("-")) out = out.slice(0, -1);
+        if (out.length > 60) {
+            out = out.slice(0, 60);
+            while (out.endsWith("-")) out = out.slice(0, -1);
+        }
+        return out;
+    }
+
+    // Stop auto-syncing as soon as the user edits the slug directly.
+    // `input` fires for typing, paste, drop, and programmatic changes
+    // we explicitly skip (see flag below).
+    let dirty = slugEl.value.trim().length > 0;
+    let suppress = false;
+    slugEl.addEventListener("input", function () {
+        if (!suppress) dirty = true;
+    });
+
+    titleEl.addEventListener("input", function () {
+        if (dirty) return;
+        suppress = true;
+        slugEl.value = slugify(titleEl.value);
+        suppress = false;
+    });
+})();
+</script>
+{% endif %}
+
+{#- Edit-only behaviour: lock heartbeat + release, autosave, presence
+    banner, comment pins. They used to sit inside the new-page block
+    above and so never ran on an existing page. -#}
+{% if mode == "edit" %}
+<script>
+// #72 — Editor lock heartbeat. The page-edit form carries
+// `data-lock-heartbeat-url` + `data-lock-heartbeat-secs` only when
+// the current user holds the lock. We ping that URL on the declared
+// cadence to refresh the TTL. A 409 means another editor stole the
+// lock (shouldn't happen with the same user_id, but if force-unlock
+// ran during this session the next ping will land 409); reload to
+// surface the banner.
+(function () {
+    const form = document.getElementById("page-edit-form");
+    if (!form) return;
+    const url = form.dataset.lockHeartbeatUrl;
+    const secs = parseInt(form.dataset.lockHeartbeatSecs || "0", 10);
+    if (!url || !secs || secs < 5) return;
+    const csrfCookie = document.cookie
+        .split("; ")
+        .find((c) => c.startsWith("rustango_csrf="));
+    const csrfToken = csrfCookie ? decodeURIComponent(csrfCookie.split("=")[1]) : "";
+    // #106 — sticky `is_editing` once the form is touched, so the
+    // presence banner can render "X is editing" vs "X is viewing".
+    let isEditing = false;
+    form.addEventListener("input", () => {
+        isEditing = true;
+    });
+    const heartbeat = async () => {
+        try {
+            const suffix = isEditing ? "?is_editing=1" : "";
+            const res = await fetch(url + suffix, {
+                method: "POST",
+                headers: { "X-CSRF-Token": csrfToken },
+            });
+            if (res.status === 409) {
+                if (window.rcmsToast) {
+                    window.rcmsToast({
+                        level: "warning",
+                        body: "Another editor took over this page. Reloading…",
+                        ttl: 4000,
+                    });
+                }
+                setTimeout(() => location.reload(), 1500);
+            }
+        } catch (_) {
+            // Network blips are fine — the lock has a TTL margin.
+        }
+    };
+    setInterval(heartbeat, secs * 1000);
+    // Leaving the editor gives the lock back at once (keepalive survives
+    // the unload); otherwise it would block colleagues for its whole TTL.
+    const releaseUrl = form.dataset.lockReleaseUrl;
+    if (releaseUrl) {
+        window.addEventListener("pagehide", () => {
+            fetch(releaseUrl, { method: "POST", keepalive: true, headers: { "X-CSRF-Token": csrfToken } }).catch(() => {});
+        });
+    }
+})();
+
+// #147 — Draft autosave. Polls `data-autosave-url` every
+// `data-autosave-secs` (default 30s) when the form is dirty. POSTs
+// the same body as the regular save. Throttles when the tab isn't
+// visible. Surfaces last-save time as a small floating chip in the
+// action bar.
+(function () {
+    const form = document.getElementById("page-edit-form");
+    if (!form) return;
+    const url = form.dataset.autosaveUrl;
+    const secs = parseInt(form.dataset.autosaveSecs || "0", 10);
+    if (!url || !secs || secs < 5) return;
+    const csrfCookie = document.cookie
+        .split("; ")
+        .find((c) => c.startsWith("rustango_csrf="));
+    const csrfToken = csrfCookie ? decodeURIComponent(csrfCookie.split("=")[1]) : "";
+    let dirty = false;
+    let lastSavedAt = null;
+    let suspended = false;
+    form.addEventListener("input", () => { dirty = true; });
+    form.addEventListener("change", () => { dirty = true; });
+    // After a manual save the form action triggers a navigation;
+    // any in-flight autosave naturally dies. No special handling.
+    // Floating chip — opt-in via #autosave-chip if the template
+    // mounts one, otherwise create a discreet bottom-right chip.
+    let chip = document.getElementById("rcms-autosave-chip");
+    if (!chip) {
+        chip = document.createElement("div");
+        chip.id = "rcms-autosave-chip";
+        chip.className = "rcms-autosave-chip";
+        chip.setAttribute("role", "status");
+        chip.setAttribute("aria-live", "polite");
+        document.body.appendChild(chip);
+    }
+    function setChip(text, mode) {
+        chip.textContent = text || "";
+        chip.dataset.mode = mode || "";
+    }
+    function timeSince(ts) {
+        const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+        if (s < 5) return "just now";
+        if (s < 60) return `${s}s ago`;
+        const m = Math.round(s / 60);
+        return `${m}m ago`;
+    }
+    function tick() {
+        if (lastSavedAt) setChip(`Auto-saved ${timeSince(lastSavedAt)}`, "idle");
+    }
+    setInterval(tick, 5000);
+    async function autosave() {
+        if (suspended || !dirty) return;
+        if (document.visibilityState !== "visible") return;
+        setChip("Auto-saving…", "saving");
+        try {
+            const params = new URLSearchParams();
+            for (const [k, v] of new FormData(form).entries()) {
+                if (typeof v === "string") params.append(k, v);
+            }
+            const res = await fetch(url, {
+                method: "POST",
+                body: params,
+                credentials: "same-origin",
+                headers: { "X-CSRF-Token": csrfToken },
+            });
+            if (res.status === 204) {
+                lastSavedAt = Date.now();
+                dirty = false;
+                setChip("Auto-saved just now", "idle");
+                // #418 — a persisted draft means there's nothing to
+                // lose; clear the unsaved-changes navigate-away guard.
+                form.dispatchEvent(new CustomEvent("rcms:autosaved"));
+            } else if (res.status === 409) {
+                suspended = true;
+                setChip("Locked by another editor — autosave paused", "warn");
+            } else {
+                setChip("Auto-save failed (HTTP " + res.status + ")", "warn");
+            }
+        } catch (_) {
+            setChip("Auto-save failed (network)", "warn");
+        }
+    }
+    setInterval(autosave, secs * 1000);
+})();
+
+// #106 — Concurrent-editor presence banner. Polls the sessions
+// endpoint every 30s and renders inline who else is around. Hidden
+// when no one else is on this page.
+(function () {
+    const banner = document.querySelector("[data-presence-banner]");
+    if (!banner) return;
+    const url = banner.dataset.presenceUrl;
+    const textEl = banner.querySelector("[data-presence-text]");
+    if (!url || !textEl) return;
+    const refresh = async () => {
+        try {
+            const res = await fetch(url, { headers: { Accept: "application/json" } });
+            if (!res.ok) return;
+            const others = await res.json();
+            if (!Array.isArray(others) || others.length === 0) {
+                banner.style.display = "none";
+                return;
+            }
+            const editing = others.filter((s) => s.is_editing);
+            const viewing = others.filter((s) => !s.is_editing);
+            const parts = [];
+            if (editing.length > 0) {
+                const names = editing.map((s) => s.username || `user#${s.user_id}`).join(", ");
+                parts.push(`${names} ${editing.length === 1 ? "is" : "are"} editing this page`);
+            }
+            if (viewing.length > 0) {
+                const names = viewing.map((s) => s.username || `user#${s.user_id}`).join(", ");
+                parts.push(`${names} ${viewing.length === 1 ? "is" : "are"} viewing`);
+            }
+            textEl.textContent = parts.join(" · ");
+            banner.style.display = "flex";
+        } catch (_) {
+            // ignore — banner keeps its last state
+        }
+    };
+    refresh();
+    setInterval(refresh, 30 * 1000);
+})();
+
+// #81 PR 2 — inline comment anchor pins. For every known
+// commentable field (title, slug, seo_title, seo_description),
+// inject a 💬 button next to the field label. Click → open the
+// Comments side-panel + (if a thread exists for that field_path)
+// scroll-and-highlight it; otherwise pre-select the field in the
+// new-thread form so the editor can post.
+(function () {
+    const sidePanel = Array.from(document.querySelectorAll("details")).find((d) =>
+        d.querySelector("summary")?.textContent?.includes("Comments"),
+    );
+    if (!sidePanel) return;
+
+    // Harvest open-thread counts per field_path from the side panel
+    // DOM. Each open thread renders `<code class="rcms-hint">{field_path}</code>`
+    // inside the first row div.
+    const counts = new Map();
+    sidePanel.querySelectorAll("ul > li").forEach((li) => {
+        const code = li.querySelector("code.rcms-hint");
+        if (!code) return;
+        const path = code.textContent.trim();
+        counts.set(path, (counts.get(path) || 0) + 1);
+    });
+
+    // Field-anchor map: input name attribute → display label key
+    // (matches the side-panel form's field_path dropdown values).
+    const COMMENTABLE_FIELDS = ["title", "slug", "seo_title", "seo_description"];
+
+    const openSidePanelToField = (fieldPath) => {
+        sidePanel.open = true;
+        sidePanel.scrollIntoView({ behavior: "smooth", block: "start" });
+        // If a thread exists for this field, briefly outline it.
+        const li = Array.from(sidePanel.querySelectorAll("ul > li")).find((row) => {
+            const code = row.querySelector("code.rcms-hint");
+            return code && code.textContent.trim() === fieldPath;
+        });
+        if (li) {
+            li.style.transition = "background 0.4s";
+            li.style.background = "var(--md-sys-color-primary-fixed)";
+            setTimeout(() => {
+                li.style.background = "";
+            }, 1200);
+        } else {
+            // No thread yet — pre-select the field in the new-thread form.
+            const select = sidePanel.querySelector("select[name=\"field_path\"]");
+            if (select) {
+                select.value = fieldPath;
+                const bodyInput = sidePanel.querySelector("input[name=\"body\"]");
+                if (bodyInput) setTimeout(() => bodyInput.focus(), 400);
+            }
+        }
+    };
+
+    COMMENTABLE_FIELDS.forEach((name) => {
+        const input = document.querySelector(`#page-edit-form [name="${name}"]`);
+        if (!input) return;
+        const labelEl = input.parentElement?.querySelector("label");
+        if (!labelEl) return;
+        const count = counts.get(name) || 0;
+        const pin = document.createElement("button");
+        pin.type = "button";
+        pin.className = "rcms-btn rcms-btn-text rcms-btn-small";
+        pin.setAttribute("data-comment-pin", name);
+        pin.title = count > 0
+            ? `${count} open thread${count !== 1 ? "s" : ""} on ${name}`
+            : `Add a comment on ${name}`;
+        pin.style.cssText = "margin-left: 6px; padding: 0 6px; height: 24px; font-size: 11px; vertical-align: middle;";
+        pin.innerHTML = count > 0
+            ? `<span class="material-symbols-rounded sm">comment</span> ${count}`
+            : `<span class="material-symbols-rounded sm rcms-opacity-55">add_comment</span>`;
+        pin.addEventListener("click", (event) => {
+            event.preventDefault();
+            openSidePanelToField(name);
+        });
+        labelEl.appendChild(pin);
+    });
+})();
+</script>
+{% endif %}
+
+{# #117 — InlinePanel Add/Remove JS. Pure client-side: Remove
+   hides the row and injects a __deleted=1 tombstone so the server
+   skips it; Add clones a row template with the next index. #}
+<script>
+(function () {
+    "use strict";
+    const panels = document.querySelectorAll("[data-inline-panel]");
+    if (!panels.length) return;
+
+    function nextIndex(rowsEl) {
+        const used = Array.from(rowsEl.querySelectorAll("[data-row-idx]"))
+            .map((el) => parseInt(el.dataset.rowIdx, 10))
+            .filter((n) => !Number.isNaN(n));
+        return used.length === 0 ? 0 : Math.max(...used) + 1;
+    }
+
+    panels.forEach((panel) => {
+        const panelName = panel.getAttribute("data-inline-panel");
+        const rowsEl = panel.querySelector("[data-inline-rows]");
+        const addBtn = panel.querySelector("[data-inline-add]");
+
+        function wireRemove(row) {
+            const btn = row.querySelector("[data-inline-remove]");
+            if (!btn) return;
+            btn.addEventListener("click", (event) => {
+                event.preventDefault();
+                const idx = row.getAttribute("data-row-idx");
+                const tomb = document.createElement("input");
+                tomb.type = "hidden";
+                tomb.name = `inline__${panelName}__${idx}____deleted`;
+                tomb.value = "1";
+                row.appendChild(tomb);
+                row.style.display = "none";
+            });
+        }
+
+        rowsEl.querySelectorAll("[data-inline-row]").forEach(wireRemove);
+
+        if (addBtn) {
+            const fields = (addBtn.dataset.fields || "").split(",").filter(Boolean);
+            addBtn.addEventListener("click", (event) => {
+                event.preventDefault();
+                const idx = nextIndex(rowsEl);
+                const row = document.createElement("div");
+                row.className = "rcms-inline-panel-row";
+                row.setAttribute("data-inline-row", "");
+                row.setAttribute("data-row-idx", String(idx));
+                const header = document.createElement("div");
+                header.className = "rcms-inline-panel-row-header";
+                const labelEl = document.createElement("strong");
+                labelEl.textContent = `#${rowsEl.querySelectorAll("[data-inline-row]").length + 1}`;
+                const removeBtn = document.createElement("button");
+                removeBtn.type = "button";
+                removeBtn.className = "rcms-btn rcms-btn-text rcms-btn-small rcms-inline-panel-remove";
+                removeBtn.setAttribute("data-inline-remove", "");
+                removeBtn.innerHTML = `<span class="material-symbols-rounded sm">delete</span> Remove`;
+                header.appendChild(labelEl);
+                header.appendChild(removeBtn);
+                row.appendChild(header);
+                fields.forEach((name) => {
+                    const wrap = document.createElement("div");
+                    wrap.className = "rcms-field";
+                    const label = document.createElement("label");
+                    label.textContent = name;
+                    const input = document.createElement("input");
+                    input.type = "text";
+                    input.name = `inline__${panelName}__${idx}__${name}`;
+                    wrap.appendChild(label);
+                    wrap.appendChild(input);
+                    row.appendChild(wrap);
+                });
+                rowsEl.appendChild(row);
+                wireRemove(row);
+                row.querySelector("input")?.focus();
+            });
+        }
+    });
+})();
+</script>
+
+{# #115 — subscribe/unsubscribe button wiring. Plain fetch() POST so
+   the markup stays a single `<button>` instead of nested `<form>`s
+   (which would close the outer page-edit form mid-stream). #}
+<script>
+(function () {
+    "use strict";
+    const btn = document.querySelector("[data-page-subscribe]");
+    if (!btn) return;
+    const labelEl = btn.querySelector("[data-subscribe-label]");
+    const iconEl = btn.querySelector(".material-symbols-rounded");
+    const hintEl = document.querySelector("[data-subscribe-hint]");
+    btn.addEventListener("click", async function (event) {
+        event.preventDefault();
+        const subscribed = btn.getAttribute("data-subscribed") === "1";
+        const url = subscribed
+            ? btn.getAttribute("data-unsubscribe-url")
+            : btn.getAttribute("data-subscribe-url");
+        const csrfCookie = (document.cookie.split(";").find(
+            c => c.trim().startsWith("rustango_csrf=")
+        ) || "").split("=")[1] || "";
+        btn.disabled = true;
+        try {
+            const resp = await fetch(url, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "X-CSRF-Token": csrfCookie },
+            });
+            if (!resp.ok) throw new Error("HTTP " + resp.status);
+            const nowSubscribed = !subscribed;
+            btn.setAttribute("data-subscribed", nowSubscribed ? "1" : "0");
+            if (labelEl) {
+                labelEl.textContent = nowSubscribed
+                    ? "Subscribed — unsubscribe"
+                    : "Subscribe to publish events";
+            }
+            if (iconEl) {
+                iconEl.textContent = nowSubscribed ? "notifications_active" : "notifications";
+            }
+            if (hintEl) {
+                hintEl.textContent = nowSubscribed
+                    ? "You'll get an email when this page publishes."
+                    : "Get an email when this page publishes (single edit, bulk publish, or workflow finish).";
+            }
+        } catch (e) {
+            console.warn("subscribe toggle failed:", e);
+        } finally {
+            btn.disabled = false;
+        }
+    });
+})();
+
+// #208 — listen for axe-core results posted from the preview
+// iframe. The companion script `cms-axe-preview.js` runs inside
+// the iframe on every preview reload, calls `axe.run()`, and
+// posts the violations back here. We merge them into the a11y
+// card alongside the server-side heuristic findings.
+(function () {
+    const card = document.getElementById("side-panel-a11y");
+    if (!card) return;
+    const list = card.querySelector("[data-a11y-list]");
+    const emptyEl = card.querySelector("[data-a11y-empty]");
+    const errorTag = card.querySelector("[data-a11y-error-tag]");
+    const warningTag = card.querySelector("[data-a11y-warning-tag]");
+    const infoTag = card.querySelector("[data-a11y-info-tag]");
+    // Initial-render tags from server-side counts; we hide them as
+    // soon as the first axe result lands so the merged counter takes
+    // over.
+    const initialTags = card.querySelectorAll(
+        "[data-a11y-initial-error], [data-a11y-initial-warning], [data-a11y-initial-info]"
+    );
+
+    // Map axe `impact` → our internal severity bucket.
+    function impactToSeverity(impact) {
+        switch (impact) {
+            case "critical":
+            case "serious":
+                return "error";
+            case "moderate":
+                return "warning";
+            case "minor":
+            default:
+                return "info";
+        }
+    }
+
+    // Render an axe violation as a row. `nodes` is the list of
+    // affected DOM elements; we render one row per (violation,
+    // node) pair so each gets its own click-to-scroll.
+    function appendAxeRow(violation, node) {
+        const li = document.createElement("li");
+        const severity = impactToSeverity(violation.impact);
+        li.className = `rcms-a11y-row rcms-a11y-row--${severity}`;
+        li.dataset.a11ySource = "axe";
+        li.dataset.a11yTarget = node.target || "";
+
+        const icon = document.createElement("span");
+        icon.className = "material-symbols-rounded sm";
+        icon.title = "Client-side axe-core (#208)";
+        icon.textContent =
+            severity === "error" ? "error" : severity === "warning" ? "warning" : "info";
+        li.appendChild(icon);
+
+        const msg = document.createElement("span");
+        msg.className = "rcms-a11y-msg";
+        msg.textContent = `${violation.help} — ${node.failureSummary || violation.description}`;
+        li.appendChild(msg);
+
+        if (node.target) {
+            const sel = document.createElement("code");
+            sel.className = "rcms-a11y-field rcms-a11y-axe-target";
+            sel.textContent = node.target;
+            sel.title = "Click to scroll the preview to this element";
+            sel.style.cursor = "pointer";
+            sel.addEventListener("click", function () {
+                const iframe = document.querySelector(".rcms-preview-pane iframe");
+                if (!iframe || !iframe.contentWindow) return;
+                try {
+                    iframe.contentWindow.postMessage(
+                        { type: "cms-axe-scroll-to", selector: node.target },
+                        location.origin
+                    );
+                } catch (e) {
+                    console.warn("[a11y] scroll-to postMessage failed:", e);
+                }
+            });
+            li.appendChild(sel);
+        }
+
+        if (violation.helpUrl) {
+            const ref = document.createElement("a");
+            ref.href = violation.helpUrl;
+            ref.target = "_blank";
+            ref.rel = "noopener";
+            ref.className = "rcms-a11y-helpurl";
+            ref.title = `Axe rule: ${violation.id}`;
+            ref.textContent = "↗";
+            li.appendChild(ref);
+        }
+        return li;
+    }
+
+    function refreshCounts() {
+        const rows = Array.from(list.querySelectorAll(".rcms-a11y-row"));
+        let errs = 0, warns = 0, infos = 0;
+        for (const r of rows) {
+            if (r.classList.contains("rcms-a11y-row--error")) errs++;
+            else if (r.classList.contains("rcms-a11y-row--warning")) warns++;
+            else infos++;
+        }
+        function setTag(tag, n, label) {
+            if (!tag) return;
+            if (n > 0) {
+                tag.textContent = `${n} ${label}${n === 1 ? "" : "s"}`;
+                tag.hidden = false;
+            } else {
+                tag.hidden = true;
+            }
+        }
+        setTag(errorTag, errs, "error");
+        setTag(warningTag, warns, "warning");
+        setTag(infoTag, infos, "info");
+        if (emptyEl) emptyEl.hidden = rows.length > 0;
+        // Keep the Accessibility TAB badge in sync with live findings —
+        // the server-side count seeds it; axe results merge in here.
+        const a11yTab = document.querySelector('[data-tab-trigger="a11y"]');
+        if (a11yTab) {
+            let badge = a11yTab.querySelector(".rcms-tab-count");
+            if (errs > 0) {
+                if (!badge) {
+                    badge = document.createElement("span");
+                    badge.className = "rcms-tab-count";
+                    a11yTab.appendChild(badge);
+                }
+                badge.textContent = String(errs);
+            } else if (badge) {
+                badge.remove();
+            }
+        }
+    }
+
+    // First axe arrival also hides the server-side initial tags
+    // — the merged counter above replaces them.
+    let firstAxeSeen = false;
+    function handleAxeResults(violations) {
+        // Wipe previous axe rows (we re-render on every preview
+        // reload). Server-side heuristic rows are sticky.
+        for (const row of Array.from(list.querySelectorAll("[data-a11y-source='axe']"))) {
+            row.remove();
+        }
+        for (const v of violations || []) {
+            for (const node of v.nodes || []) {
+                list.appendChild(appendAxeRow(v, node));
+            }
+        }
+        if (!firstAxeSeen) {
+            firstAxeSeen = true;
+            for (const t of initialTags) t.hidden = true;
+        }
+        refreshCounts();
+        // Auto-open if there are any errors after merge.
+        const hasErrors = list.querySelector(".rcms-a11y-row--error");
+        if (hasErrors && !card.open) card.open = true;
+    }
+
+    window.addEventListener("message", function (event) {
+        if (event.origin !== location.origin) return;
+        const data = event.data;
+        if (!data || data.type !== "cms-axe-results") return;
+        handleAxeResults(data.violations);
+    });
+})();
+</script>
+{% endblock %}

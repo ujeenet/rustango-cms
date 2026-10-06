@@ -1,0 +1,110 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{% if mode == "new" %}{{ "New redirect" | translate(locale=LANG) }}{% else %}{{ "Edit redirect" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% block heading %}{% if mode == "new" %}{{ "Add redirect" | translate(locale=LANG) }}{% else %}{{ "Edit redirect:" | translate(locale=LANG) }} {{ redirect.from_path }}{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:redirects:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="rcms-breadcrumbs">
+    <a href="{{ url(name='rcms-admin:redirects:list') }}">{{ "Redirects" | translate(locale=LANG) }}</a>
+    <span class="rcms-sep">›</span>
+    <span>{% if mode == "new" %}{{ "New" | translate(locale=LANG) }}{% else %}{{ redirect.from_path }}{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+<form method="post" action="{% if mode == "new" %}{{ url(name='rcms-admin:redirects:new') }}{% else %}{{ url(name='rcms-admin:redirects:edit', id=redirect.id) }}{% endif %}" class="rcms-card rcms-maxw-760" data-primary-save>
+    {{ csrf_token | csrf_input | safe }}
+    <div class="rcms-field-row">
+        <div class="rcms-field">
+            <label>{{ "From path" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+            <input type="text" name="from_path" value="{{ redirect.from_path | default(value="") }}" maxlength="510" placeholder="/old-news">
+            <div class="rcms-hint">{{ "Incoming path with leading slash. Trailing-slash variance matters: <code>/old</code> and <code>/old/</code> are distinct rules. One <code>*</code> wildcard is allowed — <code>/old-blog/*</code> (a subtree) or <code>*/feed</code> (a suffix); put <code>*</code> in the to-path to carry the matched part across." | translate(locale=LANG) | safe }}</div>
+        </div>
+        <div class="rcms-field">
+            <label>{{ "To path" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+            <input type="text" name="to_path" value="{{ redirect.to_path | default(value="") }}" maxlength="1024" placeholder="/news or https://example.com/news">
+            <div class="rcms-hint">{{ "Destination — same-host path or absolute URL. Query strings on the incoming URL are preserved." | translate(locale=LANG) }}</div>
+        </div>
+    </div>
+
+    {# #553 — pick pages instead of typing paths. A picked source page
+       snapshots its current URL into from-path at save; a picked
+       destination follows the page's URL at serve time (moves and
+       renames included). Rules linked to a page auto-disable when that
+       page is deleted or unpublished. Same data-chooser contract as
+       the page-editor widgets (cms-ux.js modal). #}
+    <div class="rcms-field-row">
+        <div class="rcms-field">
+            <label>{{ "From page" | translate(locale=LANG) }}</label>
+            <div class="rcms-chooser" data-chooser data-chooser-kind="page">
+                <input type="hidden" id="w_from_page_id" name="from_page_id"
+                       value="{{ redirect.from_page_id | default(value='') }}" data-chooser-input>
+                <button type="button" class="rcms-btn rcms-btn-outlined" data-chooser-open>
+                    <span class="material-symbols-rounded sm">article</span>
+                    <span data-chooser-label>
+                        {%- if redirect.from_page_id -%}#{{ redirect.from_page_id }}{%- else -%}{{ "Choose a page…" | translate(locale=LANG) }}{%- endif -%}
+                    </span>
+                </button>
+                {% if redirect.from_page_id %}
+                    <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-chooser-clear>{{ "Clear" | translate(locale=LANG) }}</button>
+                {% endif %}
+            </div>
+            <div class="rcms-hint">{{ "Optional — picking a page fills the from-path with its current URL at save time." | translate(locale=LANG) }}</div>
+        </div>
+        <div class="rcms-field">
+            <label>{{ "To page" | translate(locale=LANG) }}</label>
+            <div class="rcms-chooser" data-chooser data-chooser-kind="page">
+                <input type="hidden" id="w_to_page_id" name="to_page_id"
+                       value="{{ redirect.to_page_id | default(value='') }}" data-chooser-input>
+                <button type="button" class="rcms-btn rcms-btn-outlined" data-chooser-open>
+                    <span class="material-symbols-rounded sm">article</span>
+                    <span data-chooser-label>
+                        {%- if redirect.to_page_id -%}#{{ redirect.to_page_id }}{%- else -%}{{ "Choose a page…" | translate(locale=LANG) }}{%- endif -%}
+                    </span>
+                </button>
+                {% if redirect.to_page_id %}
+                    <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-chooser-clear>{{ "Clear" | translate(locale=LANG) }}</button>
+                {% endif %}
+            </div>
+            <div class="rcms-hint">{{ "Optional — the redirect follows this page's URL even if it is later moved or renamed." | translate(locale=LANG) }}</div>
+        </div>
+    </div>
+
+    <div class="rcms-field-row">
+        <div class="rcms-field rcms-checkbox-field">
+            <input type="checkbox" id="is_permanent" name="is_permanent"{% if redirect.is_permanent %} checked{% endif %}>
+            <label for="is_permanent">{{ "Permanent (301)" | translate(locale=LANG) }}</label>
+            <div class="rcms-hint">{{ "Unchecked → 302 Found (temporary). Use 301 for canonical URL changes — search engines update their index." | translate(locale=LANG) }}</div>
+        </div>
+    </div>
+
+    <div class="rcms-field-row">
+        <div class="rcms-field rcms-checkbox-field">
+            <input type="checkbox" id="overrides_live" name="overrides_live"{% if redirect.overrides_live %} checked{% endif %}>
+            <label for="overrides_live">{{ "Apply even when a published page exists at this path" | translate(locale=LANG) }}</label>
+            <div class="rcms-hint">{{ "By default redirects only fire for URLs with no live page (live pages win). Tick to make this rule beat page resolution — e.g. to send a still-published page's URL elsewhere." | translate(locale=LANG) }}</div>
+        </div>
+    </div>
+
+    <div class="rcms-field">
+        <label>{{ "Note" | translate(locale=LANG) }}</label>
+        <input type="text" name="note" value="{{ redirect.note | default(value="") }}" maxlength="255" placeholder='e.g. "renamed for SEO", "old marketing campaign"'>
+        <div class="rcms-hint">{{ "Editor reminder — shown in the redirect list. Not part of the public redirect." | translate(locale=LANG) }}</div>
+    </div>
+
+    {% if mode == "edit" and redirect.hit_count %}
+    <p class="rcms-hint">
+        <span class="material-symbols-rounded sm">analytics</span>
+        Served <strong>{{ redirect.hit_count | intcomma }}</strong> times.
+    </p>
+    {% endif %}
+
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:redirects:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">{% if mode == "new" %}{{ "Create redirect" | translate(locale=LANG) }}{% else %}{{ "Save changes" | translate(locale=LANG) }}{% endif %}</button>
+    </div>
+</form>
+{% endblock %}

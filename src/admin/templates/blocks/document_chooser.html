@@ -1,0 +1,20 @@
+{#- DocumentChooserBlock — public render. The enrichment pass
+    resolves `value.document_id` against `cms_media` and stamps
+    `_url` / `_title` / `_filename` / `_mime` / `_size` onto the
+    value. Default emits a download anchor pointing at the public
+    `/__media__/raw/{id}` route (served by `rendition_route::router`). -#}
+{%- set did = value.document_id | default(value="") -%}
+{%- if did -%}
+    {%- set href = value._url | default(value="/__media__/raw/" ~ did) -%}
+    {%- set label_fallback = value._title | default(value="") -%}
+    {%- if not label_fallback or label_fallback == "" -%}
+        {%- set label_fallback = value._filename | default(value="") -%}
+    {%- endif -%}
+    {%- set label = value.label | default(value="") -%}
+    {%- if not label or label == "" -%}{%- set label = label_fallback -%}{%- endif -%}
+    {%- if not label or label == "" -%}{%- set label = "Document #" ~ did -%}{%- endif -%}
+    <a class="rcms-block-document-chooser" href="{{ href }}" data-document-id="{{ did }}"
+       {%- if value._mime %} type="{{ value._mime }}"{% endif -%}>
+        {{- label -}}
+    </a>
+{%- endif -%}

@@ -1,0 +1,60 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Workflows" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Workflows" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:workflows:new') }}" class="rcms-btn">{{ "+ New workflow" | translate(locale=LANG) }}</a>
+{% endblock %}
+
+{% block description %}
+    {{ "A workflow is an ordered list of review steps a page passes through before it can be published. Each step assigns the decision to a role. Set one up to require sign-off on every change." | translate(locale=LANG) }}
+{% endblock %}
+
+{% block body %}
+{% if items | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "No workflows yet." | translate(locale=LANG) }}</p>
+        <a href="{{ url(name='rcms-admin:workflows:new') }}" class="rcms-btn">{{ "Create the first workflow" | translate(locale=LANG) }}</a>
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Name" | translate(locale=LANG) }}</th>
+                <th>{{ "Description" | translate(locale=LANG) }}</th>
+                <th>{{ "Steps" | translate(locale=LANG) }}</th>
+                <th>{{ "Re-approval on edit" | translate(locale=LANG) }}</th>
+                <th>{{ "Active" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for w in items %}
+            <tr>
+                <td><strong>{{ w.name }}</strong></td>
+                <td>{% if w.description %}{{ w.description }}{% else %}<span class="rcms-text-muted-2">—</span>{% endif %}</td>
+                <td>
+                    <span class="rcms-tag" title="{{ w.task_count }} step{% if w.task_count != 1 %}s{% endif %}">
+                        {{ w.task_count }} step{% if w.task_count != 1 %}s{% endif %}
+                    </span>
+                </td>
+                <td>{% if w.require_reapproval_on_edit %}<span class="rcms-tag scheduled">{{ "yes" | translate(locale=LANG) }}</span>{% else %}<span class="rcms-text-muted-2">—</span>{% endif %}</td>
+                <td>{% if w.active %}<span class="rcms-tag published">{{ "active" | translate(locale=LANG) }}</span>{% else %}<span class="rcms-tag draft">{{ "inactive" | translate(locale=LANG) }}</span>{% endif %}</td>
+                <td class="rcms-actions">
+                    <a href="{{ url(name='rcms-admin:workflows:edit', id=w.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit" | translate(locale=LANG) }}</a>
+                    <form method="post" action="{{ url(name='rcms-admin:workflows:delete', id=w.id) }}"
+                          data-confirm="{{ "Delete workflow “" | translate(locale=LANG) }}{{ w.name }}{{ "”? Rejected if any page has history under it — toggle Active off instead." | translate(locale=LANG) }}"
+                          data-confirm-style="danger"
+                          class="rcms-inline rcms-m-0">
+                        {{ csrf_token | csrf_input | safe }}
+                        <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">{{ "Delete" | translate(locale=LANG) }}</button>
+                    </form>
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+{% endblock %}

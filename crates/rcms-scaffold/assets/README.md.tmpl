@@ -1,0 +1,59 @@
+# __NAME__
+
+A [rustango-cms](https://github.com/ujeenet/rustango-cms) site, generated with `rcms new`.
+
+## Run (SQLite — no database server)
+
+SQLite has no schemas, so each tenant lives in its own file: use
+**database-mode** tenancy (`--mode database`) with an explicit
+`--host-pattern` so requests can be routed to the tenant.
+
+```sh
+export DATABASE_URL="sqlite:./var/registry.db?mode=rwc"
+ARGS="--no-default-features --features sqlite"
+
+cargo run $ARGS -- migrate-registry     # create the registry (orgs, …)
+cargo run $ARGS -- create-tenant demo \
+    --mode database \
+    --database-url "sqlite:./var/demo.db?mode=rwc" \
+    --host-pattern demo.localhost       # database mode needs an explicit host
+cargo run $ARGS -- create-superuser demo admin   # you need this to sign in
+cargo run $ARGS -- runserver
+```
+
+- Sign in: <http://demo.localhost:8080/login>
+- Admin: <http://demo.localhost:8080/cms-admin/pages>
+- Public pages: `http://demo.localhost:8080/<slug>/`
+- Sitemap: <http://demo.localhost:8080/sitemap.xml>
+
+`create-tenant` applies the tenant migrations for you, so there's no separate
+`migrate-tenants` step on a fresh install.
+
+## Run (PostgreSQL)
+
+Same order, minus the SQLite-specific flags:
+
+```sh
+createdb __NAME__
+export DATABASE_URL=postgres://localhost/__NAME__
+export RUSTANGO_APEX_DOMAIN=localtest.me   # tenant host = demo.localtest.me
+
+cargo run -- migrate-registry
+cargo run -- create-tenant demo
+cargo run -- create-superuser demo admin
+cargo run -- runserver
+```
+
+- Sign in: <http://demo.localtest.me:8080/login>
+- Admin: <http://demo.localtest.me:8080/cms-admin/pages>
+__TEMPLATE_NOTE__
+## Layout
+
+- `src/main.rs` — wires the admin + public router into the manage runner and seeds page types.
+- `src/models.rs` — your page types (`HomePage`, `ArticlePage`). Add more with `register_page_type!` and a force-link line in `main.rs`.
+- `templates/` — public page templates (the admin ships its own).
+- `migrations/` — the CMS baseline migrations (registry, tenant, cms). Generate your own with the rustango migration tooling; never hand-edit these.
+
+## Dependencies
+
+This project depends on `rustango-cms` by **path**, pointing at the checkout `rcms` was built from, because rustango-cms isn't on crates.io yet. The `rustango` framework comes from crates.io. Once rustango-cms is published, change the dependency in `Cargo.toml` to `rustango-cms = "0.1"`.

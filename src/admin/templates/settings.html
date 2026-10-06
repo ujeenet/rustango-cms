@@ -1,0 +1,99 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Settings" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Settings" | translate(locale=LANG) }}{% endblock %}
+
+{% block content %}
+{# Vertical card stack — `.card-stack` opts the cards into the 16px
+   adjacent-sibling margin (see cms.css). Without it they render flush. #}
+<div class="rcms-card-stack">
+<div class="rcms-card">
+    <h2 class="rcms-text-lg">{{ "Tenant" | translate(locale=LANG) }}</h2>
+    {# Key/value pairs, not tabular data — a description list says that
+       and keeps the last bare <table> out of the admin. #}
+    <dl class="rcms-kv">
+        <dt class="rcms-text-muted">{{ "Slug" | translate(locale=LANG) }}</dt>
+        <dd><code>{{ org_slug }}</code></dd>
+        <dt class="rcms-text-muted">{{ "Display name" | translate(locale=LANG) }}</dt>
+        <dd>{{ org_display_name }}</dd>
+    </dl>
+    <p class="rcms-hint rcms-mt-3">
+        {{ "The slug, display name and host pattern are managed in the <a href='/orgs'>operator console</a> on the apex domain, not here." | translate(locale=LANG) | safe }}
+    </p>
+</div>
+
+<div class="rcms-card">
+    <h2 class="rcms-text-lg">{{ "Locales" | translate(locale=LANG) }}</h2>
+    {% if locales | length == 0 %}
+        <p class="rcms-text-muted"><em>{{ "No locales registered. Visit <a href='{url}'>Locales</a> to add the default." | translate(locale=LANG, url=url(name='rcms-admin:locales:list')) | safe }}</em></p>
+    {% else %}
+        <ul class="rcms-m-0" style="padding-left: 18px;">
+        {% for l in locales %}
+            <li class="rcms-mb-1">
+                <code>{{ l.code }}</code> — {{ l.name }}
+                {% if l.is_default %} <span class="rcms-tag published">{{ "default" | translate(locale=LANG) }}</span>{% endif %}
+                {% if not l.active %} <span class="rcms-tag archived">{{ "inactive" | translate(locale=LANG) }}</span>{% endif %}
+            </li>
+        {% endfor %}
+        </ul>
+    {% endif %}
+    <p class="rcms-mt-3"><a href="{{ url(name='rcms-admin:locales:list') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Manage locales →" | translate(locale=LANG) }}</a></p>
+</div>
+
+{# #174 — Themes moved to Preferences. The admin theme picker
+   lives at /cms-admin/me alongside the other look-and-feel
+   toggles; the per-page Theme tab + public default picker were
+   removed entirely. `cms_theme` rows stay in the DB so host
+   crates can drive public-page theming externally. #}
+
+<div class="rcms-card">
+    <h2 class="rcms-text-lg">{{ "Stats" | translate(locale=LANG) }}</h2>
+    <ul class="rcms-m-0" style="padding-left: 18px;">
+        <li>{{ "Total media items:" | translate(locale=LANG) }} <strong>{{ media_count | intcomma }}</strong></li>
+    </ul>
+</div>
+
+{# #199 — per-tenant branding. Logo + favicon upload land under
+   cms_site_setting scope `branding`. The base template resolves
+   /__cms-branding/logo and /__cms-branding/favicon to the uploaded
+   bytes; absence falls back to the brand name + no favicon. #}
+<div class="rcms-card">
+    <h2 class="rcms-text-lg">{{ "Branding" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint rcms-m-0 rcms-mb-3">
+        {{ "Replace the sidebar brand text with a logo image, and the browser tab icon with a favicon. Logo accepts PNG / SVG / JPEG; favicon accepts ICO / PNG / SVG." | translate(locale=LANG) }}
+    </p>
+    <form method="post"
+          action="{{ url(name='rcms-admin:settings:branding') }}"
+          enctype="multipart/form-data">
+        {{ csrf_token | csrf_input | safe }}
+        <div class="rcms-field rcms-mb-3">
+            <label for="branding-site-name">{{ "Site name" | translate(locale=LANG) }}</label>
+            <input id="branding-site-name" type="text" name="site_name" value="{{ branding_site_name | default(value='') }}" maxlength="120" placeholder="{{ org_display_name }}">
+            <div class="rcms-hint">{{ "Shown on the members' sign-in and sign-up pages. Empty: the name above." | translate(locale=LANG) }}</div>
+        </div>
+        <div class="rcms-field rcms-mb-3">
+            <label for="branding-logo">{{ "Logo (PNG / SVG / JPEG)" | translate(locale=LANG) }}</label>
+            <input id="branding-logo" type="file" name="logo" accept="image/png,image/jpeg,image/svg+xml">
+            {% if branding_logo_filename %}
+                <div class="rcms-hint rcms-text-2xs rcms-mt-1">
+                    {{ "Current:" | translate(locale=LANG) }} <code>{{ branding_logo_filename }}</code> &nbsp;·&nbsp;
+                    <a href="/__cms-branding/logo" target="_blank" rel="noopener">{{ "preview" | translate(locale=LANG) }}</a>
+                </div>
+            {% endif %}
+        </div>
+        <div class="rcms-field rcms-mb-3">
+            <label for="branding-favicon">{{ "Favicon (ICO / PNG / SVG)" | translate(locale=LANG) }}</label>
+            <input id="branding-favicon" type="file" name="favicon" accept="image/x-icon,image/png,image/svg+xml,.ico">
+            {% if branding_favicon_filename %}
+                <div class="rcms-hint rcms-text-2xs rcms-mt-1">
+                    {{ "Current:" | translate(locale=LANG) }} <code>{{ branding_favicon_filename }}</code> &nbsp;·&nbsp;
+                    <a href="/__cms-branding/favicon" target="_blank" rel="noopener">{{ "preview" | translate(locale=LANG) }}</a>
+                </div>
+            {% endif %}
+        </div>
+        <div class="rcms-form-actions">
+            <button type="submit" class="rcms-btn">{{ "Save branding" | translate(locale=LANG) }}</button>
+        </div>
+    </form>
+</div>
+</div>
+{% endblock %}

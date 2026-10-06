@@ -1,0 +1,425 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Edit" | translate(locale=LANG) }} {{ media.title }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Edit image" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:media:list') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "Media" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+    .rcms-focal-stage {
+        position: relative;
+        display: inline-block;
+        background: var(--md-sys-color-surface-container);
+        border-radius: var(--md-sys-radius-lg);
+        overflow: hidden;
+        cursor: crosshair;
+        max-width: 100%;
+        line-height: 0;
+    }
+    .rcms-focal-stage img {
+        display: block;
+        max-width: 720px;
+        max-height: 540px;
+        width: auto;
+        height: auto;
+    }
+    .rcms-focal-marker {
+        position: absolute;
+        width: 28px;
+        height: 28px;
+        margin-left: -14px;
+        margin-top: -14px;
+        border-radius: 50%;
+        border: 3px solid var(--md-sys-color-primary);
+        background: rgba(99, 102, 241, 0.25);
+        pointer-events: none;
+        box-shadow: 0 0 0 3px white, 0 4px 14px rgba(0, 0, 0, 0.3);
+        transition: top 0.08s, left 0.08s;
+    }
+    .rcms-focal-marker::after {
+        content: "";
+        position: absolute;
+        top: 50%; left: 50%;
+        width: 6px; height: 6px;
+        margin: -3px 0 0 -3px;
+        border-radius: 50%;
+        background: var(--md-sys-color-primary);
+    }
+    .rcms-focal-coords {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        color: var(--muted);
+    }
+    .rcms-focal-stage.cropping { cursor: crosshair; }
+    .crop-rect {
+        position: absolute;
+        border: 2px dashed var(--md-sys-color-tertiary);
+        background: rgba(52, 211, 153, 0.18);
+        pointer-events: none;
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<form method="post" action="{{ url(name='rcms-admin:media:edit', id=media.id) }}" class="rcms-card rcms-maxw-900">
+    {{ csrf_token | csrf_input | safe }}
+
+    {# #281 — focal-point + hard-crop tools both operate in raster
+       pixel space. SVG is a vector source, so cropping it via pixel
+       coords or marking a focal point for `fill-WxH` raster
+       renditions makes no sense and produces a broken / blank
+       output. Gate both sections on the MIME so SVG editors land
+       directly on the Metadata form below. #}
+    {% if media.mime != "image/svg+xml" %}
+        <h2 class="rcms-m-0 rcms-mb-3">{{ "Focal point" | translate(locale=LANG) }}</h2>
+        <p class="rcms-hint rcms-mt-0">
+            {{ "Click anywhere on the image to mark its <strong>focal point</strong> — the part that should stay visible when <code>fill-WxH</code> renditions crop. Click <strong>Clear</strong> to fall back to the geometric center. Saving purges every cached rendition for this image so the next request regenerates with the new center." | translate(locale=LANG) | safe }}
+        </p>
+
+        <div class="rcms-focal-stage" id="focal-stage" data-natural-width="{{ media.width | default(value=1) }}" data-natural-height="{{ media.height | default(value=1) }}">
+            <img id="focal-image"
+                 src="{{ rcms_image_url(media_id=media.id, filter='max-720x540', v=media.content_hash) }}"
+                 alt="{{ media.alt_text }}">
+            <div id="focal-marker" class="rcms-focal-marker" style="display: {% if media.focal_point_x %}block{% else %}none{% endif %};
+                left: {% if media.focal_point_x %}{{ media.focal_point_x * 100 }}{% else %}50{% endif %}%;
+                top: {% if media.focal_point_y %}{{ media.focal_point_y * 100 }}{% else %}50{% endif %}%;"></div>
+        </div>
+
+        <div class="rcms-mt-3 rcms-flex rcms-gap-4 rcms-items-center rcms-flex-wrap">
+            <span class="rcms-focal-coords">
+                x: <strong id="coord-x">{% if media.focal_point_x %}{{ media.focal_point_x }}{% else %}—{% endif %}</strong>
+                · y: <strong id="coord-y">{% if media.focal_point_y %}{{ media.focal_point_y }}{% else %}—{% endif %}</strong>
+            </span>
+            <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small" id="focal-clear">
+                <span class="material-symbols-rounded sm">backspace</span> {{ "Clear focal point" | translate(locale=LANG) }}
+            </button>
+        </div>
+
+        <input type="hidden" id="focal-x-input" name="focal_point_x" value="{% if media.focal_point_x %}{{ media.focal_point_x }}{% endif %}">
+        <input type="hidden" id="focal-y-input" name="focal_point_y" value="{% if media.focal_point_y %}{{ media.focal_point_y }}{% endif %}">
+
+        <hr class="rcms-border-0 rcms-border-top rcms-mt-6 rcms-mb-6 rcms-mx-0">
+
+        {# Hard crop (#24). Lives inside the same form so the focal
+           point + metadata edits don't fight for screen space, but the
+           crop submits to a different endpoint via the buttons below.
+           Toggle the crop tool on with the button — when active, a
+           semi-transparent overlay lets editors drag a rectangle on the
+           image. The selected coords are in displayed-pixel space; the
+           JS converts to source pixels using the natural-size attrs on
+           the stage. #}
+        <h2 class="rcms-m-0 rcms-mb-3">{{ "Hard crop" | translate(locale=LANG) }}</h2>
+        <p class="rcms-hint rcms-mt-0">
+            {{ "Drag a rectangle to crop. <strong>Apply crop</strong> overwrites the source bytes in place (destructive — original gone, renditions purged). <strong>Save as new</strong> clones into a fresh media row with the cropped bytes; original stays untouched." | translate(locale=LANG) | safe }}
+        </p>
+        <div class="rcms-flex rcms-gap-2 rcms-flex-wrap rcms-items-center rcms-mb-2">
+            <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small" id="crop-toggle"
+                    data-i18n-start="{{ "Start crop" | translate(locale=LANG) }}"
+                    data-i18n-cropping="{{ "Cropping…" | translate(locale=LANG) }}">
+                <span class="material-symbols-rounded sm">crop</span> {{ "Start crop" | translate(locale=LANG) }}
+            </button>
+            <span class="rcms-hint rcms-text-xs" id="crop-status"
+                  data-i18n-idle="{{ "Idle." | translate(locale=LANG) }}"
+                  data-i18n-drag="{{ "Drag on the image to mark the crop rectangle." | translate(locale=LANG) }}"
+                  data-i18n-cancelled="{{ "Cancelled." | translate(locale=LANG) }}"
+                  data-i18n-toosmall="{{ "Selection too small — drag a bigger rectangle." | translate(locale=LANG) }}"
+                  data-i18n-selected="{{ "Selected {w}×{h} px at ({x}, {y}). Apply or save-as-new below." | translate(locale=LANG) }}"
+                  data-i18n-failed="{{ "Crop failed:" | translate(locale=LANG) }}">{{ "Idle." | translate(locale=LANG) }}</span>
+        </div>
+        <div class="rcms-flex rcms-gap-2 rcms-flex-wrap rcms-items-center">
+            <button type="button" class="rcms-btn rcms-btn-small" id="crop-apply" disabled
+                    onclick="return confirm('{{ "Apply destructive crop? Original bytes are replaced and renditions purged." | translate(locale=LANG) }}');">
+                <span class="material-symbols-rounded sm">crop</span> {{ "Apply crop" | translate(locale=LANG) }}
+            </button>
+            <button type="button" class="rcms-btn rcms-btn-tonal rcms-btn-small" id="crop-clone" disabled>
+                <span class="material-symbols-rounded sm">content_copy</span> {{ "Save as new" | translate(locale=LANG) }}
+            </button>
+            <button type="button" class="rcms-btn rcms-btn-outlined rcms-btn-small" id="crop-cancel" disabled>
+                {{ "Cancel" | translate(locale=LANG) }}
+            </button>
+        </div>
+
+        <hr class="rcms-border-0 rcms-border-top rcms-mt-6 rcms-mb-6 rcms-mx-0">
+    {% else %}
+        {# SVG preview — keep editors anchored to what they uploaded,
+           but no focal-point / no hard-crop controls. SVG sources go
+           straight to the Metadata form. The raw bytes route serves
+           the original SVG with its source content-type; renditions
+           don't apply to vector sources. #}
+        <div class="rcms-mb-4">
+            <img src="/__media__/raw/{{ media.id }}"
+                 alt="{{ media.alt_text }}"
+                 class="rcms-block rcms-border rcms-rounded"
+                 style="max-width: 360px; max-height: 240px; background: var(--md-sys-color-surface-container-low); padding: 8px;">
+            <p class="rcms-hint rcms-mt-2 rcms-mb-0 rcms-mx-0 rcms-text-xs">
+                <span class="material-symbols-rounded sm">info</span>
+                {{ "SVG sources skip the focal-point and hard-crop tools — vectors don't crop by raster coordinates. Edit the markup directly to change the artwork." | translate(locale=LANG) }}
+            </p>
+        </div>
+    {% endif %}
+
+    <h2 class="rcms-m-0 rcms-mb-3">{{ "Metadata" | translate(locale=LANG) }}</h2>
+    <div class="rcms-field">
+        <label>{{ "Title" | translate(locale=LANG) }}</label>
+        <input type="text" name="title" value="{{ media.title }}" required>
+    </div>
+    <div class="rcms-field">
+        <label>{{ "Alt text" | translate(locale=LANG) }}</label>
+        <textarea name="alt_text" rows="3">{{ media.alt_text }}</textarea>
+        <div class="rcms-hint">{{ "Describe the content for screen readers. Required by WCAG for content-bearing images. Used as the default <code>alt</code> when a usage doesn't set its own." | translate(locale=LANG) | safe }}</div>
+    </div>
+    <div class="rcms-field">
+        <label>{{ "Description" | translate(locale=LANG) }}</label>
+        <textarea name="description" rows="3">{{ media.description }}</textarea>
+        <div class="rcms-hint">{{ "Editorial metadata — credit, context, usage notes. Not used as the image <code>alt</code>." | translate(locale=LANG) | safe }}</div>
+    </div>
+
+    <div class="rcms-hint rcms-mt-2 rcms-text-xs">
+        <code>{{ media.filename }}</code> ·
+        {{ media.mime }} ·
+        {{ media.size | naturalsize }}
+        {% if media.width %} · {{ media.width }}×{{ media.height }}{% endif %}
+    </div>
+
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:media:list') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">{{ "Save" | translate(locale=LANG) }}</button>
+    </div>
+</form>
+
+{# #190 — Replace image bytes in place. Separate form so the
+   multipart upload doesn't collide with the focal/metadata form's
+   urlencoded body, and so the confirm dialog gates the destructive
+   action visibly. The id stays the same — every page that
+   references this media keeps its link. #}
+<form method="post"
+      action="{{ url(name='rcms-admin:media:replace', id=media.id) }}"
+      enctype="multipart/form-data"
+      class="rcms-card rcms-mt-6 rcms-maxw-900"
+      onsubmit="return confirm('{{ "Replace bytes for media #{id}? Every page that uses this image will serve the new file, and cached renditions of the old bytes are purged." | translate(locale=LANG, id=media.id) }}');">
+    {{ csrf_token | csrf_input | safe }}
+    <h2 class="rcms-m-0 rcms-mb-3">{{ "Replace image" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint rcms-mt-0">
+        {% set media_kind = media.kind | default(value='image') %}
+        {{ "Re-upload bytes for this image. The media id, title, alt text and focal point are kept; every page that references this image keeps its link and serves the new bytes on next render. Replacement must be the same kind ({kind})." | translate(locale=LANG, kind=media_kind) }}
+    </p>
+    <div class="rcms-field">
+        <label>{{ "New file" | translate(locale=LANG) }}</label>
+        <input type="file" name="file" required>
+    </div>
+    <div class="rcms-form-actions">
+        <button type="submit" class="rcms-btn">{{ "Replace bytes" | translate(locale=LANG) }}</button>
+    </div>
+</form>
+
+<script>
+(function () {
+    const stage = document.getElementById('rcms-focal-stage');
+    const marker = document.getElementById('rcms-focal-marker');
+    const xInput = document.getElementById('focal-x-input');
+    const yInput = document.getElementById('focal-y-input');
+    const coordX = document.getElementById('coord-x');
+    const coordY = document.getElementById('coord-y');
+    const clearBtn = document.getElementById('focal-clear');
+    if (!stage) return;
+
+    const setFocal = (fx, fy) => {
+        const x = Math.max(0, Math.min(1, fx));
+        const y = Math.max(0, Math.min(1, fy));
+        xInput.value = x.toFixed(3);
+        yInput.value = y.toFixed(3);
+        coordX.textContent = x.toFixed(3);
+        coordY.textContent = y.toFixed(3);
+        marker.style.left = (x * 100) + '%';
+        marker.style.top = (y * 100) + '%';
+        marker.style.display = 'block';
+    };
+
+    stage.addEventListener('click', (e) => {
+        const rect = stage.getBoundingClientRect();
+        const fx = (e.clientX - rect.left) / rect.width;
+        const fy = (e.clientY - rect.top) / rect.height;
+        setFocal(fx, fy);
+    });
+
+    clearBtn.addEventListener('click', () => {
+        xInput.value = '';
+        yInput.value = '';
+        coordX.textContent = '—';
+        coordY.textContent = '—';
+        marker.style.display = 'none';
+    });
+
+    // ---------- Hard crop (#24) ----------
+    const cropToggle = document.getElementById('crop-toggle');
+    const cropApply = document.getElementById('crop-apply');
+    const cropClone = document.getElementById('crop-clone');
+    const cropCancel = document.getElementById('crop-cancel');
+    const cropStatus = document.getElementById('crop-status');
+    const naturalW = parseInt(stage.dataset.naturalWidth, 10) || 1;
+    const naturalH = parseInt(stage.dataset.naturalHeight, 10) || 1;
+    let cropMode = false;
+    let cropDragging = false;
+    let cropRect = null; // DOM element while dragging / selected
+    let cropStart = null; // {x, y} in stage coords
+    let cropCurrent = null; // {x, y, w, h} in stage display-pixel coords
+
+    const enterCrop = () => {
+        cropMode = true;
+        stage.classList.add('cropping');
+        marker.style.display = 'none'; // hide focal during cropping
+        cropToggle.textContent = cropToggle.dataset.i18nCropping;
+        cropStatus.textContent = cropStatus.dataset.i18nDrag;
+        cropCancel.disabled = false;
+    };
+    const exitCrop = (cleared) => {
+        cropMode = false;
+        stage.classList.remove('cropping');
+        cropToggle.innerHTML = '<span class="material-symbols-rounded sm">crop</span> ' + cropToggle.dataset.i18nStart;
+        cropApply.disabled = true;
+        cropClone.disabled = true;
+        cropCancel.disabled = true;
+        cropCurrent = null;
+        if (cropRect) { cropRect.remove(); cropRect = null; }
+        if (xInput.value && !cleared) {
+            marker.style.display = 'block'; // restore focal marker
+        }
+        cropStatus.textContent = cleared ? cropStatus.dataset.i18nCancelled : cropStatus.dataset.i18nIdle;
+    };
+    cropToggle.addEventListener('click', () => {
+        if (cropMode) exitCrop(true);
+        else enterCrop();
+    });
+    cropCancel.addEventListener('click', () => exitCrop(true));
+
+    stage.addEventListener('mousedown', (e) => {
+        if (!cropMode) return;
+        e.preventDefault();
+        const rect = stage.getBoundingClientRect();
+        cropStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+        cropDragging = true;
+        if (cropRect) cropRect.remove();
+        cropRect = document.createElement('div');
+        cropRect.className = 'crop-rect';
+        cropRect.style.left = cropStart.x + 'px';
+        cropRect.style.top = cropStart.y + 'px';
+        cropRect.style.width = '0px';
+        cropRect.style.height = '0px';
+        stage.appendChild(cropRect);
+    });
+    stage.addEventListener('mousemove', (e) => {
+        if (!cropMode || !cropDragging || !cropRect) return;
+        const rect = stage.getBoundingClientRect();
+        const cx = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+        const cy = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+        const x = Math.min(cropStart.x, cx);
+        const y = Math.min(cropStart.y, cy);
+        const w = Math.abs(cx - cropStart.x);
+        const h = Math.abs(cy - cropStart.y);
+        cropRect.style.left = x + 'px';
+        cropRect.style.top = y + 'px';
+        cropRect.style.width = w + 'px';
+        cropRect.style.height = h + 'px';
+        cropCurrent = { x, y, w, h, displayW: rect.width, displayH: rect.height };
+    });
+    stage.addEventListener('mouseup', () => {
+        if (!cropMode || !cropDragging) return;
+        cropDragging = false;
+        if (!cropCurrent || cropCurrent.w < 5 || cropCurrent.h < 5) {
+            cropStatus.textContent = cropStatus.dataset.i18nToosmall;
+            if (cropRect) { cropRect.remove(); cropRect = null; }
+            cropCurrent = null;
+            return;
+        }
+        // Convert display-pixel coords → source-pixel coords.
+        const scaleX = naturalW / cropCurrent.displayW;
+        const scaleY = naturalH / cropCurrent.displayH;
+        const sx = Math.round(cropCurrent.x * scaleX);
+        const sy = Math.round(cropCurrent.y * scaleY);
+        const sw = Math.max(1, Math.round(cropCurrent.w * scaleX));
+        const sh = Math.max(1, Math.round(cropCurrent.h * scaleY));
+        cropCurrent.source = { x: sx, y: sy, w: sw, h: sh };
+        cropStatus.textContent = cropStatus.dataset.i18nSelected
+            .replace('{w}', sw).replace('{h}', sh).replace('{x}', sx).replace('{y}', sy);
+        cropApply.disabled = false;
+        cropClone.disabled = false;
+    });
+
+    const submitCrop = async (mode) => {
+        if (!cropCurrent || !cropCurrent.source) return;
+        const { x, y, w, h } = cropCurrent.source;
+        const csrfCookie = document.cookie.split('; ').find(c => c.startsWith('rustango_csrf='));
+        const token = csrfCookie ? decodeURIComponent(csrfCookie.split('=')[1]) : '';
+        const body = new URLSearchParams();
+        body.append('crop_x', x);
+        body.append('crop_y', y);
+        body.append('crop_w', w);
+        body.append('crop_h', h);
+        body.append('mode', mode);
+        const resp = await fetch(`{{ url(name='rcms-admin:media:crop', id=media.id) }}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': token },
+            body: body.toString(),
+            redirect: 'follow',
+        });
+        if (resp.ok || resp.redirected) {
+            window.location.href = resp.url || window.location.href;
+        } else {
+            const text = await resp.text();
+            cropStatus.textContent = cropStatus.dataset.i18nFailed + ' ' + text.slice(0, 200);
+            cropStatus.style.color = 'var(--danger)';
+        }
+    };
+    cropApply.addEventListener('click', () => submitCrop('apply'));
+    cropClone.addEventListener('click', () => submitCrop('clone'));
+})();
+</script>
+
+{# #100 — Usages report. Lists every page that references this
+   media id via the canonical row, an extension column
+   (e.g. hero_media_id), or a stream-block image reference. #}
+<div class="rcms-card rcms-mt-6">
+    <h2 class="rcms-m-0 rcms-mb-2">
+        <span class="material-symbols-rounded sm">link</span>
+        {% if usage_count != 1 %}{{ "Used by {n} pages" | translate(locale=LANG, n=usage_count) }}{% else %}{{ "Used by {n} page" | translate(locale=LANG, n=usage_count) }}{% endif %}
+    </h2>
+    {% if usage_count == 0 %}
+        <p class="rcms-hint rcms-m-0">
+            {{ "No pages reference this image. Safe to delete — or consider running the <a href='{url}'>unused media report</a> to spot other orphans." | translate(locale=LANG, url=url(name='rcms-admin:media:unused')) | safe }}
+        </p>
+    {% else %}
+        <p class="rcms-hint rcms-m-0 rcms-mb-3">
+            {{ "Each row shows a page that references this image as a hero, in a stream-block, or via a custom <code>*_media_id</code> column. Deleting this image while it's in use will leave broken renders." | translate(locale=LANG) | safe }}
+        </p>
+        <div class="rcms-table-wrap">
+        <table class="rcms-data">
+            <thead>
+                <tr>
+                    <th>{{ "Page" | translate(locale=LANG) }}</th>
+                    <th>{{ "URL" | translate(locale=LANG) }}</th>
+                    <th>{{ "Status" | translate(locale=LANG) }}</th>
+                    <th class="rcms-actions">{{ "Open" | translate(locale=LANG) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for u in usages %}
+                <tr>
+                    <td><strong>{{ u.title }}</strong></td>
+                    <td><code class="rcms-text-2xs">{{ u.url_path }}</code></td>
+                    <td><span class="rcms-tag {{ u.status }}">{{ u.status }}</span></td>
+                    <td class="rcms-actions">
+                        <a href="{{ url(name='rcms-admin:pages:edit', id=u.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit" | translate(locale=LANG) }}</a>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

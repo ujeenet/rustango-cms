@@ -1,0 +1,56 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Roles" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Roles" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:roles:new') }}" class="rcms-btn rcms-btn-small">{{ "+ New role" | translate(locale=LANG) }}</a>
+    <a href="/admin/rustango_roles" class="rcms-btn rcms-btn-outlined rcms-btn-small" title="{{ "Open in the framework admin for raw DB-CRUD." | translate(locale=LANG) }}">
+        <span class="material-symbols-rounded sm">open_in_new</span> {{ "Framework" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block description %}
+        {{ "Roles bundle a set of permissions together. Assign a role to a user to grant all of its permissions at once. Per-page and per-folder permissions sit on top of role permissions." | translate(locale=LANG) }}
+{% endblock %}
+
+{% block body %}
+
+    {% if roles | length == 0 %}
+        <div class="rcms-empty">
+            <p>{{ "No roles yet — create one to start grouping permissions for users." | translate(locale=LANG) }}</p>
+        </div>
+    {% else %}
+        <div class="rcms-table-wrap">
+        <table class="rcms-data">
+            <thead>
+                <tr>
+                    <th>{{ "Name" | translate(locale=LANG) }}</th>
+                    <th>{{ "Description" | translate(locale=LANG) }}</th>
+                    <th>{{ "Permissions" | translate(locale=LANG) }}</th>
+                    <th>{{ "Members" | translate(locale=LANG) }}</th>
+                    <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in roles %}
+                    <tr>
+                        <td><strong>{{ r.name }}</strong></td>
+                        <td class="rcms-text-muted rcms-text-xs">{{ r.description | default(value="—") }}</td>
+                        <td>{{ r.perm_count }}</td>
+                        <td>{{ r.member_count }}</td>
+                        <td class="rcms-actions">
+                            <a href="{{ url(name='rcms-admin:roles:edit', id=r.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit" | translate(locale=LANG) }}</a>
+                            <form method="post" action="{{ url(name='rcms-admin:roles:delete', id=r.id) }}"
+                                  data-confirm="{{ "Delete the" | translate(locale=LANG) }} “{{ r.name }}” {{ "role? Every user assignment to this role is removed too." | translate(locale=LANG) }}" data-confirm-style="danger">
+                                {{ csrf_token | csrf_input | safe }}
+                                <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">{{ "Delete" | translate(locale=LANG) }}</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    {% endif %}
+
+{% endblock %}

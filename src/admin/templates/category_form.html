@@ -1,0 +1,76 @@
+{% extends "rcms_admin/_base.html" %}
+{% import "rcms_admin/_widget.html" as widget %}
+{% block title %}{% if mode == "new" %}{{ "New category" | translate(locale=LANG) }}{% else %}{{ "Edit category" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% block heading %}{% if mode == "new" %}{{ "Add category" | translate(locale=LANG) }}{% else %}{{ "Edit category" | translate(locale=LANG) }}{% endif %}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:taxonomies:tree', slug=taxonomy_slug) }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+    {#- #862 — the language buttons: the default one edits the category,
+        another one translates its name. -#}
+    {% if mode == "edit" and locales and locales | length > 1 %}
+        {% set edit_url = url(name='rcms-admin:taxonomies:categories:edit', slug=taxonomy_slug, id=category_id) %}
+        {% for l in locales %}
+            {% if l.is_default %}
+                <a href="{{ edit_url }}"
+                   class="rcms-btn rcms-btn-small{% if not translation_mode %} rcms-btn-outlined{% else %} rcms-btn-text{% endif %}"
+                   title="{{ "Canonical" | translate(locale=LANG) }} ({{ l.name }})">{{ l.code }}</a>
+            {% else %}
+                <a href="{{ edit_url }}?locale={{ l.code }}"
+                   class="rcms-btn rcms-btn-small{% if editing_locale and editing_locale.code == l.code %} rcms-btn-outlined{% else %} rcms-btn-text{% endif %}"
+                   title="{{ "Translate to" | translate(locale=LANG) }} {{ l.name }}">{{ l.code }}</a>
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="rcms-breadcrumbs">
+    <a href="{{ url(name='rcms-admin:taxonomies:list') }}">{{ "Taxonomies" | translate(locale=LANG) }}</a>
+    <span class="rcms-sep">›</span>
+    <a href="{{ url(name='rcms-admin:taxonomies:tree', slug=taxonomy_slug) }}">{{ taxonomy_name }}</a>
+    <span class="rcms-sep">›</span>
+    <span>{% if mode == "new" %}{{ "New" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }}{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+{% if translation_mode %}
+<form method="post"
+      action="{{ url(name='rcms-admin:taxonomies:categories:translate', slug=taxonomy_slug, id=category_id) }}?locale={{ editing_locale.code }}"
+      class="rcms-card rcms-maxw-760">
+    {{ csrf_token | csrf_input | safe }}
+    <div class="rcms-page-form-notice rcms-page-form-notice--translation">
+        <strong><span class="material-symbols-rounded sm">info</span> {{ "Translation mode." | translate(locale=LANG) }}</strong>
+        {% set locname = editing_locale.name | escape %}
+        {{ "The left column is the original text; the right column is the <strong>{name}</strong> text. Leave a box empty to show the original." | translate(locale=LANG, name=locname) | safe }}
+    </div>
+    <div class="rcms-tr-row">
+        <div class="rcms-canonical">
+            <div class="rcms-lbl"><span class="material-symbols-rounded sm">edit_note</span> {{ "Name" | translate(locale=LANG) }} {{ "(canonical)" | translate(locale=LANG) }}</div>
+            <div class="rcms-canonical-text">{{ category_name }}</div>
+        </div>
+        <div>
+            <label class="rcms-tr-lbl" for="tr-name"><span class="material-symbols-rounded sm">translate</span> {{ "Name" | translate(locale=LANG) }} ({{ editing_locale.code }})</label>
+            <input type="text" id="tr-name" name="tr__name" value="{{ tr_name }}" placeholder="{{ category_name }}" maxlength="200">
+        </div>
+    </div>
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:taxonomies:tree', slug=taxonomy_slug) }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn"><span class="material-symbols-rounded">save</span> {{ "Save translations" | translate(locale=LANG) }}</button>
+    </div>
+</form>
+{% else %}
+<form method="post"
+      action="{% if mode == "new" %}{{ url(name='rcms-admin:taxonomies:categories:new', slug=taxonomy_slug) }}{% else %}{{ url(name='rcms-admin:taxonomies:categories:edit', slug=taxonomy_slug, id=category_id) }}{% endif %}"
+      class="rcms-card rcms-maxw-760">
+    {{ csrf_token | csrf_input | safe }}
+    {% for w in fields %}
+        {{ widget::render(w=w) }}
+    {% endfor %}
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:taxonomies:tree', slug=taxonomy_slug) }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">{% if mode == "new" %}{{ "Create category" | translate(locale=LANG) }}{% else %}{{ "Save changes" | translate(locale=LANG) }}{% endif %}</button>
+    </div>
+</form>
+{% endif %}
+{% endblock %}

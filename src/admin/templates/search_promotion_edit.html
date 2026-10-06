@@ -1,0 +1,54 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Pin results for" | translate(locale=LANG) }} “{{ query.raw }}” — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ "Pin results for" | translate(locale=LANG) }} “{{ query.raw }}”{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:reports:search') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "All queries" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block description %}
+    {% set q_norm = query.normalized | escape %}
+    {{ "Pin published pages to surface at the top of search results for <code>{query}</code>." | translate(locale=LANG, query=q_norm) | safe }}
+    {{ "Lines below are interpreted as one entry per line, in pin order. Each line:" | translate(locale=LANG) }}
+    <code>page_id [| description]</code>. {{ "The optional description is shown only in this admin view." | translate(locale=LANG) }}
+{% endblock %}
+
+{% block body %}
+
+<form method="post" action="{{ url(name='rcms-admin:reports:search:edit', id=query.id) }}" class="rcms-card rcms-maxw-720">
+    {{ csrf_token | csrf_input | safe }}
+
+    <div class="rcms-field">
+        <label>{{ "Pinned page ids (comma-separated, in order)" | translate(locale=LANG) }}</label>
+        <input type="text" name="page_ids"
+               value="{% for p in promotions %}{{ p.page_id }}{% if not loop.last %},{% endif %}{% endfor %}"
+               placeholder="{{ "e.g. 12,7,42" | translate(locale=LANG) }}">
+        <div class="rcms-hint">{{ "Hit count for this query: <strong>{hits}</strong>." | translate(locale=LANG, hits=query.hits) | safe }}</div>
+    </div>
+
+    <div class="rcms-field">
+        <label>{{ "Descriptions (optional, one per line, aligned with the page-ids order)" | translate(locale=LANG) }}</label>
+        <textarea name="descriptions" rows="4">{% for p in promotions %}{{ p.description }}
+{% endfor %}</textarea>
+    </div>
+
+    <h3 class="rcms-page-form-subheading">{{ "Available published pages" | translate(locale=LANG) }}</h3>
+    <ul class="rcms-snippet-history-list rcms-list-none rcms-p-0 rcms-m-0 rcms-text-sm rcms-maxh-260 rcms-overflow-auto">
+        {% for p in pages %}
+            <li class="rcms-snippet-history-row">
+                <code>{{ p.id }}</code>
+                <span class="rcms-snippet-history-row-text">{{ p.title }} <code class="rcms-text-2xs">{{ p.url_path }}</code></span>
+            </li>
+        {% endfor %}
+    </ul>
+
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:reports:search') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">
+            <span class="material-symbols-rounded sm">save</span> {{ "Save pinned results" | translate(locale=LANG) }}
+        </button>
+    </div>
+</form>
+{% endblock %}

@@ -1,0 +1,6 @@
+<blockquote class="rcms-block-quote">
+    <p>{{ value.text | default(value="") }}</p>
+    {%- if value.attribution -%}
+        <cite>— {{ value.attribution }}</cite>
+    {%- endif -%}
+</blockquote>

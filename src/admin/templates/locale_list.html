@@ -1,0 +1,67 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Locales" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Locales" | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:locales:new') }}" class="rcms-btn">{{ "+ Add locale" | translate(locale=LANG) }}</a>
+{% endblock %}
+
+{% block description %}
+    {{ "The languages of your site. Pages are written in the default language; add another language to translate pages, menus and snippets into it." | translate(locale=LANG) }}
+{% endblock %}
+
+{% block body %}
+{% if items | length == 0 %}
+    <div class="rcms-empty">
+        <p>{{ "No locales yet." | translate(locale=LANG) }}</p>
+        <a href="{{ url(name='rcms-admin:locales:new') }}" class="rcms-btn">{{ "Add the first locale" | translate(locale=LANG) }}</a>
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                <th>{{ "Code" | translate(locale=LANG) }}</th>
+                <th>{{ "Name" | translate(locale=LANG) }}</th>
+                <th>{{ "Default" | translate(locale=LANG) }}</th>
+                <th>{{ "Active" | translate(locale=LANG) }}</th>
+                <th>{{ "Sort" | translate(locale=LANG) }}</th>
+                <th>{{ "Core support" | translate(locale=LANG) }}</th>
+                <th class="rcms-actions">{{ "Actions" | translate(locale=LANG) }}</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for l in items %}
+            <tr>
+                <td><code>{{ l.code }}</code></td>
+                <td>{{ l.name }}</td>
+                <td>{% if l.is_default %}<span class="rcms-tag published">{{ "default" | translate(locale=LANG) }}</span>{% else %}<span class="rcms-text-muted-2">—</span>{% endif %}</td>
+                <td>{% if l.active %}{{ "yes" | translate(locale=LANG) }}{% else %}<span class="rcms-text-muted">{{ "no" | translate(locale=LANG) }}</span>{% endif %}</td>
+                <td>{{ l.sort_order }}</td>
+                <td>
+                    {# Flex lives on an inner div — `display:flex` on a <td>
+                       pulls it out of the table's column layout (see the
+                       td.actions note) and mangled the column widths. #}
+                    <div class="rcms-locale-support">
+                    {% if l.support.ui_translated %}<span class="rcms-tag published">{{ "admin UI" | translate(locale=LANG) }}</span>{% else %}<span class="rcms-tag scheduled" title="{{ "Admin chrome & untranslated strings fall back to English." | translate(locale=LANG) }}">⚠ {{ "content-only" | translate(locale=LANG) }}</span>{% endif %}
+                    {% if l.support.has_plural_rules %}<span class="rcms-tag published">{{ "CLDR plurals" | translate(locale=LANG) }}</span>{% elif not l.is_default %}<span class="rcms-tag scheduled">{{ "basic one/other" | translate(locale=LANG) }}</span>{% endif %}
+                    {% if l.support.is_rtl %}<span class="rcms-tag">{{ "RTL" | translate(locale=LANG) }}</span>{% endif %}
+                    {% if not l.support.known %}<span class="rcms-tag archived" title="{{ "core has no display/RTL/plural metadata for this code" | translate(locale=LANG) }}">{{ "unknown to core" | translate(locale=LANG) }}</span>{% endif %}
+                    </div>
+                </td>
+                <td class="rcms-actions">
+                    <a href="{{ url(name='rcms-admin:locales:edit', id=l.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit" | translate(locale=LANG) }}</a>
+                    {% if not l.is_default %}
+                        <form method="post" action="{{ url(name='rcms-admin:locales:delete', id=l.id) }}" data-confirm="{{ "Delete locale {code}? All its translations are deleted too." | translate(locale=LANG, code=l.code) }}" data-confirm-style="danger">
+                            {{ csrf_token | csrf_input | safe }}
+                            <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">{{ "Delete" | translate(locale=LANG) }}</button>
+                        </form>
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+{% endif %}
+{% endblock %}

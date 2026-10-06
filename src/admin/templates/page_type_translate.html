@@ -1,0 +1,49 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ "Translate:" | translate(locale=LANG) }} {{ title }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Translate:" | translate(locale=LANG) }} {{ title }} → {{ editing_locale.name }}{% endblock %}
+
+{% block topbar_actions %}
+    <a href="{{ build_url }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "Builder" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+
+{% block content %}
+{#- #863 — the labels of the type's choice options (select, radio,
+    checkboxes) in another language: one group per field, the original
+    label left, this language right. -#}
+<form method="post" action="{{ translate_url }}?locale={{ editing_locale.code }}" class="rcms-card rcms-maxw-760">
+    {{ csrf_token | csrf_input | safe }}
+    <div class="rcms-page-form-notice rcms-page-form-notice--translation">
+        <strong><span class="material-symbols-rounded sm">info</span> {{ "Translation mode." | translate(locale=LANG) }}</strong>
+        {% set locname = editing_locale.name | escape %}
+        {{ "The left column is the original text; the right column is the <strong>{name}</strong> text. Leave a box empty to show the original." | translate(locale=LANG, name=locname) | safe }}
+    </div>
+    {% if choice_fields | length == 0 %}
+    <p class="rcms-empty">{{ "This page type has no choice fields." | translate(locale=LANG) }}</p>
+    {% else %}
+    {% for f in choice_fields %}
+    <div class="rcms-tr-block">
+        <div class="rcms-tr-block-head"><span class="material-symbols-rounded sm">list_alt</span> {{ f.label }}</div>
+        {% for o in f.options %}
+        {% set lbl = "Option {n}" | translate(locale=LANG, n=loop.index ~ "") %}
+        <div class="rcms-tr-row">
+            <div class="rcms-canonical">
+                <div class="rcms-lbl"><span class="material-symbols-rounded sm">subject</span> {{ lbl }} {{ "(canonical)" | translate(locale=LANG) }}</div>
+                <div class="rcms-canonical-text">{{ o.label }}</div>
+            </div>
+            <div>
+                <label class="rcms-tr-lbl" for="tr-{{ f.path }}-{{ loop.index }}"><span class="material-symbols-rounded sm">translate</span> {{ lbl }} ({{ editing_locale.code }})</label>
+                <input type="text" id="tr-{{ f.path }}-{{ loop.index }}" name="tr__{{ f.path }}__{{ o.value }}" value="{{ o.translation }}" placeholder="{{ o.label }}">
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endfor %}
+    <div class="rcms-form-actions">
+        <a href="{{ build_url }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn"><span class="material-symbols-rounded sm">save</span> {{ "Save translations" | translate(locale=LANG) }}</button>
+    </div>
+    {% endif %}
+</form>
+{% endblock %}

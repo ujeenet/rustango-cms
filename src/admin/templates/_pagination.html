@@ -1,0 +1,81 @@
+{#- Shared pagination controls.
+
+    Include from any list page that puts a `pagination` object in its
+    context (see `crate::admin::pagination::context`):
+
+        {% include "rcms_admin/_pagination.html" %}
+
+    Every link is built with the `querystring` filter, so the current
+    filters (q / collection / sort / …) survive a page or page-size
+    change — the partial never needs to know what they are.
+
+    The selects navigate on change rather than sitting in a <form>: a
+    form here would either nest inside the caller's filter form, which
+    HTML forbids, or need every other filter duplicated as hidden
+    inputs. Both selects are inside a <noscript>-safe pattern only in
+    the sense that prev/next remain plain links, so paging still works
+    with JS disabled.
+-#}
+{% if pagination and pagination.show %}
+<nav class="rcms-pagination" aria-label="{{ "Pagination" | translate(locale=LANG) }}">
+    <span class="rcms-pagination-status rcms-text-xs rcms-text-muted">
+        {{ pagination.start_index }}–{{ pagination.end_index }} {{ "of" | translate(locale=LANG) }}
+        <strong>{{ pagination.total }}</strong>
+    </span>
+
+    <span class="rcms-pagination-spacer"></span>
+
+    <label class="rcms-pagination-size rcms-text-xs rcms-text-muted">
+        {{ "Per page" | translate(locale=LANG) }}
+        <select aria-label="{{ "Rows per page" | translate(locale=LANG) }}"
+                onchange="if (this.value) { window.location = this.value; }">
+            {% for n in pagination.per_page_choices %}
+                {# Changing page size invalidates the current offset, so
+                   always return to page 1. #}
+                <option value="{{ query_string | querystring(per_page=n, page=1) | safe }}"
+                        {% if n == pagination.per_page %}selected{% endif %}>{{ n }}</option>
+            {% endfor %}
+        </select>
+    </label>
+
+    {% if pagination.total_pages > 1 %}
+        <div class="rcms-pagination-nav">
+            {% if pagination.has_prev %}
+                <a href="{{ query_string | querystring(page=pagination.prev_page) | safe }}"
+                   class="rcms-btn rcms-btn-outlined rcms-btn-small"
+                   rel="prev" aria-label="{{ "Previous page" | translate(locale=LANG) }}">
+                    <span class="material-symbols-rounded sm">chevron_left</span>
+                </a>
+            {% else %}
+                <span class="rcms-btn rcms-btn-outlined rcms-btn-small rcms-is-disabled" aria-hidden="true">
+                    <span class="material-symbols-rounded sm">chevron_left</span>
+                </span>
+            {% endif %}
+
+            <label class="rcms-pagination-jump rcms-text-xs rcms-text-muted">
+                {{ "Page" | translate(locale=LANG) }}
+                <select aria-label="{{ "Go to page" | translate(locale=LANG) }}"
+                        onchange="if (this.value) { window.location = this.value; }">
+                    {% for p in pagination.pages %}
+                        <option value="{{ query_string | querystring(page=p) | safe }}"
+                                {% if p == pagination.page %}selected{% endif %}>{{ p }}</option>
+                    {% endfor %}
+                </select>
+                {{ "of" | translate(locale=LANG) }} {{ pagination.total_pages }}
+            </label>
+
+            {% if pagination.has_next %}
+                <a href="{{ query_string | querystring(page=pagination.next_page) | safe }}"
+                   class="rcms-btn rcms-btn-outlined rcms-btn-small"
+                   rel="next" aria-label="{{ "Next page" | translate(locale=LANG) }}">
+                    <span class="material-symbols-rounded sm">chevron_right</span>
+                </a>
+            {% else %}
+                <span class="rcms-btn rcms-btn-outlined rcms-btn-small rcms-is-disabled" aria-hidden="true">
+                    <span class="material-symbols-rounded sm">chevron_right</span>
+                </span>
+            {% endif %}
+        </div>
+    {% endif %}
+</nav>
+{% endif %}

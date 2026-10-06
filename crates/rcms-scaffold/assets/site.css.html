@@ -1,0 +1,60 @@
+{# Starter styles, inlined so a new project has no asset pipeline to set up.
+
+   This is deliberately small and unopinionated — enough that a fresh site
+   looks finished rather than broken. Replace it with your own stylesheet
+   (or a <link> to one under a static route) whenever you like; nothing
+   else in the project depends on these class names. #}
+<style>
+    :root {
+        --fg: #16161a;
+        --muted: #5f6070;
+        --bg: #ffffff;
+        --line: #e4e4ec;
+        --accent: #4f46e5;
+    }
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --fg: #ececf2;
+            --muted: #a2a6c2;
+            --bg: #101014;
+            --line: #2a2a35;
+            --accent: #8b85f5;
+        }
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        padding: 3rem 1.5rem 5rem;
+        background: var(--bg);
+        color: var(--fg);
+        font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        -webkit-font-smoothing: antialiased;
+    }
+    body > * { max-width: 42rem; margin-inline: auto; }
+    a { color: var(--accent); }
+    h1, h2, h3 { line-height: 1.25; letter-spacing: -0.01em; }
+    h1 { font-size: 2rem; margin: 0; }
+    .site-header { padding-bottom: 1.5rem; border-bottom: 1px solid var(--line); }
+    .lede { margin: 0.5rem 0 0; color: var(--muted); font-size: 1.05rem; }
+    .empty { color: var(--muted); }
+    .index { list-style: none; margin: 0; padding: 0; }
+    .index li { padding: 0.9rem 0; border-bottom: 1px solid var(--line); }
+    .index a { font-weight: 600; text-decoration: none; }
+    .index a:hover { text-decoration: underline; }
+    .index span { display: block; margin-top: 0.15rem; color: var(--muted); font-size: 0.94rem; }
+    .breadcrumb { padding-bottom: 1.25rem; color: var(--muted); font-size: 0.9rem; }
+    .breadcrumb a { color: var(--muted); }
+    article img { max-width: 100%; height: auto; border-radius: 8px; }
+    article pre {
+        padding: 1rem;
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+    }
+    article blockquote {
+        margin: 1.5rem 0;
+        padding-left: 1rem;
+        border-left: 3px solid var(--line);
+        color: var(--muted);
+    }
+</style>

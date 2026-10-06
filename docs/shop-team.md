@@ -158,4 +158,4 @@ When you open the product, a banner says whose changes wait. The form shows the 
 
 ## Next
 
-This is the end of the chapters that are written so far. See [the list of chapters](shop-overview.md) for what comes next.
+[A sale](shop-sale.md): publish a sale page at a set time and take it down again, without being there.

@@ -67,12 +67,7 @@ Do the chapters in this order. Each one uses what you made in the chapter before
 | 12 | [A second language](shop-second-language.md) | Add French, then translate the pages, the menu, the shipping text and the order form. |
 | 13 | [A members area](shop-members-area.md) | Show trade prices only to cafés and shops: a role, a private page, sign-up, a friendly "not yet" page and a menu item only members see. |
 | 14 | [Work as a team](shop-team.md) | Add a helper, check each new product before it goes live, send it back with a note, and review changes to live products. |
-
-### Coming next
-
-This chapter uses the same shop. It is not written yet:
-
-- **A sale** — publish a page at a set time and hide it again later.
+| 15 | [A sale](shop-sale.md) | Prepare a sale page now; the site publishes it at a set time and takes it down again a week later. |
 
 ### For developers
 

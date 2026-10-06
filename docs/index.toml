@@ -44,6 +44,7 @@ pages = [
     "shop-second-language.md",
     "shop-members-area.md",
     "shop-team.md",
+    "shop-sale.md",
     "shop-dev-templates.md",
     "shop-dev-helper-traits.md",
 ]

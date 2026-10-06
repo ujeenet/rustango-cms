@@ -2647,12 +2647,39 @@ fn parse_datetime_local(raw: Option<&str>) -> Option<chrono::DateTime<chrono::Ut
     if raw.is_empty() {
         return None;
     }
-    // The HTML5 datetime-local input may emit "YYYY-MM-DDTHH:MM" or
-    // "YYYY-MM-DDTHH:MM:SS" — try both.
+    // The admin's datetime inputs send UTC with a `Z` (converted from the
+    // editor's timezone in the browser); an offset is honoured too.
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(raw) {
+        return Some(dt.with_timezone(&chrono::Utc));
+    }
+    if let Some(utc) = raw.strip_suffix('Z') {
+        return parse_datetime_local(Some(utc));
+    }
+    // Without JS the input posts its UTC value bare: "YYYY-MM-DDTHH:MM"
+    // or "YYYY-MM-DDTHH:MM:SS".
     chrono::NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M")
         .or_else(|_| chrono::NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M:%S"))
         .ok()
         .map(|naive| chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(naive, chrono::Utc))
+}
+
+#[cfg(test)]
+mod datetime_input_tests {
+    use super::parse_datetime_local;
+
+    /// The schedule inputs post UTC (`…Z`), converted in the browser from the
+    /// editor's timezone; without JS they post the bare UTC value back.
+    #[test]
+    fn utc_offset_and_bare_values_parse_to_the_same_instant() {
+        let want = chrono::DateTime::parse_from_rfc3339("2026-12-01T12:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        for raw in ["2026-12-01T12:00Z", "2026-12-01T12:00:00Z", "2026-12-01T09:00:00-03:00", "2026-12-01T12:00", " 2026-12-01T12:00:00 "] {
+            assert_eq!(parse_datetime_local(Some(raw)), Some(want), "{raw}");
+        }
+        assert_eq!(parse_datetime_local(Some("")), None);
+        assert_eq!(parse_datetime_local(Some("tomorrow")), None);
+    }
 }
 
 #[cfg(test)]

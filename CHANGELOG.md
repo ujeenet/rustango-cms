@@ -126,6 +126,14 @@ have an entry in [UPGRADING.md](UPGRADING.md).
 
 ### Fixed
 
+- The page schedule (**Go live at** / **Expire at**) stored the typed time
+  as if it were UTC, so an editor in Halifax who scheduled 09:00 got 06:00.
+  The inputs now show and take the editor's admin timezone (user setting,
+  `RCMS_DEFAULT_TIMEZONE`, else the browser's), name it, and store UTC; the
+  server accepts `…Z` / offset values. The hints no longer say the times are
+  UTC or that expiry archives the page.
+- The Scheduled pages report left out the take-down of a page that is still
+  scheduled, and described the old archive behaviour.
 - A required radio, rating or checkbox group was only checked by the
   server, and its refusal sent the visitor back to step 1 with every answer
   erased.

@@ -14777,7 +14777,11 @@ async fn scheduled_pages_rows(
             }
         }
         if let Some(exp) = p.expire_at {
-            if exp > now && p.status == crate::page::PageStatus::Published.as_str() {
+            // A scheduled page with both dates comes down too: list it.
+            if exp > now
+                && (p.status == crate::page::PageStatus::Published.as_str()
+                    || p.status == crate::page::PageStatus::Scheduled.as_str())
+            {
                 let countdown = (exp - now).num_seconds();
                 rows.push(serde_json::json!({
                     "kind": "expire",

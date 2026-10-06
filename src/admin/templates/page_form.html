@@ -1228,25 +1228,28 @@
 
         {# Scheduling — #12. Set the status dropdown above to
            "scheduled" + a `go-live` date for editorial pre-publishing.
-           A background sweep on every admin list view flips the
-           status when the times pass. Times are treated as UTC for
-           now — per-user timezones land with #13. #}
+           A background sweep flips the status when the times pass.
+           Stored as UTC; the inputs show and take the editor's admin
+           timezone (`data-utc`, converted by _base.html). #}
         <h3 class="rcms-page-form-subheading">{{ "Schedule" | translate(locale=LANG) }}</h3>
         <p class="rcms-hint rcms-page-form-subhint">
-            {{ "Auto-flip the page status on a timer. Pair <strong>Go live at</strong> with status <code>scheduled</code> to publish later; set <strong>Expire at</strong> on a published page to auto-archive it. Both fields are treated as UTC until per-user timezones land." | translate(locale=LANG) | safe }}
+            {{ "Publish or take down the page at a set time. Set <strong>Go live at</strong> on a draft to publish it later; set <strong>Expire at</strong> to take a published page down." | translate(locale=LANG) | safe }}
+            {{ "Times are in your timezone:" | translate(locale=LANG) }} <span data-user-tz></span>
         </p>
         <div class="rcms-field-row">
             <div class="rcms-field">
                 <label>{{ "Go live at" | translate(locale=LANG) }}</label>
                 <input type="datetime-local" name="go_live_at"
-                       value="{% if page.go_live_at %}{{ page.go_live_at | date(format='%Y-%m-%dT%H:%M') }}{% endif %}">
-                <div class="rcms-hint">{{ "When <code>status = scheduled</code>, the sweep flips to <code>published</code> at this moment." | translate(locale=LANG) | safe }}</div>
+                       value="{% if page.go_live_at %}{{ page.go_live_at | date(format='%Y-%m-%dT%H:%M') }}{% endif %}"
+                       data-utc="{% if page.go_live_at %}{{ page.go_live_at | date(format='%+') }}{% endif %}">
+                <div class="rcms-hint">{{ "The page goes live at this moment." | translate(locale=LANG) }}</div>
             </div>
             <div class="rcms-field">
                 <label>{{ "Expire at" | translate(locale=LANG) }}</label>
                 <input type="datetime-local" name="expire_at"
-                       value="{% if page.expire_at %}{{ page.expire_at | date(format='%Y-%m-%dT%H:%M') }}{% endif %}">
-                <div class="rcms-hint">{{ "When <code>status = published</code>, the sweep flips to <code>archived</code> at this moment." | translate(locale=LANG) | safe }}</div>
+                       value="{% if page.expire_at %}{{ page.expire_at | date(format='%Y-%m-%dT%H:%M') }}{% endif %}"
+                       data-utc="{% if page.expire_at %}{{ page.expire_at | date(format='%+') }}{% endif %}">
+                <div class="rcms-hint">{{ "The page is taken down (expired) at this moment." | translate(locale=LANG) }}</div>
             </div>
         </div>
 

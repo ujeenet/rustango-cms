@@ -9,7 +9,7 @@
 {% endblock %}
 
 {% block description %}
-    {{ "Every page queued to publish (status <code>scheduled</code> with a future <code>go_live_at</code>) or queued to archive (status <code>published</code> with a future <code>expire_at</code>). The background sweep runs on every admin list view so flips land without manual intervention." | translate(locale=LANG) | safe }}
+    {{ "Every page that will go live or be taken down at a set time. Times are in your timezone:" | translate(locale=LANG) }} <span data-user-tz></span>
 {% endblock %}
 
 {% block body %}
@@ -17,7 +17,7 @@
 {% if rows | length == 0 %}
     <div class="rcms-empty">
         <p>{{ "Nothing scheduled." | translate(locale=LANG) }}</p>
-        <p class="rcms-hint">{{ "Set <strong>Go live at</strong> on a draft page with status <code>scheduled</code> to queue a publish; set <strong>Expire at</strong> on a published page to queue an archive." | translate(locale=LANG) | safe }}</p>
+        <p class="rcms-hint">{{ "Set <strong>Go live at</strong> on a draft to publish it later, or <strong>Expire at</strong> to take a page down, on the page's Promote tab." | translate(locale=LANG) | safe }}</p>
     </div>
 {% else %}
     <div class="rcms-table-wrap">
@@ -38,7 +38,7 @@
                         {% if r.kind == "publish" %}
                             <span class="rcms-tag scheduled"><span class="material-symbols-rounded sm">publish</span> {{ "Publish" | translate(locale=LANG) }}</span>
                         {% else %}
-                            <span class="rcms-tag archived"><span class="material-symbols-rounded sm">archive</span> {{ "Archive" | translate(locale=LANG) }}</span>
+                            <span class="rcms-tag archived"><span class="material-symbols-rounded sm">event_busy</span> {{ "Take down" | translate(locale=LANG) }}</span>
                         {% endif %}
                     </td>
                     <td>

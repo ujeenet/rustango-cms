@@ -670,6 +670,58 @@
             });
         } catch (e) { /* ignore */ }
 
+        // Datetime inputs: the server stores UTC, editors type their own
+        // wall time. An input marked `data-utc` shows the stored moment in
+        // the effective zone, and its form sends UTC back (`…Z`) — through
+        // the `formdata` event, so autosave and preview posts convert too.
+        // Without JS the input keeps the server's UTC value both ways.
+        const pad = (n) => String(n).padStart(2, "0");
+        // Offset (ms) of `tz` at instant `ms`: its wall time read as UTC, minus the instant.
+        const zoneOffset = (ms, tz) => {
+          const p = {};
+          new Intl.DateTimeFormat("en-US", {
+            timeZone: tz, hourCycle: "h23", year: "numeric", month: "2-digit",
+            day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
+          }).formatToParts(new Date(ms)).forEach((x) => { p[x.type] = x.value; });
+          return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - ms;
+        };
+        const utcToWall = (iso) => {
+          const d = new Date(iso);
+          if (Number.isNaN(d.getTime())) return "";
+          const w = new Date(d.getTime() + (effectiveTz ? zoneOffset(d.getTime(), effectiveTz) : -d.getTimezoneOffset() * 60000));
+          return `${w.getUTCFullYear()}-${pad(w.getUTCMonth() + 1)}-${pad(w.getUTCDate())}T${pad(w.getUTCHours())}:${pad(w.getUTCMinutes())}`;
+        };
+        const wallToUtc = (wall) => {
+          const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(wall || "");
+          if (!m) return wall;
+          const asUtc = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+          let ms;
+          if (effectiveTz) {
+            // Two passes settle the offset across a DST change.
+            ms = asUtc - zoneOffset(asUtc, effectiveTz);
+            ms = asUtc - zoneOffset(ms, effectiveTz);
+          } else {
+            ms = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime();
+          }
+          return new Date(ms).toISOString().slice(0, 16) + "Z";
+        };
+        window.rcmsTimeZone = effectiveTz;
+        const zoned = document.querySelectorAll('input[type="datetime-local"][data-utc]');
+        zoned.forEach((input) => {
+          const iso = input.getAttribute("data-utc");
+          if (iso) input.value = utcToWall(iso);
+        });
+        const zonedForms = new Set([...zoned].map((i) => i.form).filter(Boolean));
+        zonedForms.forEach((form) => {
+          form.addEventListener("formdata", (e) => {
+            form.querySelectorAll('input[type="datetime-local"][data-utc]').forEach((input) => {
+              if (input.name && e.formData.has(input.name) && input.value) {
+                e.formData.set(input.name, wallToUtc(input.value));
+              }
+            });
+          });
+        });
+
         const elements = document.querySelectorAll("time[data-utc]");
         if (elements.length === 0) return;
         const tzOpt = effectiveTz ? { timeZone: effectiveTz } : {};

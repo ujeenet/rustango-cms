@@ -125,7 +125,7 @@ rand = { version = "0.10", default-features = false, features = ["std", "std_rng
 # #319 — explicit OS CSPRNG at auth/URL-identifier boundaries (signing key,
 # flash-cookie HMAC secret). Already transitive via rand; named here for the
 # direct `getrandom::fill` calls. rand 0.10 removed the `OsRng` type.
-getrandom = "0.3"
+getrandom = "0.4"
 # v0.2 Slice 5b — image renditions. `default-features = false` +
 # the codec list keeps the build slim; add formats as needed.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }

@@ -4,7 +4,7 @@ What to change in a host application when upgrading rustango-cms. Find
 your symptom below; each entry names the change and the fix. The full list
 is in [CHANGELOG.md](CHANGELOG.md).
 
-## Unreleased
+## 0.1.0
 
 ### rustango 0.60
 

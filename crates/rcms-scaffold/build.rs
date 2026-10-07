@@ -78,6 +78,19 @@ fn main() {
          const RUSTANGO_REQ: &str = {req:?};\n"
     ));
 
+    // The rustango-cms requirement a generated project uses: this
+    // checkout's `major.minor`, so the project gets the release whose
+    // migrations and templates the scaffolder embeds.
+    let version = manifest
+        .lines()
+        .find_map(|l| l.strip_prefix("version = \"")?.split('"').next())
+        .expect("workspace Cargo.toml declares the rustango-cms `version`");
+    let rcms_req = version.splitn(3, '.').take(2).collect::<Vec<_>>().join(".");
+    out.push_str(&format!(
+        "// The rustango-cms requirement, read from the workspace manifest.\n\
+         const RCMS_REQ: &str = {rcms_req:?};\n"
+    ));
+
     let dest = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR set by cargo"))
         .join("migrations.rs");
     std::fs::write(&dest, out).expect("write generated migration list");

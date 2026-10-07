@@ -38,14 +38,14 @@ It runs multi-tenant from the start — every tenant gets its own page tree, med
 
 ```toml
 [dependencies]
-rustango-cms = { git = "https://github.com/ujeenet/rustango-cms" }
+rustango-cms = "0.1"
 rustango     = { version = "0.60", default-features = false, features = ["admin", "auth_flows", "cache", "cache-page", "config", "email", "forms", "manage", "passwords", "runtime", "signals", "signed_url", "tenancy", "template_views"] }
 axum         = { version = "0.8", default-features = false, features = ["tokio", "http1", "json", "form", "query"] }
 tera         = { version = "1.20", default-features = false }
 serde        = { version = "1", features = ["derive"] }
 ```
 
-The crate is not on crates.io yet; until the first release, depend on the repository as above. Pick the database with a feature: `postgres` is the default, and `default-features = false, features = ["sqlite"]` (or `"mysql"`) switches it — on both `rustango-cms` and `rustango`.
+Pick the database with a feature: `postgres` is the default, and `default-features = false, features = ["sqlite"]` (or `"mysql"`) switches it — on both `rustango-cms` and `rustango`.
 
 Use the same `rustango` minor version as the CMS (0.60 today). Two semver-incompatible copies give you two different `Tenant` and `Pool` types that do not unify. [UPGRADING.md](UPGRADING.md) has the notes for each version.
 

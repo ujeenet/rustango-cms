@@ -14,9 +14,7 @@ sqlite = ["rustango-cms/sqlite", "rustango/sqlite"]
 mysql = ["rustango-cms/mysql", "rustango/mysql"]
 
 [dependencies]
-# rustango-cms isn't on crates.io yet: this points at the checkout `rcms` was
-# built from. Once it is published, change it to `rustango-cms = "0.1"`.
-rustango-cms = { path = "__RCMS_PATH__", default-features = false }
+rustango-cms = __RCMS_DEP__
 rustango = { version = "__RUSTANGO_REQ__", default-features = false, features = [
     "admin", "auth_flows", "cache", "cache-page", "config", "email", "forms", "manage", "passwords", "runtime", "signals", "signed_url", "tenancy", "template_views",
 ] }

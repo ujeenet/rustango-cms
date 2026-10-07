@@ -10,6 +10,10 @@
 //! cargo run -p rcms-scaffold -- new myblog
 //! # or, installed:  cargo install --path crates/rcms-scaffold && rcms new myblog
 //! ```
+//!
+//! The generated project depends on the published rustango-cms release.
+//! `--local` points it at this checkout instead, for working on the CMS
+//! and a site together.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -61,8 +65,9 @@ fn run(args: &[String]) -> Result<(), String> {
         return Err(format!("unknown command `{}` (expected `new`)", args[1]));
     }
 
-    // Parse: new <name> [--dir <parent>] [--template <minimal|blog>]
+    // Parse: new <name> [--dir <parent>] [--template <minimal|blog>] [--local]
     let mut name: Option<String> = None;
+    let mut local = false;
     let mut dir: Option<String> = None;
     let mut template = String::from("minimal");
     let mut i = 2;
@@ -79,6 +84,7 @@ fn run(args: &[String]) -> Result<(), String> {
                     .ok_or("--template needs a value (minimal|blog)")?
                     .clone();
             }
+            "--local" => local = true,
             "-h" | "--help" => {
                 print_usage();
                 return Ok(());
@@ -107,16 +113,21 @@ fn run(args: &[String]) -> Result<(), String> {
         }
     };
 
-    // The rustango-cms checkout this scaffolder was built from: generated
-    // projects depend on it by path until rustango-cms is on crates.io.
-    // (The rustango framework itself comes from crates.io.)
-    // CARGO_MANIFEST_DIR = .../rustango-cms/crates/rcms-scaffold
-    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let rcms_root = manifest
-        .parent()
-        .and_then(Path::parent)
-        .ok_or("can't locate the rustango-cms repo root from CARGO_MANIFEST_DIR")?;
-    let rcms_root = canon(rcms_root)?;
+    let rcms_dep = if local {
+        // The checkout this scaffolder was built from.
+        // CARGO_MANIFEST_DIR = .../rustango-cms/crates/rcms-scaffold
+        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let rcms_root = manifest
+            .parent()
+            .and_then(Path::parent)
+            .ok_or("can't locate the rustango-cms repo root from CARGO_MANIFEST_DIR")?;
+        format!(
+            "{{ path = {:?}, default-features = false }}",
+            path_str(&canon(rcms_root)?)
+        )
+    } else {
+        format!("{{ version = \"{RCMS_REQ}\", default-features = false }}")
+    };
 
     // Target directory.
     let parent = dir.map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
@@ -128,7 +139,7 @@ fn run(args: &[String]) -> Result<(), String> {
     // Render + write.
     let cargo = CARGO_TMPL
         .replace("__NAME__", &name)
-        .replace("__RCMS_PATH__", &path_str(&rcms_root))
+        .replace("__RCMS_DEP__", &rcms_dep)
         // Must match what rustango-cms itself requires, or the project
         // resolves two frameworks (#613).
         .replace("__RUSTANGO_REQ__", RUSTANGO_REQ);
@@ -227,14 +238,16 @@ fn print_usage() {
     println!(
         "rcms — scaffold a rustango-cms project\n\n\
          USAGE:\n  \
-           rcms new <project-name> [--dir <parent>] [--template <minimal|blog>]\n\n\
+           rcms new <project-name> [--dir <parent>] [--template <minimal|blog>] [--local]\n\n\
          Creates <parent>/<project-name>/ (default parent: current directory)\n\
          with a runnable CMS app: Cargo.toml, src/, templates/, migrations/,\n\
          README.md, .env.example, .gitignore.\n\n\
          Templates:\n  \
            minimal (default) — HomePage + ArticlePage, no typed extension\n  \
            blog              — ArticlePage with a typed cms_article_page\n                      \
-             extension (Markdown body + hero image)"
+             extension (Markdown body + hero image)\n\n\
+         --local depends on this rustango-cms checkout by path instead of the\n\
+         crates.io release."
     );
 }
 
@@ -301,6 +314,20 @@ mod tests {
             !CARGO_TMPL.contains("version = \"0.44\""),
             "template still hardcodes a framework version instead of __RUSTANGO_REQ__"
         );
+    }
+
+    /// A generated project asks crates.io for this checkout's release line,
+    /// unless `--local` points it at the checkout.
+    #[test]
+    fn generated_manifest_depends_on_the_release() {
+        assert!(RCMS_REQ.split('.').count() == 2, "RCMS_REQ is major.minor, got {RCMS_REQ}");
+        assert!(
+            env!("CARGO_PKG_VERSION").starts_with(&format!("{RCMS_REQ}.")),
+            "scaffolder version {} is out of step with rustango-cms {RCMS_REQ}",
+            env!("CARGO_PKG_VERSION")
+        );
+        assert!(CARGO_TMPL.contains("rustango-cms = __RCMS_DEP__"));
+        assert!(!CARGO_TMPL.contains("__RCMS_PATH__"));
     }
 
     /// The analytics beacon POSTs via `navigator.sendBeacon`, which

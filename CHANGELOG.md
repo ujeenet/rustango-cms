@@ -8,7 +8,14 @@ Issue numbers such as `#258` in entries written before the public release
 refer to the project's earlier, private tracker, not to issues in this
 repository.
 
-## Unreleased
+## 0.1.0 — 2026-10-06
+
+First release on crates.io: `rustango-cms` and `rustango-cms-macros`.
+
+### Changed
+
+- `rcms new` projects depend on the crates.io release of rustango-cms;
+  `--local` keeps the old path dependency on a checkout.
 
 ### Breaking
 

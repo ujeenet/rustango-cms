@@ -56,4 +56,4 @@ __TEMPLATE_NOTE__
 
 ## Dependencies
 
-This project depends on `rustango-cms` by **path**, pointing at the checkout `rcms` was built from, because rustango-cms isn't on crates.io yet. The `rustango` framework comes from crates.io. Once rustango-cms is published, change the dependency in `Cargo.toml` to `rustango-cms = "0.1"`.
+`rustango-cms` and the `rustango` framework both come from crates.io. Keep `rustango` on the minor version that `rustango-cms` requires: two copies of the framework in one build give you `Tenant` and `Pool` types that do not match. (A project made with `rcms new --local` depends on a rustango-cms checkout by path instead.)

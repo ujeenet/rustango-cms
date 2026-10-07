@@ -13,9 +13,9 @@ This walkthrough takes you from an empty directory to a working blog with an edi
 | Tool | Why | Install |
 |---|---|---|
 | Rust 1.88+ | Compiler | <https://rustup.rs> |
-| A checkout of `rustango-cms` | The scaffolder and the CMS itself | `git clone https://github.com/ujeenet/rustango-cms` |
+| A checkout of `rustango-cms` | The scaffolder, `rcms` | `git clone https://github.com/ujeenet/rustango-cms` |
 
-rustango-cms isn't on crates.io yet, so a generated project points at your checkout of it; the scaffolder writes that path for you. The `rustango` framework comes from crates.io.
+The generated project gets `rustango-cms` and the `rustango` framework from crates.io; the checkout is only needed to run the scaffolder.
 
 Check what you have:
 
@@ -59,7 +59,7 @@ Here's what it wrote:
 
 ```
 myblog/
-├── Cargo.toml              # path deps on rustango-cms + rustango
+├── Cargo.toml              # depends on rustango-cms + rustango
 ├── .env.example
 ├── .gitignore
 ├── README.md               # the same commands, kept for later

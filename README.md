@@ -2,6 +2,8 @@
 
 A page-tree content management system for Rust, built on top of [rustango](https://crates.io/crates/rustango).
 
+**Documentation:** [cms.rustango.com](https://cms.rustango.com) — guides for editors and developers, including a step-by-step tutorial that builds a small shop.
+
 `rustango-cms` provides:
 
 - An abstract `Page` model with parent/child tree traversal (materialized-path) and multi-table inheritance (typed extension tables one-to-one back to `cms_page`).

@@ -1,4 +1,4 @@
-//! Page-value bridge (#559/#564) — turns a compiled schema + a page's
+//! Page-value bridge — turns a compiled schema + a page's
 //! stored values into editor HTML, and a posted form back into stored
 //! values.
 //!
@@ -20,8 +20,8 @@ use crate::widget::{Widget, WidgetKind};
 
 /// Coerce one posted form value into typed JSON per widget kind. The only
 /// copy of the rule: `PageTypeHandler::preview_extension` calls it too, so
-/// a builder field and a page field of the same kind serialize identically
-/// (#660). Chooser ids become `i64` (empty = null), as they are stored.
+/// a builder field and a page field of the same kind serialize identically.
+/// Chooser ids become `i64` (empty = null), as they are stored.
 #[must_use]
 pub fn coerce(kind: WidgetKind, raw: &str) -> Value {
     match kind {
@@ -92,7 +92,7 @@ fn component_versions(compiled: &CompiledSchema) -> Value {
 /// Walk the compiled body → a typed value map from a posted form. Only
 /// declared keys are kept; groups reassemble to nested objects, zones
 /// keep the stream array. Shared by [`save_from_form`] and the unsaved
-/// preview path (#565) so on-screen edits render identically to saves.
+/// preview path so on-screen edits render identically to saves.
 #[must_use]
 pub fn build_values(
     compiled: &CompiledSchema,
@@ -453,8 +453,8 @@ pub async fn children_builder(
     Ok(out)
 }
 
-/// Public-render context for a page whose type has a published schema
-/// (#565). Returns `(builder_values, zone_html)` where `builder_values`
+/// Public-render context for a page whose type has a published schema.
+/// Returns `(builder_values, zone_html)` where `builder_values`
 /// is the whole value tree (scalars + nested groups + zone arrays) for
 /// `ctx.builder.*`, and `zone_html` maps each flexible-content/repeater
 /// zone key → pre-rendered HTML (through the stream pipeline with the
@@ -506,7 +506,7 @@ async fn values_for_doc(
 /// The display labels of a page's choice fields (select, radio, checkboxes)
 /// in `locale` (a locale code; `None` = the default language), with the
 /// same nesting as `builder.*`: `builder_labels.glaze` is "Bleu lune" where
-/// `builder.glaze` is the stored value "Moon blue" (#863). A multi-choice
+/// `builder.glaze` is the stored value "Moon blue". A multi-choice
 /// field gives a list. Fields with no value are left out.
 #[must_use]
 pub fn choice_labels(doc: &crate::page_builder::Document, values: &Value, locale: Option<&str>) -> Value {
@@ -747,7 +747,7 @@ pub fn first_media_id(compiled: &CompiledSchema, values: &Value) -> Option<i64> 
 }
 
 /// The built-in block that renders a chooser widget's value, and the key
-/// its id goes under (#844).
+/// its id goes under.
 fn chooser_block(kind: crate::widget::WidgetKind) -> Option<(&'static str, &'static str)> {
     use crate::widget::WidgetKind as K;
     match kind {
@@ -788,7 +788,7 @@ fn value_at<'v>(values: Option<&'v Map<String, Value>>, path: &str) -> Option<&'
 
 /// Chooser fields rendered through the built-in chooser blocks, so a photo
 /// is an `<img>` and a page is a link exactly as the same block in a zone
-/// would be (#844). One enrichment pass looks up every referenced row.
+/// would be. One enrichment pass looks up every referenced row.
 async fn render_chooser_fields(
     body: &[BodyItem],
     values: Option<&Map<String, Value>>,
@@ -825,7 +825,7 @@ async fn render_chooser_fields(
     out
 }
 
-/// A fixed field's value as public HTML, by widget kind (#844): rich text
+/// A fixed field's value as public HTML, by widget kind: rich text
 /// sanitized, markdown rendered, choices by label, links clickable (http,
 /// https, mailto and tel only). `None` for an empty value or a kind that is
 /// never shown (password, hidden) or rendered elsewhere (choosers).
@@ -896,7 +896,7 @@ fn labelled(kind: crate::widget::WidgetKind) -> bool {
 /// The `cms_translation.field_path` prefix for page-builder leaves.
 pub const BUILDER_PATH_PREFIX: &str = "builder";
 
-/// Enumerate translatable text leaves in a page's builder values (#567):
+/// Enumerate translatable text leaves in a page's builder values:
 /// fixed text fields + group text members (`builder.<key>` /
 /// `builder.<group>.<field>`) and stream text leaves inside repeater/flex
 /// zones (`builder.<zone>.<uuid>.<name>`, via the block walker with the
@@ -999,7 +999,7 @@ fn push_fixed_leaf(
     });
 }
 
-/// Apply per-locale overrides to a page's builder values in place (#567).
+/// Apply per-locale overrides to a page's builder values in place.
 /// Fixed/group text leaves keyed `builder.<path>` are replaced when the
 /// override is non-empty; zone streams delegate to the block overlay with
 /// the dyn-block set. Missing/empty overrides leave the canonical value.
@@ -1473,7 +1473,7 @@ mod public_value_tests {
         public_value_html(&w, &v)
     }
 
-    /// #844 — values render by kind instead of as escaped raw text.
+    /// Values render by kind instead of as escaped raw text.
     #[test]
     fn values_render_by_widget_kind() {
         assert_eq!(html(K::RichText, json!("<p>Hi<script>x</script></p>")).unwrap(), "<p>Hi</p>");

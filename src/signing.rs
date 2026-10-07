@@ -1,5 +1,5 @@
 //! Minimal HMAC-SHA256 used across the CMS for short signed tokens
-//! (view-restriction grants #294, signed rendition URLs #425).
+//! (view-restriction grants, signed rendition URLs).
 //!
 //! The framework's CSRF module has an `hmac_sha256` but it's
 //! `pub(crate)`; rather than pull the `hmac` + `sha2` crates twice, we
@@ -9,7 +9,7 @@
 use sha2::{Digest, Sha256};
 
 /// Process-wide CMS secret used to sign short-lived tokens (preview
-/// tokens #430, and any future signed CMS artifact). `None` = unset →
+/// tokens, and any future signed CMS artifact). `None` = unset →
 /// the dependent feature stays off.
 static SECRET: std::sync::OnceLock<Option<Vec<u8>>> = std::sync::OnceLock::new();
 
@@ -19,7 +19,7 @@ static SECRET: std::sync::OnceLock<Option<Vec<u8>>> = std::sync::OnceLock::new()
 ///
 /// The first read fixes the secret for the life of the process, so a call
 /// after it — or a second call with another key — cannot take effect, and
-/// is logged as an error rather than dropped (#697).
+/// is logged as an error rather than dropped.
 pub fn set_secret(key: impl Into<Vec<u8>>) {
     let key = key.into();
     if let Err(rejected) = SECRET.set(Some(key)) {

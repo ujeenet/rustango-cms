@@ -210,7 +210,7 @@ fn claim(key: &str) -> Option<std::sync::Arc<rustango::__private_runtime::tokio:
 
 /// Finish a pass: `true` keeps the claim for another one. It is kept when a
 /// drain was requested during the pass — a row enqueued after the pass read
-/// the queue would otherwise wait for the next submission (#741) — or when
+/// the queue would otherwise wait for the next submission — or when
 /// the caller still has a retry to wait for.
 fn finish_pass(key: &str, waiting: bool) -> bool {
     let mut g = IN_FLIGHT.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -223,7 +223,7 @@ fn finish_pass(key: &str, waiting: bool) -> bool {
     false
 }
 
-/// Pending and due at `now`. Filtered in SQL (#741): selecting the oldest
+/// Pending and due at `now`. Filtered in SQL: selecting the oldest
 /// pending rows and skipping backed-off ones in Rust let a window full of
 /// retries (a webhook that is down) starve newer rows that were due.
 fn due_at(now: chrono::DateTime<Utc>) -> Q {

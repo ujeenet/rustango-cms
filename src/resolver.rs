@@ -11,10 +11,10 @@
 //! 2. **Slug-walk fallback** for cases the materialized lookup
 //!    misses — historical rows from before slice 1, draft-preview
 //!    routes, etc. Walks the slug chain one level at a time
-//!    (Wagtail's `Page.route()` shape), filters to the public statuses.
+//!    and filters to the public statuses.
 //!
-//! Both paths serve the **public statuses** — `published` and, since
-//! #556, `archived` (superseded-but-preserved content). Drafts,
+//! Both paths serve the **public statuses** — `published` and
+//! `archived` (superseded-but-preserved content). Drafts,
 //! scheduled, and `expired` (takedown) rows stay invisible to anonymous
 //! visitors. The caller reads `page.status` to distinguish the two
 //! served states.
@@ -26,14 +26,14 @@ use rustango::sql::FetcherPool as _;
 use crate::page::Page;
 use crate::tree_ops::TreeError;
 
-/// Statuses a public page can have. `archived` joins `published` (#556);
+/// Statuses a public page can have. `archived` joins `published`;
 /// `scheduled` is included only so a page whose go-live time has passed is
 /// served before the sweep flips it — [`visible_now`] decides. `expired`
 /// is excluded so takedown still 404s. Owned `String`s for the `is_in` binds.
 ///
 /// The query side of "is this page served": filter by these, then keep the
 /// rows [`visible_now`] accepts. Anything that links to or lists served
-/// pages uses the pair, so it agrees with what a visitor gets (#763).
+/// pages uses the pair, so it agrees with what a visitor gets.
 #[must_use]
 pub fn served_statuses() -> [String; 3] {
     [
@@ -44,7 +44,7 @@ pub fn served_statuses() -> [String; 3] {
 }
 
 /// Whether a page is public at `now`, judged by its dates rather than by
-/// whether the schedule sweep has run yet (#680): a scheduled page goes
+/// whether the schedule sweep has run yet: a scheduled page goes
 /// live at `go_live_at`, a published one comes down at `expire_at`.
 #[must_use]
 pub fn visible_now(page: &Page, now: chrono::DateTime<chrono::Utc>) -> bool {
@@ -157,7 +157,7 @@ pub async fn resolve_path(t: &Tenant, url_path: &str) -> Result<Option<Page>, Tr
     resolve_by_walk(t, url_path).await
 }
 
-/// #198 — when [`resolve_path`] misses, walk ancestor prefixes of
+/// When [`resolve_path`] misses, walk ancestor prefixes of
 /// `request_path` looking for a `Page` whose registered
 /// `PageTypeHandler::routes()` accepts the remaining suffix. Returns
 /// the matched page + match details on first hit (longest prefix

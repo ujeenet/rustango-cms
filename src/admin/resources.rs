@@ -1,5 +1,5 @@
 //! Admin-resource registry — single source of truth for the CRUD
-//! permissions matrix on `/cms-admin/roles/{id}/edit` (#33).
+//! permissions matrix on `/cms-admin/roles/{id}/edit`.
 //!
 //! Each entry describes one sidebar resource (Pages, Library, Media,
 //! Redirects, Users, …) with:
@@ -359,7 +359,7 @@ pub fn parse_codename(codename: &str) -> Option<(String, Action)> {
 }
 
 /// The actions a role currently holds on `resource`, given the set of
-/// granted `(role_id, codename)` pairs (#436). Only the resource's own
+/// granted `(role_id, codename)` pairs. Only the resource's own
 /// `actions` are considered, in declaration order. Drives each
 /// `(resource × role)` cell of the tenant permission-overview matrix.
 #[must_use]

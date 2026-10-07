@@ -1,4 +1,4 @@
-//! Page-builder schema document (#559/#560) — the node tree a Developer
+//! Page-builder schema document — the node tree a Developer
 //! authors in the visual builder, stored (versioned) per page type.
 //!
 //! Shape (internally tagged on `kind`):
@@ -127,7 +127,7 @@ pub struct RowNode {
     pub children: Vec<Node>,
 }
 
-/// A named, always-present struct (ACF group): image + title +
+/// A named, always-present struct (a group): image + title +
 /// description under one key. Children: fields + rows.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GroupNode {
@@ -154,7 +154,7 @@ pub struct ComponentNode {
     pub key: Option<String>,
 }
 
-/// N instances of one field group (ACF repeater / Wagtail ListBlock).
+/// N instances of one field group (a repeater).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RepeaterNode {
     #[serde(default)]
@@ -169,7 +169,7 @@ pub struct RepeaterNode {
     pub item: GroupDef,
 }
 
-/// A flexible-content zone (ACF flexible content / Strapi dynamic zone):
+/// A flexible-content zone:
 /// the editor freely composes entries from `allowed`. `allowed` entries
 /// resolve to zone-local `groups`, library components (`c_<slug>`), or
 /// code-registered blocks (`find_block`) — interop bonus.
@@ -224,7 +224,7 @@ pub struct ComponentDoc {
     pub children: Vec<Node>,
 }
 
-/// A library component handed to [`validate`] / [`crate::page_builder::compile`].
+/// A library component handed to [`validate`] / [`crate::page_builder::compile()`].
 #[derive(Debug, Clone)]
 pub struct ComponentEntry {
     pub doc: ComponentDoc,
@@ -438,7 +438,7 @@ pub fn validate_component(doc: &ComponentDoc) -> Vec<String> {
 
 /// Whether a page-type schema references a library component by slug —
 /// either a [`ComponentNode`] (`ref == slug`) anywhere in the tree, or a
-/// flex zone whose `allowed` lists `c_<slug>` (#563 delete guard).
+/// flex zone whose `allowed` lists `c_<slug>` (delete guard).
 #[must_use]
 pub fn references_component(doc: &Document, slug: &str) -> bool {
     let tag = component_type(slug);

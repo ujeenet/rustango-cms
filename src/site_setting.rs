@@ -1,4 +1,4 @@
-//! Per-tenant site settings (#108, Wagtail parity `wagtail.contrib.settings`).
+//! Per-tenant site settings.
 //!
 //! Editor-managed singleton key-value rows. Templates read them via
 //! the `{{ site_setting(scope='footer') }}` Tera function; admins
@@ -9,7 +9,7 @@
 //!
 //! - **Free-form** (default): editors type raw JSON in a textarea.
 //!   Covers ad-hoc scopes with zero host boilerplate.
-//! - **Typed** (#406): a host crate registers a [`SiteSettingSchema`]
+//! - **Typed**: a host crate registers a [`SiteSettingSchema`]
 //!   for a scope via [`crate::register_site_setting!`], declaring a
 //!   list of [`Widget`]s. The admin then renders a real form (the same
 //!   `_widget.html` machinery page-type fields use), validates required
@@ -138,7 +138,7 @@ pub fn schema_for(scope: &str) -> Option<&'static SiteSettingSchema> {
 
 /// Every registered schema, sorted by scope. The admin list surfaces
 /// these even before a row exists, so typed settings are always
-/// discoverable (Wagtail's "settings menu" parity).
+/// discoverable in the settings menu.
 #[must_use]
 pub fn registered_schemas() -> Vec<&'static SiteSettingSchema> {
     let mut v: Vec<_> = inventory::iter::<SiteSettingSchema>.into_iter().collect();
@@ -146,7 +146,7 @@ pub fn registered_schemas() -> Vec<&'static SiteSettingSchema> {
     v
 }
 
-/// Register a typed schema for a site-settings `scope` (#406).
+/// Register a typed schema for a site-settings `scope`.
 ///
 /// ```ignore
 /// use rustango_cms::widget::{Widget, WidgetKind};

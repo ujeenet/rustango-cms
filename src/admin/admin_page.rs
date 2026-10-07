@@ -1,4 +1,4 @@
-//! Extension point for **custom admin pages** (#23).
+//! Extension point for **custom admin pages**.
 //!
 //! Authors building on top of `rustango-cms` register a unit-struct
 //! handler via [`crate::register_admin_page!`] and it appears as a
@@ -116,8 +116,8 @@ pub trait AdminPageHandler: Send + Sync + 'static {
     }
 
     /// Codename prefix to surface this page in the role permissions
-    /// matrix (#33). Returning `Some("acme_reports")` adds a
-    /// "Custom admin pages → <label>" row with `view` + `edit`
+    /// matrix. Returning `Some("acme_reports")` adds a
+    /// "Custom admin pages → `<label>`" row with `view` + `edit`
     /// columns, granting / revoking codenames `acme_reports.view`
     /// and `acme_reports.edit`. Default `None` means the page is
     /// not access-controlled by the matrix — hosts can still gate

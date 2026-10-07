@@ -1,9 +1,9 @@
 //! `PageLock` — best-effort editor lock on a `cms_page` row.
 //!
-//! Two editors opening the same page in a Wagtail-shaped CMS expect a
+//! Two editors opening the same page in a page-tree CMS expect a
 //! "Page X is being edited by Y" banner instead of a silent
 //! last-write-wins clobber. This module is the foundational lock
-//! primitive; multi-step workflows (#73), inline comments (#81), and
+//! primitive; multi-step workflows, inline comments, and
 //! editing-session tracking (B11) all sit on top of it.
 //!
 //! ## Semantics
@@ -22,10 +22,10 @@
 //! the owner room to be away from keyboard without permanently jamming
 //! the page for everyone else.
 //!
-//! ## Wagtail parity
+//! ## Lock kinds
 //!
-//! Mirrors `wagtail.locks.BasicLock` shape. Workflow-driven locks
-//! (`WorkflowLock`, `ScheduledForPublishLock`) ship with #73.
+//! This is the basic editor lock. Workflow-driven locks
+//! (`WorkflowLock`, `ScheduledForPublishLock`) ship with workflows.
 //!
 //! See `src/admin/handlers.rs::page_edit_form` for the acquire site
 //! and `src/admin/handlers.rs::page_edit_submit` for the release site.
@@ -35,8 +35,7 @@ use rustango::sql::Auto;
 use rustango::Model;
 use serde::{Deserialize, Serialize};
 
-/// How long a lock survives without a heartbeat refresh. Matches the
-/// default in Wagtail's `WAGTAILADMIN_LOCK_TIMEOUT` shape; tune via
+/// How long a lock survives without a heartbeat refresh. Tune via
 /// `RUSTANGO_CMS_LOCK_TTL_SECS` if shorter sessions are needed.
 pub const DEFAULT_TTL_SECS: i64 = 30 * 60;
 

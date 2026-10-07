@@ -1,4 +1,4 @@
-//! Varnish-purge backend for [`crate::cache_invalidate::PageCacheInvalidator`] (#193).
+//! Varnish-purge backend for [`crate::cache_invalidate::PageCacheInvalidator`].
 //!
 //! Wires the per-page cache-invalidation hook to a Varnish fleet.
 //! After a CMS save, each configured Varnish instance receives a

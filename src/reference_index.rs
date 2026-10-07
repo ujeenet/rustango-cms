@@ -1,5 +1,4 @@
-//! Generic reference index — \"what links here\" (#146, Wagtail
-//! parity D3).
+//! Generic reference index — \"what links here\".
 //!
 //! Tracks every inbound reference: page→page links, snippet→page
 //! embeds, page→media renditions. Feeds two surfaces:
@@ -15,7 +14,7 @@
 //!   - \`href=\"/some/path\"\` → page reference (resolved via url_path
 //!     lookup).
 //!   - \`{{ cms_snippet(slug=\"X\") }}\` → snippet reference.
-//!   - \`/__media__/<spec>/<id>\` → media reference.
+//!   - `/__media__/<spec>/<id>` → media reference.
 //!   - StreamField block values with \`media_id\` / \`page_id\` keys.
 
 use chrono::{DateTime, Utc};
@@ -77,7 +76,7 @@ pub struct Reference {
 /// follow-up Page lookup if needed.
 ///
 /// Patterns recognized:
-///   - \`/__media__/<spec>/<id>\` → media reference.
+///   - `/__media__/<spec>/<id>` → media reference.
 ///   - \`{{ cms_snippet(slug=\"X\") }}\` or \`cms_snippet(slug=X)\` → no
 ///     direct id, caller must resolve via slug.
 #[must_use]
@@ -224,7 +223,7 @@ pub fn aggregate_referrers(refs: Vec<ReferenceIndex>) -> Vec<Referrer> {
 
 /// Aggregated, title-resolved inbound usage for any target
 /// `(to_kind, to_id)` — reused across pages / snippets / media /
-/// documents (#419). Page + snippet referrers get their real title
+/// documents. Page + snippet referrers get their real title
 /// resolved in one batched query each; other kinds keep the `kind#id`
 /// fallback.
 pub async fn usage_summary(pool: &rustango::sql::Pool, to_kind: &str, to_id: i64) -> Vec<Referrer> {

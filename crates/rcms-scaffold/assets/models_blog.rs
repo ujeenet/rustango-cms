@@ -1,7 +1,7 @@
 //! Page-type handlers for this site (blog template).
 //!
 //! `ArticlePage` carries a **typed extension table** (`cms_article_page`)
-//! with a Markdown body + optional hero image — Wagtail-shape multi-table
+//! with a Markdown body + optional hero image — multi-table
 //! inheritance: the shared tree/status fields live on `cms_page`, the
 //! typed fields live here. The extension is edited inline in the page
 //! editor via `extension_fields` / `save_extension`.
@@ -91,7 +91,7 @@ impl PageTypeHandler for ArticlePage {
     /// the save *after* creation. Return an empty row rather than `null` for
     /// that gap — otherwise `{{ extension.body_markdown }}` raises Tera's
     /// "Variable not found" and the public page 500s instead of rendering an
-    /// empty article (#620). Templates should never have to tell "no row yet"
+    /// empty article. Templates should never have to tell "no row yet"
     /// apart from "empty row".
     async fn load_extension(&self, pool: &Pool, page_id: i64) -> Result<Value, ExecError> {
         let row = ArticleBody::objects()

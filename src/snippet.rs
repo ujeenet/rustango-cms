@@ -325,7 +325,7 @@ pub async fn folder_tree_for_type(
 
 thread_local! {
     /// The render's `slug → html` maps (wrapped, body-only), installed by
-    /// [`install`] for the duration of `tera.render` (#845).
+    /// [`install`] for the duration of `tera.render`.
     static CURRENT_SNIPPETS: std::cell::RefCell<Option<SnippetMaps>> =
         const { std::cell::RefCell::new(None) };
 }
@@ -363,7 +363,7 @@ pub fn install(
 /// `{{ cms_snippet(slug="hero-cta") }}` is the snippet's rendered body in
 /// its wrapper; `body=true` gives the body alone. An unknown slug is an
 /// empty string. Tera functions can't read the context, so the maps come
-/// from the thread-local the public render installs (#845).
+/// from the thread-local the public render installs.
 pub fn register_tera_function(tera: &mut tera::Tera) {
     tera.register_function("cms_snippet", CmsSnippetFn);
 }
@@ -448,7 +448,7 @@ pub async fn prefetch_all(
 /// Wrap rendered markdown in a class-bearing `<div>` so theme CSS
 /// can target `.cms-snippet[data-type="callout"]` etc. `body_markdown`
 /// is passed in (rather than read off `s`) so the caller can supply a
-/// per-locale translation override (#409).
+/// per-locale translation override.
 fn render_with_wrapper(s: &Snippet, body_markdown: &str) -> String {
     let html = crate::markdown::render(body_markdown);
     format!(
@@ -477,7 +477,7 @@ mod cms_snippet_fn_tests {
         tera.render("t.html", &tera::Context::new()).unwrap()
     }
 
-    /// #845 — `cms_snippet` reads the snippets the render installed.
+    /// `cms_snippet` reads the snippets the render installed.
     #[test]
     fn cms_snippet_returns_the_installed_snippet() {
         let _g = install(

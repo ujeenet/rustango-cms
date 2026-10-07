@@ -22,7 +22,7 @@ use crate::media::Media;
 pub struct ImageListQuery {
     #[serde(flatten)]
     pub list: q::ListQuery,
-    /// Optional collection scope. Wagtail equivalent: `?collection=N`.
+    /// Optional collection scope: `?collection=N`.
     #[serde(default, deserialize_with = "crate::api::query::empty_as_none")]
     pub collection: Option<i64>,
 }

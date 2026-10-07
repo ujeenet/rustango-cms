@@ -141,8 +141,8 @@
             {{ "Save translations" | translate(locale=LANG) }}
         </button>
     {% else %}
-        {# #318 — three-action save footer (Django/Wagtail ModelForm
-           parity). The submit button's `_action` value tells the handler
+        {# #318 — three-action save footer.
+           The submit button's `_action` value tells the handler
            where to go next: list / keep editing this page / add a sibling
            under the same parent. The primary stays first so an Enter
            keypress saves and returns to the list. #}
@@ -213,8 +213,8 @@
                 <span class="material-symbols-rounded sm">close</span> {{ "Cancel" | translate(locale=LANG) }}
             </a>
             {% endif %}
-            {# #107 — runtime-hook page action menu entries (Wagtail's
-               `register_page_action_menu_item`). Renders below the
+            {# #107 — runtime-hook page action menu entries
+               (`register_page_action_menu_item`). Renders below the
                built-in entries; href_template is rendered with the
                page id pre-substituted server-side. #}
             {% if plugin_page_action_menu_items and plugin_page_action_menu_items | length > 0 %}
@@ -968,7 +968,7 @@
     {# -------- Content tab -------- #}
     <section class="rcms-tab-panel" id="tab-content" role="tabpanel" data-tab-panel="content">
         {# #269 — page-type breadcrumb chip. Slim, muted, sits above
-           the title so the type reads as context (like Wagtail's
+           the title so the type reads as context (like a
            breadcrumb) instead of competing with the title field as
            a same-weight form input. Hover reveals the machine-name
            + "permanent" note so power users still have the detail
@@ -985,7 +985,7 @@
         <div class="rcms-field-row">
             <div class="rcms-field">
                 <label>{{ "Title" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
-                {# Phase 7 — Wagtail TitleFieldPanel parity. cms-ux.js
+                {# Phase 7 — auto-slug from the title. cms-ux.js
                    reads `data-slug-source` on the slug input and listens
                    for `input` events on the title input named there;
                    slug auto-fills from the slugified title until the

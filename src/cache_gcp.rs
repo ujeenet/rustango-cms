@@ -1,5 +1,5 @@
 //! Google Cloud CDN purge backend for
-//! [`crate::cache_invalidate::PageCacheInvalidator`] (#428).
+//! [`crate::cache_invalidate::PageCacheInvalidator`].
 //!
 //! Wires the per-page cache-invalidation hook to Cloud CDN's
 //! [`urlMaps.invalidateCache`] Compute Engine API. After a CMS save
@@ -12,7 +12,7 @@
 //! Behind the `cache_gcp` feature. Cloud CDN authenticates against
 //! the Compute Engine management API with a short-lived OAuth2 bearer
 //! token, so the invalidator takes an [`AccessTokenSource`] (use
-//! [`StaticToken`] for scripts/tests; implement the trait against the
+//! [`StaticToken`](crate::cache_invalidate::StaticToken) for scripts/tests; implement the trait against the
 //! GCE metadata server for a long-running server):
 //!
 //! ```ignore

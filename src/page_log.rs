@@ -1,6 +1,6 @@
-//! Per-page audit log (#192, Wagtail parity).
+//! Per-page audit log.
 //!
-//! Mirrors Wagtail's `PageLogEntry`: every meaningful action on a
+//! Every meaningful action on a
 //! page (publish, edit, move, copy, alias create, restore, lock,
 //! unlock, force-unlock, workflow submit / approve / reject / cancel,
 //! comment new / resolved / reopened) lands a row. Revisions answer

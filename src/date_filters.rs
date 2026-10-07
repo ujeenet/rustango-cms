@@ -1,6 +1,6 @@
 //! Tera date filters — parse stringified dates from extension /
 //! form values and re-format them for output, fail-soft on
-//! unparseable / null / empty input (#255).
+//! unparseable / null / empty input.
 //!
 //! Tera's built-in `| date` filter DOES parse `YYYY-MM-DD` and
 //! RFC3339 strings — but it errors hard on anything else

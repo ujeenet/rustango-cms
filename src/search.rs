@@ -1,4 +1,4 @@
-//! Database full-text search backend (#408).
+//! Database full-text search backend.
 //!
 //! Admin + API search has been client-side `LIKE` substring matching —
 //! no relevance ranking, poor scaling. This adds a **Postgres
@@ -14,7 +14,7 @@
 //! v1 indexes the canonical text (`title` + `seo_title` +
 //! `seo_description`) on the fly — no stored column required, correct
 //! without a migration. A `GIN` index + extension-body indexing (via
-//! the #432 task queue) are follow-ups for scale.
+//! the task queue) are follow-ups for scale.
 
 // ---- pluggable backend (Postgres FTS is the built-in; Elasticsearch
 //      is an opt-in external backend) -------------------------------
@@ -30,7 +30,7 @@ pub struct SearchDoc {
     pub seo_title: String,
     pub seo_description: String,
     pub url_path: String,
-    /// #556 — the page's lifecycle status (`published` / `archived`) so a
+    /// The page's lifecycle status (`published` / `archived`) so a
     /// backend can badge archived hits. Defaults to `published` for docs
     /// indexed before this field existed.
     #[serde(default = "default_published_status")]
@@ -155,7 +155,7 @@ async fn fts_page_ids(
     }
 }
 
-/// Fuzzy "did you mean?" suggestion (#408): the published page title
+/// Fuzzy "did you mean?" suggestion: the published page title
 /// most trigram-similar to `query` above `threshold` (0.0–1.0), or
 /// `None`. Postgres + the `pg_trgm` extension only — `None` on any
 /// other dialect, when `pg_trgm` isn't installed, on a query error, or
@@ -198,9 +198,9 @@ const FTS_INDEX: &str = "cms_page_fts_idx";
 
 /// Create the GIN index that makes [`search_page_ids`] scale — an
 /// expression index over the exact `to_tsvector(...)` the query uses,
-/// so the planner can use it instead of a seq scan (#408). Idempotent
+/// so the planner can use it instead of a seq scan. Idempotent
 /// (`IF NOT EXISTS`); Postgres-only (no-op + `Ok` on other dialects).
-/// [`crate::seed::ensure_seeded`] runs it for every tenant at boot (#729).
+/// [`crate::seed::ensure_seeded`] runs it for every tenant at boot.
 ///
 /// # Errors
 /// The `CREATE INDEX` failing (e.g. insufficient privileges).
@@ -233,7 +233,7 @@ pub async fn ensure_pg_fts_index(
 mod tests {
     use rustango::sql::sqlx;
 
-    /// A Postgres schema of its own for one test (#730), holding a
+    /// A Postgres schema of its own for one test, holding a
     /// throwaway `cms_page` with the columns the search queries read.
     ///
     /// These tests used to share `RCMS_TEST_TENANT_URL` — the variable
@@ -290,7 +290,7 @@ mod tests {
         }
     }
 
-    /// Real-Postgres ranking check (#408). Runs with `--ignored` against
+    /// Real-Postgres ranking check. Runs with `--ignored` against
     /// `RCMS_TEST_PG_URL`, in a [`Scratch`] schema.
     ///
     /// Verifies the live `search_page_ids` query end-to-end against a
@@ -337,7 +337,7 @@ mod tests {
         assert!(pos(9001) < pos(9002), "title match ranks first: {ids:?}");
     }
 
-    /// Real-Postgres `pg_trgm` "did you mean?" check (#408). Same gating
+    /// Real-Postgres `pg_trgm` "did you mean?" check. Same gating
     /// as [`pg_fts_ranks_and_filters`]; also needs the `pg_trgm`
     /// extension (created in the test DB).
     #[tokio::test]
@@ -370,7 +370,7 @@ mod tests {
         assert_eq!(none, None, "no near match → no suggestion");
     }
 
-    /// Real-Postgres GIN index check (#408): the expression index is
+    /// Real-Postgres GIN index check: the expression index is
     /// created, idempotently.
     #[tokio::test]
     #[ignore = "needs RCMS_TEST_PG_URL"]
@@ -397,7 +397,7 @@ mod tests {
     }
 
     /// Real-Postgres: the all-status variant surfaces drafts that the
-    /// published-only public query excludes (#408 admin search).
+    /// published-only public query excludes (admin search).
     #[tokio::test]
     #[ignore = "needs RCMS_TEST_PG_URL"]
     async fn pg_all_statuses_includes_drafts() {

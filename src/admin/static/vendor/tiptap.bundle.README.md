@@ -27,7 +27,7 @@ Pinned at build time: TipTap 2.27.2. Extensions: StarterKit (headings h2–h4,
 bold/italic/strike/code, lists, blockquote, code-block, hr) + Link + Image +
 Table (table-row/header/cell, non-resizable).
 
-The Link mark is extended (see `tiptap.entry.js`) to carry Wagtail-style
+The Link mark is extended (see `tiptap.entry.js`) to carry
 **move-safe** attributes — `<a linktype="page|media" id="N">` (no `href`).
 Stock Link only matches `a[href]` and would drop `linktype`/`id` on edit,
 silently breaking links that survive page/media moves; the override adds an

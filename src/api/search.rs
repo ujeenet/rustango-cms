@@ -18,7 +18,7 @@
 
 /// Fold `s` for a case-insensitive substring match — Unicode-aware, so
 /// `Новини` matches `новини` and `ÜBER` matches `über`. The one fold every
-/// API search fallback uses (#746), matching the admin explorer.
+/// API search fallback uses, matching the admin explorer.
 pub(crate) fn fold(s: &str) -> String {
     s.to_lowercase()
 }

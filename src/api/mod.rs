@@ -1,8 +1,8 @@
-//! REST API v2 — public reads plus member login (#105, Wagtail parity A5).
+//! REST API v2 — public reads plus member login.
 //!
 //! Lets headless frontends (Next.js / Nuxt / Astro / SvelteKit) read
-//! pages, images, and documents over JSON. Mirrors the shape of
-//! `wagtail/api/v2/` — pagination, sparse-field selection, tree filters
+//! pages, images, and documents over JSON — pagination, sparse-field
+//! selection, tree filters
 //! (child_of / descendant_of / ancestor_of), translation siblings,
 //! locale, search, ordering.
 //!
@@ -43,7 +43,7 @@
 //! ## Response shape
 //!
 //! Every list response carries `{ meta: { total_count, limit, offset }, items: [...] }`.
-//! Per-row shape matches the Wagtail v2 convention: a `meta` sub-object
+//! Per-row shape: a `meta` sub-object
 //! with `type`, `detail_url`, plus the content fields hoisted to the
 //! top level. Sparse selection (`?fields=`) filters which content
 //! fields appear; `meta` is always present.

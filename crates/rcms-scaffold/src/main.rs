@@ -1,6 +1,6 @@
 //! `rcms new <project>` — scaffold a new rustango-cms project.
 //!
-//! Mirrors Wagtail's `wagtail start <project>`: emits a self-contained,
+//! Emits a self-contained,
 //! runnable CMS app (Cargo.toml, src/main.rs + models.rs, public
 //! templates, the CMS baseline migrations, README, .env.example,
 //! .gitignore). The skeleton + migrations are embedded at compile time,
@@ -244,7 +244,7 @@ mod tests {
 
     /// The embedded baseline must match the repo's `migrations/` directory.
     /// A hand-written list drifted when the migrations were squashed and broke
-    /// the build outright (#613); the list is generated now, and this asserts
+    /// the build outright; the list is generated now, and this asserts
     /// the generation actually saw something real.
     #[test]
     fn embedded_migrations_match_the_repo() {
@@ -277,7 +277,7 @@ mod tests {
     /// The generated project's framework requirement must match what
     /// rustango-cms itself requires. When it didn't, `[patch.crates-io]`
     /// stopped applying and a generated project resolved two different
-    /// `rustango` crates into one graph (#613).
+    /// `rustango` crates into one graph.
     #[test]
     fn generated_manifest_pins_the_workspace_framework_version() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
@@ -303,7 +303,7 @@ mod tests {
         );
     }
 
-    /// #619 — the analytics beacon POSTs via `navigator.sendBeacon`, which
+    /// The analytics beacon POSTs via `navigator.sendBeacon`, which
     /// can't carry an `X-CSRF-Token`, so `/__cms__/collect` has to be exempt
     /// from CSRF. Every generated project shipped without the exemption:
     /// beacons 403'd, no pageview was ever recorded, and the only symptom was

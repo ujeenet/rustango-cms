@@ -1,4 +1,4 @@
-//! MCP read tools (#587): discover page types + blocks, search and read
+//! MCP read tools: discover page types + blocks, search and read
 //! pages (drafts included — the agent acts as an editor), list locales,
 //! collections, media, and snippets, and enumerate a page's translatable
 //! field paths. Every tool acts as the key's owner and enforces the same

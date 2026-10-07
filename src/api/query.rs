@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-/// Hard cap on `?limit=` — matches Wagtail's `WAGTAILAPI_LIMIT_MAX`.
+/// Hard cap on `?limit=`.
 /// Beyond this, slow clients can DoS the cms with one request.
 pub const MAX_LIMIT: usize = 100;
 /// Default page size when `?limit=` is omitted.
@@ -300,7 +300,7 @@ pub struct ListMeta {
     pub next_offset: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub previous_offset: Option<usize>,
-    /// #408 — a fuzzy "did you mean?" suggestion, set only by the page
+    /// A fuzzy "did you mean?" suggestion, set only by the page
     /// search when it returns no hits but a near-match title exists.
     /// Omitted from the JSON otherwise.
     #[serde(skip_serializing_if = "Option::is_none")]

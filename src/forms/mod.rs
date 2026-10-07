@@ -1,4 +1,4 @@
-//! Visual Form Builder (epic #533).
+//! Visual Form Builder.
 //!
 //! Forms are **snippet-backed**: each form is a `Snippet` of `type_name`
 //! `"form"` whose `data` column holds a [`schema::Form`] JSON document.
@@ -7,10 +7,10 @@
 //! dedicated `form` block.
 //!
 //! Module map (filled in per ticket):
-//! - [`schema`] — the form JSON contract + validation (FB-02 / #535).
-//! - [`library_type`] — `FormLibraryType` snippet registration (FB-03 / #536).
-//! - [`block`] — the embeddable `form` StreamField block (FB-09 / #542).
-//! - [`render`] — schema → public HTML (FB-09 / #542).
+//! - [`schema`] — the form JSON contract + validation.
+//! - [`library_type`] — `FormLibraryType` snippet registration.
+//! - [`block`] — the embeddable `form` StreamField block.
+//! - [`render`] — schema → public HTML.
 
 pub mod block;
 pub mod library_type;

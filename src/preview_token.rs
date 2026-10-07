@@ -1,4 +1,4 @@
-//! Signed preview tokens for decoupled / headless frontends (#430).
+//! Signed preview tokens for decoupled / headless frontends.
 //!
 //! The public API serves **published** pages only (404 on drafts). A
 //! preview token lets an authorized decoupled frontend fetch a page's
@@ -13,7 +13,7 @@
 //! [`crate::signing::secret`]. The expiry is signed, so it can't be
 //! extended by tampering. The tenant is signed but not carried: every
 //! tenant numbers its pages from 1, so a token must verify only on the
-//! tenant that minted it (#673). The feature is **off** until a
+//! tenant that minted it. The feature is **off** until a
 //! secret is configured (`RCMS_SECRET_KEY` or
 //! [`crate::signing::set_secret`]).
 

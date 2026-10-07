@@ -62,7 +62,7 @@ pub type EnrichFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 /// not enough to answer "where am I?", which is the first thing a block
 /// that inherits something from its page needs to know.
 ///
-/// `#[non_exhaustive]` so a new field breaks no one (#665): a host that
+/// `#[non_exhaustive]` so a new field breaks no one: a host that
 /// drives the walker builds one with [`EnrichCtx::new`].
 #[derive(Clone, Copy)]
 #[non_exhaustive]

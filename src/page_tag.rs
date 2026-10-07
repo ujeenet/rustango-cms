@@ -1,4 +1,4 @@
-//! Page tag system (#189, Wagtail parity).
+//! Page tag system.
 //!
 //! Tags are how editors organize blog-style content. Each \`PageTag\`
 //! row is a (page_id, name) pair; tag names are tenant-global
@@ -104,7 +104,7 @@ pub async fn replace_tags(
 }
 
 /// Pre-fetch every tag attached to any page in `page_ids`, grouped
-/// by `page_id` (#252). Single `IN (…)` query instead of N point
+/// by `page_id`. Single `IN (…)` query instead of N point
 /// lookups so the public-render handler can join tags onto every
 /// `children` ctx entry without an N+1.
 ///

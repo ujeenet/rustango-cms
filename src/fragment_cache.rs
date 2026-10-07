@@ -1,10 +1,9 @@
-//! Page-keyed template-fragment caching (#429).
+//! Page-keyed template-fragment caching.
 //!
 //! ## Why there is no `{% rcmscache %}` Tera tag
 //!
-//! Wagtail's fragment caching is a Django **block tag**
-//! (`{% wagtailcache %}…{% endwagtailcache %}`) that skips rendering
-//! the body on a cache hit. **Tera cannot express this**: its grammar
+//! A fragment-cache tag would have to be a **block tag** that skips
+//! rendering its body on a cache hit. **Tera cannot express this**: its grammar
 //! is fixed — there is no API to register a custom block statement,
 //! and the one block-shaped extension point, `{% filter foo %}…
 //! {% endfilter %}`, renders the body *first* and then hands the
@@ -51,7 +50,7 @@ use crate::page::Page;
 ///
 /// `tenant_slug` is part of the key because every tenant numbers its
 /// pages from 1: without it, tenants sharing one cache served each
-/// other's fragments for the same page id (#681).
+/// other's fragments for the same page id.
 #[must_use]
 pub fn page_fragment_key(tenant_slug: &str, page: &Page, suffix: &str) -> String {
     let id = page.id.get().copied().unwrap_or(0);

@@ -1,5 +1,5 @@
 //! Visual themes — design tokens stored as data, rendered as CSS
-//! variables. Mirrors the shape of [wagtail-visual-themes](https://github.com/ujeenet/wagtail-visual-themes):
+//! variables:
 //! a [`Theme`] holds surface / semantic colors + typography + radii +
 //! shadows; [`BrandColor`] rows attach N named brand colors per theme,
 //! each emitting its own slug-keyed CSS variable triplet (raw / rgb /
@@ -10,14 +10,14 @@
 //! `<head>` and reference `var(--color-bg)`, `var(--color-primary)`
 //! etc. anywhere downstream.
 //!
-//! #274 — the admin chrome reads Material Design 3 token names
+//! The admin chrome reads Material Design 3 token names
 //! (`--md-sys-color-surface`, `--md-sys-color-primary`, …), not the
 //! legacy `--color-*` names this module historically emitted. So every
 //! block now emits BOTH namespaces: the legacy `--color-*` for any
 //! host crate / public template still reading them, plus the MD3
 //! bridge so picking a different admin theme actually shifts the
 //! chrome palette. Container / on-* variants the schema doesn't carry
-//! directly are derived via [`mix_with_neutral`] + [`wcag_foreground`].
+//! directly are derived via `mix_with_neutral` + `wcag_foreground`.
 
 use chrono::{DateTime, Utc};
 use rustango::sql::Auto;
@@ -25,7 +25,7 @@ use rustango::Model;
 use serde::{Deserialize, Serialize};
 
 /// A named design-token bundle. Editors create one per visual style
-/// they want to ship: "Wagtail Teal", "Forest", "Aurora Violet".
+/// they want to ship: "Teal", "Forest", "Aurora Violet".
 ///
 /// One theme can be marked `is_admin_default` (drives the admin
 /// chrome) and one `is_default` (the fallback for public pages with
@@ -49,13 +49,13 @@ pub struct Theme {
     #[rustango(primary_key)]
     pub id: Auto<i64>,
 
-    /// Human display name — "Wagtail Teal", "Forest", etc.
+    /// Human display name — "Teal", "Forest", etc.
     #[rustango(max_length = 100)]
     pub name: String,
 
     /// URL-safe identifier — emitted into the body class as
     /// `theme-<slug>` so per-theme template overrides work
-    /// (`.theme-wagtail-teal .hero { … }`).
+    /// (`.theme-forest .hero { … }`).
     #[rustango(max_length = 64, unique)]
     pub slug: String,
 
@@ -617,7 +617,7 @@ fn push_var_indented(buf: &mut String, name: &str, value: &str) {
 }
 
 /// Append `--name: value;` — or nothing, when either half could end the
-/// declaration, the rule or the `<style>` element (#739). Theme and brand
+/// declaration, the rule or the `<style>` element. Theme and brand
 /// colour rows are editable by any user with change permission on those
 /// models, and this output reaches every public page and the admin chrome
 /// with `| safe`, so a value is data and must stay inside its declaration.
@@ -713,7 +713,7 @@ const SHADE_LEVELS: &[(&str, f32)] = &[
 ///
 /// Checks the digits before slicing: `len()` counts bytes, so a 6-byte
 /// non-ASCII string (`"aé€"`) would otherwise pass a length check and
-/// panic on a char boundary (#687).
+/// panic on a char boundary.
 pub(crate) fn parse_rgb6(hex: &str) -> Option<(u8, u8, u8)> {
     let s = hex.trim_start_matches('#');
     if s.len() != 6 || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
@@ -884,7 +884,7 @@ mod tests {
         }
     }
 
-    /// #274 — every MD3 token the chrome reads from `cms.css` must be
+    /// Every MD3 token the chrome reads from `cms.css` must be
     /// covered by `emit_css` so picking a theme actually swings the
     /// palette. Cross-check the bridge against the full list of
     /// `--md-sys-color-*` consumers; missing one means switching that
@@ -924,7 +924,7 @@ mod tests {
         assert!(css.contains("--md-sys-color-error-container:"));
     }
 
-    /// #274 — the dark + system blocks have to match cms.css's
+    /// The dark + system blocks have to match cms.css's
     /// specificity (`:root[data-theme="dark"]`, 0,2,0). A bare
     /// `[data-theme="dark"]` selector loses the cascade against
     /// cms.css's built-in dark block and the theme switch becomes

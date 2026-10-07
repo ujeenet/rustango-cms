@@ -40,17 +40,17 @@ Every target below corresponds to a Rust module in
 | Target | What it covers |
 |---|---|
 | `rustango_cms::admin` | Top-level admin handler errors (page edit, media, etc.) |
-| `rustango_cms::admin::account` | Account-preferences submit (#197) — failed email sends, password rotations |
+| `rustango_cms::admin::account` | Account-preferences submit — failed email sends, password rotations |
 | `rustango_cms::api` | Public JSON API errors (pages / images / documents) |
 | `rustango_cms::auto_menu` | Auto-menu builder fan-out — schema drift, missing snippet warnings |
 | `rustango_cms::block` | StreamField block render failures |
-| `rustango_cms::cache_invalidate` | Page cache purge failures (Cloudflare / Varnish backends in #193) |
+| `rustango_cms::cache_invalidate` | Page cache purge failures (Cloudflare, Varnish and the other purge backends) |
 | `rustango_cms::children_filtered` | Tera `children_filtered()` Tera fn — bad arg shapes |
 | `rustango_cms::forms` | `register_form_field_kind!` + form submission failures |
 | `rustango_cms::hooks` | Plugin hooks — registration drift, panicked callbacks |
 | `rustango_cms::migrations` | Per-tenant migration runs |
-| `rustango_cms::page_log` | Audit-log write failures (#192) |
-| `rustango_cms::page_subscription` | Publish-notify email send failures (#115) |
+| `rustango_cms::page_log` | Audit-log write failures |
+| `rustango_cms::page_subscription` | Publish-notify email send failures |
 | `rustango_cms::page_url` | URL reverse / build helpers — passed bad ids |
 | `rustango_cms::reference_index` | Reference-index rebuild failures + diffing |
 | `rustango_cms::render` | Public page render — template errors, alias resolution warnings, snippet drift |
@@ -61,9 +61,9 @@ Every target below corresponds to a Rust module in
 | `rustango_cms::snippet_render` | Tera `cms_snippet()` fn — drift / missing snippet ids |
 | `rustango_cms::task_kind` | Workflow task registry lookups |
 | `rustango_cms::theme_seed` | Theme seeding on tenant boot |
-| `rustango_cms::view_restriction` | Per-page view restriction lookups (#76) |
+| `rustango_cms::view_restriction` | Per-page view restriction lookups |
 | `rustango_cms::widget` | Widget-kind dispatch — unknown kinds |
-| `rustango_cms::workflow_mail` | Workflow notification email send failures (#85) |
+| `rustango_cms::workflow_mail` | Workflow notification email send failures |
 
 A quick recipe for "show me what the CMS thinks went wrong on this
 request":

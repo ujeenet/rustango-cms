@@ -1,4 +1,4 @@
-//! Categories & taxonomies (#557) — WordPress-style categorization, built
+//! Categories & taxonomies — hierarchical categorization, built
 //! the **same way pages are**: real migration-tracked models, not a JSON
 //! blob or a config file.
 //!
@@ -177,7 +177,7 @@ pub async fn find_taxonomy(
 }
 
 /// The built-in hierarchical `category` vocabulary shipped with every
-/// tenant (WordPress parity). Base columns only — name, description,
+/// tenant. Base columns only — name, description,
 /// featured image, thumbnail, parent. The flat [`page_tag`](crate::page_tag)
 /// story stays the tags vocabulary.
 #[derive(Default)]

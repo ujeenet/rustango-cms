@@ -1,4 +1,4 @@
-//! MCP write tools (#587): create / update / publish pages, upload media,
+//! MCP write tools: create / update / publish pages, upload media,
 //! upsert snippets, write translations. Every tool funnels into the SAME
 //! write paths the admin handlers use (`apply_page_edit`, `store_media`,
 //! `upsert_page_translations`, the snippet save + revision capture), acts

@@ -4,6 +4,10 @@ All notable changes to rustango-cms. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Breaking changes
 have an entry in [UPGRADING.md](UPGRADING.md).
 
+Issue numbers such as `#258` in entries written before the public release
+refer to the project's earlier, private tracker, not to issues in this
+repository.
+
 ## Unreleased
 
 ### Breaking

@@ -1,7 +1,6 @@
-//! Runtime extension-point registry (#107, Wagtail parity B13).
+//! Runtime extension-point registry.
 //!
-//! Mirrors the shape of Wagtail's `@hooks.register('NAME', fn)` but
-//! typed: each hook has a precise signature, and registration is
+//! Hooks are typed: each hook has a precise signature, and registration is
 //! compile-time via `inventory::submit!` rather than runtime
 //! `HashMap<&str, Box<dyn Fn>>`. Plugins crate-side `submit!` a
 //! handler; CMS-side call sites collect every registered handler
@@ -10,7 +9,7 @@
 //! ## Available hooks
 //!
 //! The v1 surface is intentionally narrow — the 6 hooks below cover
-//! ~80% of Wagtail's plugin ecosystem use cases. More can land as
+//! the common plugin use cases. More can land as
 //! customers ask.
 //!
 //! | Hook | When | Signature |
@@ -183,7 +182,7 @@ pub fn admin_menu_items() -> Vec<&'static AdminMenuItem> {
 }
 
 // ---------------------------------------------------------------
-// HelpMenuItem (#127, Wagtail parity C7)
+// HelpMenuItem (#127)
 // ---------------------------------------------------------------
 
 /// One sidebar entry rendered under a dedicated "Help" section.
@@ -222,7 +221,7 @@ pub fn help_menu_items() -> Vec<&'static HelpMenuItem> {
 }
 
 // ---------------------------------------------------------------
-// AccountSettingsPanel (#128, Wagtail parity C6)
+// AccountSettingsPanel (#128)
 // ---------------------------------------------------------------
 
 /// One panel contributed to the per-user `/cms-admin/me` page.
@@ -253,7 +252,7 @@ macro_rules! register_account_settings_panel {
 }
 
 // ---------------------------------------------------------------
-// UserbarItem (#148, Wagtail parity D4)
+// UserbarItem (#148)
 // ---------------------------------------------------------------
 
 /// Plugin-contributed entry in the on-site editor userbar.
@@ -291,7 +290,7 @@ pub fn userbar_items() -> Vec<&'static UserbarItem> {
 }
 
 // ---------------------------------------------------------------
-// DashboardWidget (#144, Wagtail parity D1)
+// DashboardWidget (#144)
 // ---------------------------------------------------------------
 
 /// One widget contributed to /cms-admin/dashboard. Pre-rendered
@@ -337,7 +336,7 @@ pub fn account_settings_panels() -> Vec<&'static AccountSettingsPanel> {
 }
 
 // ---------------------------------------------------------------
-// BulkActionSpec (#134, Wagtail parity C4)
+// BulkActionSpec (#134)
 // ---------------------------------------------------------------
 
 /// Plugin-contributed bulk action declaration.
@@ -548,12 +547,11 @@ pub fn page_listing_buttons(page_id: i64) -> Vec<serde_json::Value> {
 }
 
 // ---------------------------------------------------------------
-// PageHeaderButton (#140, Wagtail parity D10)
+// PageHeaderButton (#140)
 // ---------------------------------------------------------------
 
 /// One button rendered alongside Save / Publish on the page editor
-/// header. Wagtail equivalent: the `register_page_header_buttons`
-/// hook. Differs from [`PageActionMenuItem`] — that lives inside the
+/// header. Differs from [`PageActionMenuItem`] — that lives inside the
 /// kebab dropdown; this is a top-level button always visible.
 #[derive(Debug, Clone, Copy)]
 pub struct PageHeaderButton {
@@ -694,11 +692,10 @@ pub fn run_admin_search_areas(query: &str) -> Vec<(&'static str, Vec<AdminSearch
 }
 
 // ---------------------------------------------------------------
-// AdminCss / AdminJs (#422, Wagtail insert_global_admin_css/js)
+// AdminCss / AdminJs (#422)
 // ---------------------------------------------------------------
 
-/// A blob of CSS injected into every admin page's `<head>` — Wagtail's
-/// `insert_global_admin_css` parity. The string is emitted verbatim
+/// A blob of CSS injected into every admin page's `<head>`. The string is emitted verbatim
 /// inside a `<style>` tag (host-trusted), so plugins can restyle the
 /// chrome, hide elements, or theme their own admin pages without
 /// shipping a separate stylesheet route.
@@ -707,7 +704,7 @@ pub struct AdminCss(pub &'static str);
 
 inventory::collect!(AdminCss);
 
-/// Register global admin CSS (#422).
+/// Register global admin CSS.
 ///
 /// ```ignore
 /// register_admin_css!(".my-plugin-badge { color: rebeccapurple; }");
@@ -727,15 +724,15 @@ pub fn admin_css() -> Vec<&'static str> {
     inventory::iter::<AdminCss>().map(|c| c.0).collect()
 }
 
-/// A blob of JS injected just before `</body>` on every admin page —
-/// Wagtail's `insert_global_admin_js` parity. Emitted verbatim inside a
+/// A blob of JS injected just before `</body>` on every admin page.
+/// Emitted verbatim inside a
 /// `<script>` tag (host-trusted).
 #[derive(Debug, Clone, Copy)]
 pub struct AdminJs(pub &'static str);
 
 inventory::collect!(AdminJs);
 
-/// Register global admin JS (#422).
+/// Register global admin JS.
 #[macro_export]
 macro_rules! register_admin_js {
     ($js:expr) => {

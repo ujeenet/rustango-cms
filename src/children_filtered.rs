@@ -1,5 +1,5 @@
-//! `children_filtered(...)` Tera helper — Wagtail
-//! `page.get_children().live().order_by(...)` parity.
+//! `children_filtered(...)` Tera helper — a page's live children,
+//! filtered and ordered.
 //!
 //! Pairs with [`crate::page_type::PageTypeHandler::children_query`]:
 //! the handler hook decides what's in `children` (the typed list the

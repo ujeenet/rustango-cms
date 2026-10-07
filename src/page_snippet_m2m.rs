@@ -1,34 +1,24 @@
-//! Page ↔ Snippet many-to-many relations (#243, Wagtail parity for
-//! `ParentalManyToManyField`).
+//! Page ↔ Snippet many-to-many relations.
 //!
-//! Wagtail pattern:
-//!
-//! ```python
-//! class BlogPostPage(Page):
-//!     categories = ParentalManyToManyField(BlogCategory)
-//! ```
-//!
-//! …gives editors a multi-select chooser on the page form and a
-//! `page.categories.all()` accessor in templates. Behind the scenes
-//! Django creates a through-table; Wagtail's ParentalManyToManyField
-//! adds the in-memory tracking so unsaved related rows survive
-//! preview / revision capture.
+//! A page type can declare a named relation (e.g. `categories`) to a
+//! snippet type. Editors get a multi-select chooser on the page form
+//! and templates get an iterable of the related snippets. Behind the
+//! scenes the links live in a through-table.
 //!
 //! This module is the framework-managed through-table. Reads and
 //! writes go through plain helpers ([`relate`], [`unrelate`],
-//! [`replace_all`], [`related_snippets`]). The admin chooser shipped
-//! in #311: [`crate::widget::Widget::snippet_m2m`] builds the
+//! [`replace_all`], [`related_snippets`]). For the admin chooser,
+//! [`crate::widget::Widget::snippet_m2m`] builds the
 //! `WidgetKind::SnippetM2M` multi-snippet widget, and the form
 //! save-path persists the posted id array via [`replace_all`].
 //!
-//! Declarative API (#243): a page type declares its relations with the
+//! Declarative API: a page type declares its relations with the
 //! struct-level `#[page_type(snippet_m2m(categories = "Category", …))]`
 //! attribute. The `PageType` derive then generates (a) the `widgets()`
 //! chooser, (b) the `save_extension` write via [`replace_all`], and
 //! (c) a `snippet_m2m_relations()` accessor that the public renderer uses
 //! to resolve each relation into the `snippet_relations.<name>` template
-//! variable — the Wagtail `page.categories` equivalent
-//! (`{% for c in snippet_relations.categories %}`). The earlier
+//! variable (`{% for c in snippet_relations.categories %}`). The earlier
 //! `#[field(widget = SnippetM2M)]` sketch was superseded by the
 //! struct-level form, since an M2M relation has no backing extension
 //! column to hang a `#[field]` off.
@@ -38,7 +28,7 @@
 //! One row per (page, snippet, relation_name) triple. `relation_name`
 //! lets a single page point at the same snippet under multiple
 //! semantic names (`categories`, `featured_authors`, etc.) without
-//! collision — matches the named-field shape Wagtail uses.
+//! collision.
 //!
 //! ```text
 //! cms_page_snippet_m2m
@@ -236,9 +226,7 @@ pub async fn relate(
 }
 
 /// Remove a single (page, snippet, relation) link. No-op when the
-/// triple doesn't exist — matches Wagtail's
-/// `page.categories.remove(c)` shape (silently absorbs missing
-/// targets).
+/// triple doesn't exist (silently absorbs missing targets).
 ///
 /// # Errors
 /// Driver / query failures.

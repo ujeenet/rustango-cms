@@ -1,4 +1,4 @@
-//! Per-language labels for a page type's choice options (#863).
+//! Per-language labels for a page type's choice options.
 //!
 //! A select / radio / checkboxes field stores the chosen option's *value*
 //! on the page; visitors see the option's label. The labels live in the

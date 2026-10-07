@@ -1,18 +1,17 @@
-//! StreamField — Wagtail-parity composable body blocks.
+//! StreamField — composable body blocks.
 //!
 //! A `Block` is one type of node that can sit in a `WidgetKind::Stream`
 //! list. Each block declares its structural shape via [`Block::fields`]
 //! — a `Vec<BlockField>` of leaves ([`BlockField::Widget`] /
 //! [`BlockField::Computed`]) and nested containers ([`BlockField::Stream`]
-//! / [`BlockField::Repeat`]). The same `BlockField` enum collapses
-//! Wagtail's three-way `StructBlock` / `StreamBlock` / `ListBlock` split
-//! into one recursive shape so the validator + renderer + admin editor
+//! / [`BlockField::Repeat`]). The same `BlockField` enum covers
+//! struct, stream and list blocks
+//! in one recursive shape so the validator + renderer + admin editor
 //! all reuse a single walker.
 //!
 //! ## JSON wire format
 //!
-//! A stream's stored JSON is an array of `{type, id, value}` tuples
-//! matching Wagtail's `stream_block.py:526-530` shape:
+//! A stream's stored JSON is an array of `{type, id, value}` tuples:
 //!
 //! ```json
 //! [
@@ -26,20 +25,15 @@
 //!
 //! - Multi-field block: `value` is a flat dict keyed by [`BlockField`] `name`s.
 //! - Single-field block: canonical shape is still `{<name>: <scalar>}`,
-//!   but a bare scalar at `value` is also accepted on the way in (matching
-//!   Wagtail's lax normalization).
+//!   but a bare scalar at `value` is also accepted on the way in.
 //! - `id` is a UUID v4 minted client-side on insert; never re-minted on edit.
 //! - `Repeat` (homogeneous) stores `[{type: item_type, id, value}, …]` — same
 //!   shape as `Stream`, single allowed type.
 //!
-//! ## Inversion of Wagtail's friction
+//! ## A small trait surface
 //!
-//! Wagtail's `Block` base class exposes ~8 override-able methods
-//! (`value_from_form`, `value_for_form`, `get_form_state`,
-//! `value_from_datadict`, `clean`, `normalize`, `to_python`,
-//! `get_prep_value`). Almost all of them exist to bridge Python's form
-//! framework to the JS-side editor through Telepath adapters. We have
-//! one Tera macro + one Rust trait, so we collapse to three required
+//! The editor is one Tera macro and a block is one Rust trait, so a
+//! block needs only three required
 //! methods ([`Block::type_name`], [`Block::verbose_name`],
 //! [`Block::fields`]) and four optional ones with defaults
 //! ([`Block::icon`], [`Block::group`], [`Block::version`],
@@ -62,8 +56,7 @@ pub use registry::{find_block, registered_blocks, validate_block_registry, Block
 pub enum BlockError {
     /// The stored JSON didn't match the block's [`Block::fields`]
     /// schema. Carries a path so admin can highlight the offending
-    /// block. Mirrors Wagtail's `StreamBlockValidationError`
-    /// (`stream_block.py:66-75`).
+    /// block.
     #[error("block `{block_type}` at `{path}`: {reason}")]
     Shape {
         block_type: String,
@@ -113,9 +106,6 @@ pub enum BlockError {
 /// + the block-field-side initial value. Default value is "no
 /// constraints", so existing call sites get backwards-compatible
 /// behaviour after the migration to the sub-struct.
-///
-/// Wagtail parity: maps onto FieldBlock kwargs (`min_length`,
-/// `max_length`, `regex`, `min_value`, `max_value`, `default`).
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct BlockFieldMeta {
     /// HTML5 `minlength` on string-shaped widgets (Text, Textarea,
@@ -217,7 +207,7 @@ impl BlockFieldMeta {
 }
 
 /// Per-block-type cardinality constraint on a [`BlockField::Stream`]
-/// — Wagtail's `block_counts` kwarg. Empty (`None` / `None`) means
+/// (block counts). Empty (`None` / `None`) means
 /// "no constraint on this type". Independent of the stream-wide
 /// `min` / `max` already on the variant.
 #[derive(Debug, Clone, Copy, Default, Serialize)]
@@ -229,13 +219,13 @@ pub struct BlockCountConstraint {
 }
 
 /// One declared field inside a block's structural shape. The four
-/// variants together cover everything Wagtail's StructBlock /
-/// StreamBlock / ListBlock / StaticBlock surfaces express — a single
+/// variants together cover struct, stream, list and static
+/// blocks — a single
 /// recursive enum, walked once, validated once, rendered once.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum BlockField {
-    /// A scalar leaf — Wagtail's `FieldBlock`. Pairs a name with one
+    /// A scalar leaf. Pairs a name with one
     /// rcms [`WidgetKind`] for the admin editor; the JSON value is
     /// whatever shape that widget POSTs.
     Widget {
@@ -261,8 +251,8 @@ pub enum BlockField {
 
     /// A read-only computed leaf — pure function of the block value.
     /// Renders inline in the admin editor + on the public page. No
-    /// JSON column, no form input. Mirrors Wagtail's `StaticBlock` +
-    /// the rcms `DisplayField` shape.
+    /// JSON column, no form input. Same idea as the
+    /// `DisplayField` shape.
     Computed {
         name: String,
         label: String,
@@ -270,7 +260,7 @@ pub enum BlockField {
         /// passes the *whole* block value (the `{name1: val1, …}`
         /// dict) so computed fields can derive from siblings.
         ///
-        /// Function pointer (not Box<dyn Fn>) so the variant stays
+        /// Function pointer (not `Box<dyn Fn>`) so the variant stays
         /// `Clone`-able cheaply and inventory-friendly.
         #[serde(skip)]
         render: fn(&Value, &BlockRenderCtx) -> String,
@@ -278,7 +268,7 @@ pub enum BlockField {
         help: Option<String>,
     },
 
-    /// Heterogeneous nested list — Wagtail's `StreamBlock`. `allowed`
+    /// Heterogeneous nested list. `allowed`
     /// lists which registered block types may appear here. Boot-time
     /// validation in [`validate_block_registry`] verifies every entry
     /// resolves.
@@ -290,7 +280,7 @@ pub enum BlockField {
         min: Option<u32>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         max: Option<u32>,
-        /// Wagtail's `block_counts` — per-block-type cardinality
+        /// Block counts — per-block-type cardinality
         /// (e.g. `{"heading": BlockCountConstraint { min: Some(1),
         /// max: Some(3) }}`). Independent of the stream-wide
         /// `min` / `max`. Empty map = no per-type constraints.
@@ -298,7 +288,7 @@ pub enum BlockField {
         block_counts: std::collections::HashMap<String, BlockCountConstraint>,
     },
 
-    /// Homogeneous nested list — Wagtail's `ListBlock`. Convenience
+    /// Homogeneous nested list. Convenience
     /// shorthand for `Stream { allowed: &[item_type] }` with the
     /// admin editor showing a single "+ Add" button (no picker — only
     /// one type is permitted).
@@ -592,7 +582,7 @@ pub struct BlockRenderCtx<'a> {
     /// Block templates can recursively call back into Tera via the
     /// registered `block_render` / `stream_render` functions.
     pub tera: &'a tera::Tera,
-    /// #559 — per-request overlay of UI-defined block types (page-builder
+    /// Per-request overlay of UI-defined block types (page-builder
     /// dyn blocks). Checked before the inventory registry by every stream
     /// walker. `None` = code blocks only (the default for all existing
     /// call sites).
@@ -608,7 +598,7 @@ impl<'a> BlockRenderCtx<'a> {
         }
     }
 
-    /// Attach the page-builder dyn-block overlay (#559).
+    /// Attach the page-builder dyn-block overlay.
     #[must_use]
     pub fn with_dyn_blocks(mut self, set: &'a crate::page_builder::DynBlockSet) -> Self {
         self.dyn_blocks = Some(set);
@@ -672,8 +662,6 @@ pub trait Block: Send + Sync + 'static {
     /// One-line description shown in the picker tile tooltip + the
     /// "what does this block do" hint when the editor hovers over an
     /// entry. `None` ⇒ no tooltip.
-    ///
-    /// Wagtail parity: `Block.Meta.description`.
     fn description(&self) -> Option<&'static str> {
         None
     }
@@ -683,8 +671,6 @@ pub trait Block: Send + Sync + 'static {
     /// blocks whose default value already reads well in the
     /// collapsed header so the editor scrolls less when the page
     /// has many of them.
-    ///
-    /// Wagtail parity: `Block.Meta.collapsed`.
     fn collapsed(&self) -> bool {
         false
     }
@@ -698,8 +684,6 @@ pub trait Block: Send + Sync + 'static {
     /// The returned JSON must match the block's [`Self::fields`]
     /// shape — a dict keyed by field name. The admin editor merges
     /// this dict with the empty defaults on insert.
-    ///
-    /// Wagtail parity: `Block.Meta.default`.
     fn default_value(&self) -> Option<Value> {
         None
     }
@@ -732,9 +716,6 @@ pub trait Block: Send + Sync + 'static {
     /// The format string is also stamped onto the rendered block as
     /// `data-label-format=` so the stream editor JS can live-update
     /// the header when the author edits any field.
-    ///
-    /// Wagtail parity: `Block.Meta.label_format` /
-    /// `StructBlock.Meta.label_format`.
     fn label_format(&self) -> Option<&'static str> {
         None
     }
@@ -743,10 +724,8 @@ pub trait Block: Send + Sync + 'static {
     /// block-picker tile. When set, the admin pre-renders this block
     /// with the sample value (via [`Self::preview_template`] or the
     /// regular block template) and stashes the resulting HTML on
-    /// each [`PickerOption`]. Editors get a "what does this look
+    /// each [`PickerOption`](crate::block::admin::PickerOption). Editors get a "what does this look
     /// like" glimpse before they insert the block.
-    ///
-    /// Wagtail parity: `Block.Meta.preview_value`.
     fn preview_value(&self) -> Option<Value> {
         None
     }
@@ -756,13 +735,11 @@ pub trait Block: Send + Sync + 'static {
     /// used for the public-side render). Useful when the block's real
     /// template emits markup that needs heavy CSS / context to look
     /// right but a tiny mock preview is enough.
-    ///
-    /// Wagtail parity: `Block.Meta.preview_template`.
     fn preview_template(&self) -> Option<&'static str> {
         None
     }
 
-    /// Wagtail-parity `Block.get_context()` — augments the Tera ctx
+    /// Augments the Tera ctx
     /// with derived values (e.g. a layout-string → grid-span map)
     /// before the block's template renders. Default returns an
     /// empty map. Keys cannot shadow the framework's own ctx

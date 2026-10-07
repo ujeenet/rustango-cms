@@ -10,8 +10,8 @@
 //! ## Wire-format version
 //!
 //! The JSON envelope of a block entry stores `version: u32` next to
-//! `type` / `id` / `value` (Wagtail does not carry per-item versions
-//! — this is an rcms inversion: explicit > implicit). Missing
+//! `type` / `id` / `value` (explicit per-item versions beat
+//! implicit ones). Missing
 //! `version` is treated as `1` (the initial baseline).
 
 use serde_json::Value;

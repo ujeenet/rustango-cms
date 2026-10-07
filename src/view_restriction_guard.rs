@@ -1,4 +1,4 @@
-//! Public-renderer enforcement for `PageViewRestriction` (#76).
+//! Public-renderer enforcement for `PageViewRestriction`.
 //!
 //! Sits between [`resolve_path`] and [`render`] in the public
 //! router. When an effective restriction is found on the requested
@@ -273,7 +273,7 @@ fn has_valid_password_grant(
     })
 }
 
-/// The signature over a grant (#737). Keyed by the CMS signing secret
+/// The signature over a grant. Keyed by the CMS signing secret
 /// ([`crate::signing::secret`]) when one is configured, so a leaked
 /// database row can't mint grants; without one, by the stored hash as
 /// before. Either way the message carries the tenant, the page, a
@@ -337,7 +337,7 @@ mod grant_tests {
         h
     }
 
-    /// #737 — a grant is bound to its tenant, page and password, and
+    /// A grant is bound to its tenant, page and password, and
     /// expires on the server.
     #[test]
     fn a_grant_is_scoped_and_expires() {

@@ -1,7 +1,7 @@
-//! Public form renderer (#542 / FB-09).
+//! Public form renderer.
 //!
-//! Turns a [`schema::Form`] into the HTML a visitor fills in. The output is
-//! the contract `form_runtime.js` (FB-10) enhances: pages are `<fieldset
+//! Turns a [`schema::Form`](super::schema::Form) into the HTML a visitor fills in. The output is
+//! the contract `form_runtime.js` enhances: pages are `<fieldset
 //! data-rcms-page>` blocks the runtime shows one at a time; with JS off all
 //! pages are visible and the form still submits + server-validates.
 //!
@@ -9,12 +9,12 @@
 //! (form id), `_embed` (the embedding block's uuid), and a cache-safe
 //! `_csrf` field populated from the double-submit cookie by an inline
 //! script (the rendered HTML may be page-cached, so no per-user token is
-//! baked in). The submit handler (FB-11) reads the `Referer` for the source
+//! baked in). The submit handler reads the `Referer` for the source
 //! page and resolves the embed's override from that page's stream by uuid.
 
 use super::schema::{Field, FieldType, Form};
 
-/// Honeypot field name — a hidden input bots tend to fill (#440 parity).
+/// Honeypot field name — a hidden input bots tend to fill.
 pub const HONEYPOT_FIELD: &str = "_hp";
 
 /// Render a whole form to HTML. `embed_id` is the embedding block's uuid

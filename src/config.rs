@@ -1,4 +1,4 @@
-//! Process configuration from the environment (#701).
+//! Process configuration from the environment.
 //!
 //! Every setting the CMS reads is named here, under one prefix, `RCMS_`.
 //! Earlier releases used three (`RCMS_`, `CMS_`, `RUSTANGO_CMS_`), so an

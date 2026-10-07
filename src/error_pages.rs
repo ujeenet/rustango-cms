@@ -8,7 +8,7 @@
 //! keeping the real error status code on the wire.
 //!
 //! When no published Error page exists for a status (or the error page
-//! itself fails to render), [`fallback_response`] serves a bundled,
+//! itself fails to render), `fallback_response` serves a bundled,
 //! fully self-contained HTML page — no Tera, no DB — so the error path
 //! can never recurse into another error.
 //!
@@ -235,7 +235,7 @@ pub async fn find_for_status(pool: &Pool, code: u16) -> Result<Option<Page>, Exe
 
 /// Serve the error response for `status`: the editor-built Error page
 /// rendered through the full public pipeline when one exists and
-/// renders cleanly, else the static [`fallback_response`].
+/// renders cleanly, else the static `fallback_response`.
 ///
 /// The error page render is only accepted when it comes back `200 OK`
 /// — anything else (including a failure inside the error page itself)

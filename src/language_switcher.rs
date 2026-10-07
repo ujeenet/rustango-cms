@@ -1,4 +1,4 @@
-//! Public language-switcher data for templates (#401).
+//! Public language-switcher data for templates.
 //!
 //! The admin has a locale picker, but visitors had no built-in way to
 //! switch language. This exposes a `language_switcher()` Tera function
@@ -76,7 +76,7 @@ pub fn install(entries: Vec<SwitcherEntry>) -> SwitcherGuard {
     SwitcherGuard { _priv: () }
 }
 
-/// RAII guard clearing [`PENDING_SWITCHER`] on drop — the router holds
+/// RAII guard clearing `PENDING_SWITCHER` on drop — the router holds
 /// it across the render future so a stashed hand-off never leaks onto a
 /// pooled worker thread if the render short-circuits before consuming it.
 pub struct PendingGuard {
@@ -95,7 +95,7 @@ impl Drop for PendingGuard {
 /// guard that clears them on drop. Called by the public render handler
 /// immediately before it polls the render future (no `.await` in
 /// between), so the future's first synchronous slice — the top of
-/// [`crate::render`]'s `render_inner`, which calls [`take_pending`] —
+/// [`crate::render`](mod@crate::render)'s `render_inner`, which calls [`take_pending`] —
 /// runs on this same thread and sees them.
 #[must_use]
 pub fn stash_pending(entries: Vec<SwitcherEntry>) -> PendingGuard {

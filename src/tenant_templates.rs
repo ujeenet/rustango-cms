@@ -115,7 +115,7 @@ struct Entry {
     used: AtomicU64,
 }
 
-/// The file in a tenant's override directory naming its owner (#733).
+/// The file in a tenant's override directory naming its owner.
 /// Not `.html`, so it is never loaded as a template or listed as one.
 const OWNER_FILE: &str = ".rcms-owner";
 
@@ -299,7 +299,7 @@ impl TenantTemplates {
     }
 
     /// Bind a tenant's override directory to `owner`, the identity of the
-    /// tenant database it belongs to (#733).
+    /// tenant database it belongs to.
     ///
     /// Overrides live on disk, keyed by slug, and a purged tenant's slug
     /// can be reused: without this the next tenant given that slug renders
@@ -1380,7 +1380,7 @@ mod tests {
         assert_eq!(render(&tt.for_tenant("t0"), "page.html"), "zero");
     }
 
-    /// #733 — a successor tenant on a reused slug never renders the
+    /// A successor tenant on a reused slug never renders the
     /// previous owner's overrides.
     #[test]
     fn a_reused_slug_does_not_inherit_the_old_overrides() {
@@ -1446,7 +1446,7 @@ mod tests {
         );
     }
 
-    /// #727 — the async render path takes a cached instance without
+    /// The async render path takes a cached instance without
     /// touching the disk, and falls back to `for_tenant` when one is due.
     #[test]
     fn cached_serves_only_an_instance_not_due_a_check() {
@@ -1463,7 +1463,7 @@ mod tests {
         assert!(always.cached("acme").is_none(), "always due: re-check on the blocking pool");
     }
 
-    /// #770 — a symlink out of the tenant's folder can't be used to create
+    /// A symlink out of the tenant's folder can't be used to create
     /// directories outside it, not just files.
     #[cfg(unix)]
     #[test]

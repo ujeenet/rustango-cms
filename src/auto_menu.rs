@@ -1,10 +1,10 @@
-//! `auto_menu(parent_id=…, depth=…)` Tera function — wagtailmenus
-//! parity.
+//! `auto_menu(parent_id=…, depth=…)` Tera function — an automatic
+//! menu built from the page tree.
 //!
-//! Wagtail's `wagtailmenus` walks the page tree at render time,
+//! The function walks the page tree at render time,
 //! filters by `show_in_menus = True` + `status = "published"`, and
 //! returns a nested list a host template can iterate to emit nav
-//! chrome. This function mirrors that surface so hosts don't have
+//! chrome. Hosts don't have
 //! to hand-roll the SQL or maintain a `cms_navigation` row when the
 //! menu IS the published tree.
 //!
@@ -176,7 +176,7 @@ pub async fn prefetch(pool: &rustango::sql::Pool) -> Vec<MenuRow> {
     }
 }
 
-/// Cached variant of [`prefetch`] (#316). Serves the menu pool from
+/// Cached variant of [`prefetch`]. Serves the menu pool from
 /// `cache` under `key`, recomputing + storing on miss via
 /// [`rustango::cache_fragment::cached_render`]. The pool is a slim
 /// projection of the published, menu-eligible tree; it changes only
@@ -327,7 +327,7 @@ mod tests {
         assert_eq!(out, "0");
     }
 
-    /// #316 — `prefetch_cached` stores the menu pool as JSON of
+    /// `prefetch_cached` stores the menu pool as JSON of
     /// `Vec<MenuRow>` (the framework cache is string-valued). Guard the
     /// round-trip so a field rename / drop that would silently corrupt
     /// cached menus fails loudly here instead of in production.

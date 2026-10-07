@@ -1,4 +1,4 @@
-//! MCP engine (#587) — operate the CMS from an AI agent.
+//! MCP engine — operate the CMS from an AI agent.
 //!
 //! The framework ships the whole protocol layer (`rustango::mcp`: JSON-RPC
 //! transport, SSE, agent auth incl. raw-key bearers, OAuth 2.1, skills +

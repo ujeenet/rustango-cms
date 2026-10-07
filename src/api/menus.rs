@@ -1,4 +1,4 @@
-//! `GET /api/v2/menus/` + `GET /api/v2/menus/{slug}/` (#568 / 15).
+//! `GET /api/v2/menus/` + `GET /api/v2/menus/{slug}/`.
 //!
 //! Exposes the navigation the admin builds so headless frontends can
 //! render the navbar. Reuses [`crate::navigation::resolve_menus_with`] —

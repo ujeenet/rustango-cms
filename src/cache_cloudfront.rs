@@ -1,4 +1,4 @@
-//! AWS CloudFront invalidator for [`crate::cache_invalidate::PageCacheInvalidator`] (#193).
+//! AWS CloudFront invalidator for [`crate::cache_invalidate::PageCacheInvalidator`].
 //!
 //! Wires the per-page cache-invalidation hook to CloudFront's
 //! [CreateInvalidation] API. After a CMS save, the public path is
@@ -38,7 +38,7 @@
 //! ```
 //!
 //! scoped to the target distribution. The role-based assumption
-//! flow (the `role_arn` field in #193's AC) is satisfied by setting
+//! flow (the `role_arn` field) is satisfied by setting
 //! `AWS_ROLE_ARN` + `AWS_WEB_IDENTITY_TOKEN_FILE` in the
 //! environment — the SDK picks them up automatically. Hand-rolled
 //! AssumeRole is a follow-up; the env-driven flow covers EKS IRSA
@@ -212,7 +212,7 @@ mod tests {
     /// CloudFront's SDK doesn't ship a built-in mock client — unlike
     /// the HTTP-based backends where httpmock makes the test trivial,
     /// we'd need `aws-smithy-mocks` (separate crate, heavier) to
-    /// exercise the real request shape. For V1 the helper-level
+    /// exercise the real request shape. For now the helper-level
     /// behaviours (path normalisation, subtree wildcard shape) cover
     /// what's most likely to regress.
     ///

@@ -1,4 +1,4 @@
-//! Workflow notification helpers (#85).
+//! Workflow notification helpers.
 //!
 //! Sends email on every workflow state change so reviewers know
 //! when something is waiting on them and submitters know how their
@@ -9,8 +9,7 @@
 //!
 //! ## Notifications
 //!
-//! Sent automatically from the page-editor workflow handlers
-//! (#84):
+//! Sent automatically from the page-editor workflow handlers:
 //!   * **submit**  — notify members of the FIRST task's role
 //!   * **approve** to next step — notify members of the NEW current task's role
 //!   * **approve** to finish — notify the submitter
@@ -69,7 +68,7 @@ pub async fn notify_many(
 }
 
 /// User ids of every active member of a role. The notification
-/// preference filter (#197) operates on user_ids before email
+/// preference filter operates on user_ids before email
 /// resolution so we don't synthesise fallback addresses for users
 /// who have muted the event anyway.
 ///

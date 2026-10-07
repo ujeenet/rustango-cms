@@ -1,9 +1,9 @@
-//! Generic chooser registry (#421) — register a chooser for any
+//! Generic chooser registry — register a chooser for any
 //! `#[derive(Model)]` type, generalising the three hand-rolled choosers
 //! (page / snippet / document).
 //!
 //! A host registers with
-//! [`register_chooser!`]`(Ty, "slug", "Label", "title_field", "sub_field")`;
+//! [`register_chooser!`](crate::register_chooser!)`(Ty, "slug", "Label", "title_field", "sub_field")`;
 //! the admin then serves `/cms-admin/__chooser/<slug>?q=…` returning the
 //! same `{ "items": [ { id, title, sub, … } ] }` shape the bespoke
 //! choosers use. The editor's chooser overlay (`cms-ux.js`) resolves an
@@ -28,7 +28,7 @@ use serde_json::Value;
 pub const CHOOSER_LIMIT: usize = 50;
 
 /// Type-erased "search rows as normalised chooser items". Built by
-/// [`register_chooser!`] from the concrete model's
+/// [`register_chooser!`](crate::register_chooser!) from the concrete model's
 /// `objects().fetch()` + its schema `search_fields` (the fetch is a
 /// derive-generated inherent method, so it can't be reached generically —
 /// hence the thunk, same shape as [`crate::admin::model_admin`]).
@@ -72,7 +72,7 @@ pub fn find(slug: &str) -> Option<&'static ChooserViewSet> {
 /// substring over `search_fields`), cap at `limit`, and normalise each
 /// to carry a `title` + `sub` key (from `title_field` / `sub_field`)
 /// alongside its original fields. An empty / blank query returns the
-/// first `limit` rows. Pure — the [`register_chooser!`] thunk and the
+/// first `limit` rows. Pure — the [`register_chooser!`](crate::register_chooser!) thunk and the
 /// unit tests both call it.
 #[must_use]
 pub fn filter_and_normalize(
@@ -118,7 +118,7 @@ fn field_string(row: &Value, field: &str) -> String {
     }
 }
 
-/// Register a generic chooser for a `#[derive(Model)]` type (#421).
+/// Register a generic chooser for a `#[derive(Model)]` type.
 ///
 /// ```ignore
 /// rustango_cms::register_chooser!(crate::Author, "author", "Author", "name", "email");

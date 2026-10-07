@@ -1,10 +1,9 @@
-//! Tera helper that emits canonical `<head>` meta tags for a page
-//! (#183, Wagtail parity).
+//! Tera helper that emits canonical `<head>` meta tags for a page.
 //!
 //! Hosts wire one call:
 //! `{{ rcms_meta_tags(page=page, canonical=canonical_url, origin=site_origin) | safe }}`
 //! and get:
-//! - `<link rel="canonical">` (#395) — pass `canonical=canonical_url`
+//! - `<link rel="canonical">` — pass `canonical=canonical_url`
 //!   (the renderer injects `canonical_url`: the source page's URL for
 //!   aliases, else the page's own URL); falls back to `page.url_path`
 //!   when the arg is omitted
@@ -20,7 +19,7 @@
 //! - Image → resolve `page.og_image_media_id` via `/__media__/fill-1200x630/<id>`
 //!   when set; else empty (no tag emitted). The renderer fills
 //!   `og_image_media_id` with the page's first photo when the editor chose
-//!   none ([`first_image_in_extension`], `page_builder::values::first_media_id`).
+//!   none (`first_image_in_extension`, `page_builder::values::first_media_id`).
 //!
 //! `origin` (the renderer injects `site_origin`, e.g. `https://shop.example`)
 //! makes the canonical and image URLs absolute — social networks ignore a

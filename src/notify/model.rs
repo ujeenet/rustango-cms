@@ -69,7 +69,7 @@ pub struct NotificationTarget {
     pub created_at: Auto<DateTime<Utc>>,
 }
 
-/// Debug without the secret (#734): `Cast`'s own Debug prints the
+/// Debug without the secret: `Cast`'s own Debug prints the
 /// decrypted value, so a derived impl would log a webhook URL or bot token
 /// from any `{:?}` of a target.
 impl std::fmt::Debug for NotificationTarget {

@@ -13,7 +13,7 @@
 //!   who will render it.
 //! * [`NotificationChannel`] renders and delivers one. Email writes a
 //!   message, Slack posts blocks, Telegram sends Markdown. Register one
-//!   with [`register_notification_channel!`] and it is available
+//!   with [`register_notification_channel!`](crate::register_notification_channel!) and it is available
 //!   everywhere, including from a host app's own crate.
 //! * A [`Target`](model::NotificationTarget) row is a configured
 //!   destination: which channel, its settings, its secret, and which
@@ -21,7 +21,7 @@
 //!
 //! ## Delivery is durable on purpose
 //!
-//! [`enqueue`] writes a row per target and returns; a worker
+//! [`enqueue`](worker::enqueue) writes a row per target and returns; a worker
 //! ([`worker::drain`]) sends with backoff. Notifications are the part of a
 //! form nobody watches until it silently stops working, and the failure
 //! modes here are all *transient and external* — a rate limit, an expired
@@ -206,7 +206,7 @@ pub trait NotificationChannel: Send + Sync {
     async fn deliver(&self, d: &Delivery<'_>, msg: &Notification) -> Result<(), DeliverError>;
 }
 
-/// Registration slot — see [`register_notification_channel!`].
+/// Registration slot — see [`register_notification_channel!`](crate::register_notification_channel!).
 pub struct ChannelRegistration {
     pub factory: fn() -> Box<dyn NotificationChannel>,
 }

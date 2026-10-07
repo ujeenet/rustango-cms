@@ -76,7 +76,7 @@ pub fn register_tera_function(tera: &mut Tera) {
 ///
 /// Visible when no context is installed or the tenant gates nothing. A
 /// value with no `path` key is not a page (an external menu link) and has
-/// nothing to gate. A malformed page fails closed (#770): a non-string
+/// nothing to gate. A malformed page fails closed: a non-string
 /// `path` is hidden, and a missing `page_type_id` is hidden whenever a
 /// page type is gated, since the type check can't be answered.
 fn value_visible(value: &Value) -> bool {
@@ -201,7 +201,7 @@ mod tests {
         assert_eq!(render("{{ open | can_view }}", &ctx), "true");
     }
 
-    /// #770 — a malformed page fails closed; a pathless menu link stays.
+    /// A malformed page fails closed; a pathless menu link stays.
     #[test]
     fn can_view_fails_closed_on_malformed_pages() {
         let _g = install(AccessContext::deny_type_for_test(5));

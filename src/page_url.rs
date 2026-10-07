@@ -1,10 +1,10 @@
 //! `pageurl(id=N)` Tera helper — resolve a `cms_page` id to its
 //! public URL at render time.
 //!
-//! Wagtail's `{% pageurl page %}` template tag handles the common
+//! A `pageurl` lookup handles the common
 //! case of a `ForeignKey(Page)` on an extension row (CTA targets,
 //! related-page choosers, etc.) — the template asks for the URL,
-//! Wagtail walks the page tree. We do the same: the public render
+//! the CMS walks the page tree. Concretely, the public render
 //! pipeline scans the extension dict for `*_id` fields whose values
 //! resolve to a `cms_page` row, pre-fetches the rows in a single
 //! batch query, and exposes both a `_pages_by_id` ctx map AND a
@@ -13,7 +13,7 @@
 //!
 //! Tera 1.x doesn't pass the global context into function / filter
 //! args, so we stash the resolved map in a thread-local that
-//! [`render::render_inner`](crate::render) sets right before
+//! [`render::render_inner`](mod@crate::render) sets right before
 //! `tera.render(…)` runs and clears the moment render returns
 //! (RAII via [`PageUrlGuard`]). Tera's `render` is fully sync, so the
 //! thread-local survives the whole call without leaking across
@@ -88,7 +88,7 @@ pub fn install(pages_by_id: HashMap<i64, String>) -> PageUrlGuard {
 
 /// Resolve a page id against the currently-installed map. Returns
 /// `None` when nothing is installed, when `id <= 0`, or when the
-/// page wasn't pre-fetched. Used by [`crate::richtext`] (#248) to
+/// page wasn't pre-fetched. Used by [`crate::richtext`] to
 /// rewrite `<a linktype="page" id="N">` anchors against the same
 /// map the `pageurl(id=…)` Tera function reads.
 #[must_use]
@@ -162,8 +162,8 @@ fn current_url_prefix() -> String {
 ///
 /// Both forms are marked `is_safe = true`: the URL is read from the
 /// `cms_page.url_path` column maintained by `tree_ops`, which is
-/// CMS-controlled, not user input. Matches Wagtail's `{% pageurl %}`
-/// where the output flows into `href=…` unescaped.
+/// CMS-controlled, not user input, so the output can flow into
+/// `href=…` unescaped.
 pub fn register_tera_function(tera: &mut Tera) {
     tera.register_function("pageurl", PageurlFn);
     tera.register_filter("pageurl", PageurlFilter);
@@ -677,7 +677,7 @@ mod tests {
         assert_eq!(render_expr("{{ child | page_href }}", &ctx), "/p/about");
     }
 
-    /// #640 — `pageurl` emits the same href as `page_href`.
+    /// `pageurl` emits the same href as `page_href`.
     #[test]
     fn pageurl_strips_the_site_and_adds_the_mount_prefix() {
         let _mount = install_url_prefix("/p");

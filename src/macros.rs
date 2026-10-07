@@ -68,10 +68,10 @@ macro_rules! register_page_type {
     };
 }
 
-/// Register a custom admin page (#23). The type must implement
+/// Register a custom admin page. The type must implement
 /// [`AdminPageHandler`](crate::admin::admin_page::AdminPageHandler)
 /// and `Default`. Mirrors the
-/// [`register_page_type!`] / [`register_library_type!`] pattern —
+/// [`register_page_type!`] / [`register_library_type!`](crate::register_library_type!) pattern —
 /// drop the macro call anywhere in the crate's source and the page
 /// shows up at `/cms-admin/x/<slug>` with a sidebar entry in its
 /// declared section.
@@ -107,7 +107,7 @@ macro_rules! register_admin_page {
     };
 }
 
-/// Register a custom taxonomy / category vocabulary (#557). The type must
+/// Register a custom taxonomy / category vocabulary. The type must
 /// implement [`TaxonomyHandler`](crate::category::TaxonomyHandler) and
 /// `Default`. Mirrors [`register_page_type!`] — drop the call anywhere in
 /// the crate's source and the vocabulary is synced into a `cms_taxonomy`

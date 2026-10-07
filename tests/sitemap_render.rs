@@ -1,8 +1,8 @@
 //! Tests for the sitemap XML emitter. Uses
 //! `rustango::setup_test_data!` to share a single fixture of
 //! `SitemapEntry` rows across every test in this file (init runs at
-//! most once per test-binary process — the standard
-//! Django-`setUpTestData` shape).
+//! most once per test-binary process — a shared class-level
+//! fixture).
 
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};

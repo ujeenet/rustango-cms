@@ -1,5 +1,4 @@
-//! Page-type field builder (#559) — ACF/Strapi-style UI-defined body
-//! schemas.
+//! Page-type field builder — UI-defined body schemas.
 //!
 //! A **Developer** authors a page type's body structure in a visual
 //! builder (fields, rows, groups, repeaters, flexible-content zones,
@@ -9,12 +8,12 @@
 //! save/delete; page values live in one stable JSON store and upgrade
 //! lazily (mirroring `Block::version`/`migrate`).
 //!
-//! - [`schema`] — the authored node tree + validation (child #560)
-//! - [`compile`] — schema → `Widget`s + [`dyn_block::DynBlockSet`] (child #560)
-//! - [`dyn_block`] — UI-defined groups as `Block`-trait citizens (child #560)
+//! - [`schema`] — the authored node tree + validation
+//! - [`compile`](mod@compile) — schema → `Widget`s + [`dyn_block::DynBlockSet`]
+//! - [`dyn_block`] — UI-defined groups as `Block`-trait citizens
 //!
 //! Storage models, the builder UI, the page-editor bridge, public render,
-//! Phase-2 UI-created types, and i18n land in children #561–#567.
+//! UI-created types, and i18n live in the sibling modules.
 
 pub mod choice_i18n;
 pub mod compile;

@@ -69,12 +69,12 @@ pub(crate) struct PublicState {
     pub(crate) tera: Arc<Tera>,
     pub(crate) url_prefix: String,
     locale_mode: LocaleMode,
-    /// Optional mailer + from-addr for form-submission notifications
-    /// (#80 PR 3 / #549 FB-16). When `None`, submissions don't email
+    /// Optional mailer + from-addr for form-submission notifications.
+    /// When `None`, submissions don't email
     /// anyone — the data still lands in `cms_form_entry`.
     pub(crate) mailer: Option<Arc<dyn rustango::email::Mailer>>,
     pub(crate) mailer_from: Arc<String>,
-    /// #316 — when the router runs a page cache (`_cached` variants),
+    /// When the router runs a page cache (`_cached` variants),
     /// the same backend + TTL are shared here so the render path can
     /// cache the menu-eligible tree query. `None` for the uncached
     /// variants (the render path then queries live every time).
@@ -103,7 +103,7 @@ impl PublicState {
     ///
     /// A cached instance comes straight back; resolving one walks the
     /// tenant's directory and may rebuild a Tera, so that runs on the
-    /// blocking pool rather than a runtime worker (#727).
+    /// blocking pool rather than a runtime worker.
     pub(crate) async fn tera_for(&self, slug: &str) -> Arc<Tera> {
         let Some(tt) = self.tenant_templates.as_ref() else {
             return Arc::clone(&self.tera);
@@ -144,7 +144,7 @@ impl PublicState {
 /// supplied backend + TTL. Used by the `_cached` shortcuts and
 /// `PublicRouter::build` to produce the layered router.
 ///
-/// Varies on `Accept-Language` (#397) AND the persisted locale cookie
+/// Varies on `Accept-Language` AND the persisted locale cookie
 /// (#i18n): the renderer resolves the active locale from path / `?lang=`
 /// (both already in the cache key via path+query) / the `rcms_locale`
 /// cookie / `Accept-Language`, so the cache must key on each input or a
@@ -242,11 +242,11 @@ pub struct PublicRouter {
     cache: Option<(BoxedCache, Duration)>,
     locale_mode: LocaleMode,
     mailer: Option<(Arc<dyn rustango::email::Mailer>, String)>,
-    /// #254 — pairs of `(URL prefix, filesystem root)` to mount as
+    /// Pairs of `(URL prefix, filesystem root)` to mount as
     /// static-file handlers. Stacked: every entry becomes a route
     /// taking a wildcard path.
     static_dirs: Vec<(String, std::path::PathBuf)>,
-    /// #254 — single-file entries baked from `include_bytes!`. Each
+    /// Single-file entries baked from `include_bytes!`. Each
     /// triple is `(URL path, bytes, content-type)`.
     static_files: Vec<(String, &'static [u8], &'static str)>,
     /// Directory holding one subdirectory of template overrides per
@@ -312,7 +312,7 @@ impl PublicRouter {
         self
     }
 
-    /// Wire a mailer for form-submission notifications (#80 PR 3).
+    /// Wire a mailer for form-submission notifications.
     /// Each \`cms_form_settings.notify_emails\` recipient gets a copy
     /// of every submission to that page. `from_addr` is the `From:`
     /// stamped on every notification.
@@ -630,13 +630,13 @@ fn fallback_router_inner(state: PublicState) -> Router {
         .with_state(state)
 }
 
-/// Serve the cacheable public form runtime (#543 FB-10 / #547 FB-14).
+/// Serve the cacheable public form runtime.
 async fn serve_form_runtime_js() -> impl IntoResponse {
     // Unversioned public URL: the 1-hour static policy, not immutable (#696).
     serve_static_bytes(include_str!("forms/runtime.js").as_bytes(), "text/javascript; charset=utf-8")
 }
 
-/// Serve the standard, replaceable public form stylesheet (#533).
+/// Serve the standard, replaceable public form stylesheet.
 async fn serve_form_css() -> impl IntoResponse {
     serve_static_bytes(include_str!("forms/forms.css").as_bytes(), "text/css; charset=utf-8")
 }
@@ -968,7 +968,7 @@ async fn styled_denial(
     }
 }
 
-/// #401 — fetch the active locales and stash the per-page language
+/// Fetch the active locales and stash the per-page language
 /// switcher (the URL to *this* page in each locale, built per the
 /// configured `LocaleMode`) for the `language_switcher()` Tera fn. The
 /// stash is consumed and re-installed on the render thread inside
@@ -1004,8 +1004,7 @@ pub(crate) async fn install_locale_switcher(
 
 /// When the slug resolver returns `None` (no published page at this
 /// URL), consult the tenant's `cms_redirect` table before giving
-/// up. Mirrors Django's `contrib.redirects` "hooks into the 404
-/// handler" design: live pages always win, redirects fill in for
+/// up. Redirects hook into the 404 path: live pages always win, redirects fill in for
 /// retired URLs.
 ///
 /// On a redirect hit, the framework's

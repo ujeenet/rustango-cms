@@ -1,6 +1,6 @@
 //! Named URL patterns + Tera helper registration.
 //!
-//! Mirrors Django's `urls.py` shape via [`rustango::urls::register_url!`]:
+//! Registered via [`rustango::register_url!`]:
 //! every admin route gets a stable name (`rcms-admin:pages:list`,
 //! `rcms-admin:pages:edit`, …) so templates resolve URLs through
 //! `{{ url(name="…") }}` instead of hard-coding `/cms-admin/...`
@@ -16,12 +16,12 @@
 //! - `{{ "…" | querystring(…) }}` — URL query-string builder
 //!   for pagination + filter links.
 //! - `{{ ts | naturaltime }}`, `intcomma`, `naturalsize`,
-//!   `ordinal`, etc. — Django-shape humanize filters
+//!   `ordinal`, etc. — humanize filters
 //!   ([`rustango::humanize`]).
 //! - `{{ csrf_token | csrf_input | safe }}` — hidden-input shape
 //!   of the CSRF token ([`rustango::forms::csrf`]).
 //!
-//! No-op on the registry-name side: [`rustango::urls::register_url!`]
+//! No-op on the registry-name side: [`rustango::register_url!`]
 //! submits each pattern through `inventory`, so the names are live
 //! the moment this module is linked into the binary.
 
@@ -556,7 +556,7 @@ pub fn register_tera_helpers(tera: &mut tera::Tera) {
     // over the final page by `richtext::resolve_internal_links`. `is_safe = true` so
     // the editor's already-escaped output passes through verbatim.
     crate::richtext::register_tera_filter(tera);
-    // #244 — `auto_menu(parent_id=…, depth=…)`. wagtailmenus parity.
+    // #244 — `auto_menu(parent_id=…, depth=…)`, the automatic menu.
     // The render handler pre-fetches every `show_in_menus = true AND
     // status = published` page into a thread-local pool; the function
     // walks that pool at call time to build the nested item tree.
@@ -604,7 +604,7 @@ pub fn register_tera_helpers(tera: &mut tera::Tera) {
     // head (not just the sitemap) discover the language versions.
     crate::language_switcher::register_hreflang_function(tera);
     // #442 — `routable_url()` reverses a routable page's sub-URL
-    // patterns (Wagtail's `routablepageurl`).
+    // patterns.
     crate::routable::register_tera_function(tera);
 }
 

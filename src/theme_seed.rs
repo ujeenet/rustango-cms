@@ -9,11 +9,12 @@
 //!
 //! ## Idempotency
 //!
-//! [`ensure_themes_seeded`] is a no-op once `cms_theme` has any rows:
-//! editors can rename, recolor, or delete bundled presets freely
-//! after first boot and the seeder won't clobber them. To force a
-//! re-hydration, clear the table (`DELETE FROM cms_theme`) — the FK
-//! cascade drops `cms_brand_color` rows automatically.
+//! [`ensure_themes_seeded`] runs on every boot and reconciles by slug:
+//! it inserts fixture themes whose slug the tenant lacks (with brand
+//! colors) and never updates an existing row, so renames and recolors
+//! survive. On a tenant that already has themes, new built-ins land
+//! with `is_default` / `is_admin_default` cleared. A deleted bundled
+//! preset comes back on the next boot, since its slug is missing again.
 //!
 //! [`fixtures/cms_theme.json`]: ../../../fixtures/cms_theme.json
 
@@ -91,13 +92,6 @@ const BRAND_COLORS: &[(&str, &[(&str, &str, &str, &str)])] = &[
     ),
 ];
 
-/// Hydrate the six bundled theme presets + their brand colors into
-/// the current tenant. No-op once `cms_theme` has any rows (see the
-/// module docs for the rationale).
-///
-/// Designed to be called once per tenant from
-/// [`crate::seed::ensure_seeded`].
-///
 /// Which fixture rows this tenant is missing, with their flags adjusted
 /// for how the tenant is arriving.
 ///
@@ -131,9 +125,15 @@ fn rows_to_insert(
     rows
 }
 
+/// Hydrate the bundled theme presets + their brand colors into the
+/// current tenant. Inserts every built-in theme whose slug the tenant
+/// lacks and never updates an existing row (see the module docs).
+///
+/// Called for each tenant from [`crate::seed::ensure_seeded`].
+///
 /// # Errors
 /// Driver / query failures propagate. A malformed
-/// [`fixtures/cms_theme.json`] file surfaces as a fixture-format
+/// `fixtures/cms_theme.json` file surfaces as a fixture-format
 /// error — that would be a compile-time bug in this crate, not a
 /// runtime concern (the JSON is checked into the repo).
 pub async fn ensure_themes_seeded(pool: &Pool) -> Result<(), ExecError> {

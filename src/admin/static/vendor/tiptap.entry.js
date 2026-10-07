@@ -13,7 +13,7 @@ import TableRow from "@tiptap/extension-table-row";
 import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
 
-// Wagtail-style move-safe links store the target as `linktype` + `id`
+// Move-safe links store the target as `linktype` + `id`
 // (and carry NO href) so they survive page/media moves; the server-side
 // `| richtext` filter resolves them to real URLs at render time. Stock
 // TipTap Link only understands `href`, so without this it (a) fails to

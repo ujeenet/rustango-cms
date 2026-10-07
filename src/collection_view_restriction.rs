@@ -1,6 +1,5 @@
 //! `CollectionViewRestriction` — gate served media bytes behind a
-//! login requirement or group membership check (#195, Wagtail
-//! parity).
+//! login requirement or group membership check.
 //!
 //! Mirrors [`crate::view_restriction::PageViewRestriction`] but keyed
 //! by [`crate::media::MediaCollection`]. Restrictions inherit DOWN

@@ -1,139 +1,119 @@
-# rustango-cms
+# Rustango-CMS
 
-A page-tree content management system for Rust, built on top of [rustango](https://crates.io/crates/rustango).
+**A page-tree content management system for Rust: describe a page type once, and editors get a form for it, a place in the site tree, a live preview, revisions and a public URL.**
 
-**Documentation:** [cms.rustango.com](https://cms.rustango.com) — guides for editors and developers, including a step-by-step tutorial that builds a small shop.
+**Built on [rustango](https://github.com/ujeenet/rustango), [axum](https://github.com/tokio-rs/axum) and [Tera](https://keats.github.io/tera/).** The CMS is a set of `axum::Router`s and Tera templates you merge into your own rustango app, so the rest of your site stays plain Rust.
 
-`rustango-cms` provides:
+It runs multi-tenant from the start — every tenant gets its own page tree, media, users and settings — and the same source boots on **PostgreSQL, MySQL 8+ and SQLite**.
 
-- An abstract `Page` model with parent/child tree traversal (materialized-path) and multi-table inheritance (typed extension tables one-to-one back to `cms_page`).
-- A `PageType` registry table + a `PageTypeHandler` trait registered via `inventory` for deep customization.
-- A fallback URL handler that resolves slug paths to pages and renders them through rustango's existing Tera-based template layer.
+📚 **Docs:** [cms.rustango.com](https://cms.rustango.com) · [in-repo guides](docs/) · [API reference](https://docs.rs/rustango-cms)
+🏺 **Tutorial:** [Build a ceramics shop](https://cms.rustango.com/shop-overview) — a whole site, step by step, for editors and developers, with a [runnable example](examples/ceramics_shop/).
 
-Tenant-aware from day one — every read and write goes through the tenant's own pool (`rustango::extractors::Tenant::pool()`), and migrations register with `MigrationScope::Tenant` so each tenant gets its own `cms_page` and `cms_page_type` tables.
+---
 
-## Status
+## Contents
 
-**v0.1 — pre-alpha.** Public surface stable enough to build on; expect rapid iteration before tagging.
+- [Features](#features)
+- [Install](#install)
+- [Quick start](#quick-start)
+- [Try the demo](#try-the-demo)
+- [Translations: chrome vs content](#translations-chrome-vs-content)
+- [Logging](#logging)
+- [Cargo features](#cargo-features)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
-## What's new
+## Features
 
-The big arc since the 0.39 tenancy refactor ([issue #1](https://github.com/ujeenet/rustango-cms/issues/1)) was bringing the CMS onto the framework's **v0.40–v0.50** surface, replacing code the CMS used to hand-roll. Now on **rustango 0.60**:
+- **Three ways to define content.** Page types as Rust structs (`#[derive(PageType)]`), page types built by editors in the admin with no code or migration, and reusable blocks (a StreamField body of headings, images, quotes, embeds, forms and your own `#[derive(Block)]` types).
+- **An editor's admin at `/cms-admin/`.** Page tree with drag-and-drop, live preview, revisions and rollback, scheduled publishing and take-down, locking, approval workflows with email notifications, a media library with focal points and renditions, menus, categories, snippets, redirects, site settings and an accessibility checker.
+- **Multi-language content.** Locales per tenant, side-by-side translation screens for pages, snippets, forms and menus, and a localised admin (English, Ukrainian, Polish, French, German, Simplified Chinese and Japanese).
+- **A form builder.** Multi-step forms with conditional logic, submissions stored per form, and notification email.
+- **Members and permissions.** Roles and codename permissions for editors; private pages and sections for signed-in members, with sign-up, login and single sign-on.
+- **Headless when you want it.** A read/write JSON API under `/api/v2/`, locale-aware, and an MCP server so an AI agent can work in the CMS as a user, with its own keys.
+- **Production pieces.** SEO fields, sitemap, RSS/Atom feeds, `robots.txt`, search (built-in or Elasticsearch), S3-compatible media storage, front-cache purging (Cloudflare, Varnish, CloudFront, Google Cloud CDN, Azure CDN) and CSRF protection on every admin form.
 
-- **Tri-dialect** — boots on Postgres, MySQL 8+, and SQLite from one source; admin auth (`with_login_required`, the `SessionUser` save-flow guards) works on all three, not just PG.
-- **Framework modules** — public `/sitemap.xml` via `rustango::sitemaps`, table-driven 301/302 `rustango::redirects`, RSS/Atom via `rustango::syndication`, flash messages via `rustango::messages`, named URL reversal + `{% url %}` / `{% csrf_token %}` / `{% querystring %}` template tags, `Paginator` for the list views, and `humanize` filters — replacing the CMS's own copies.
-- **ORM adoption** — `QuerySet::first(pool)` for single-row lookups and `QuerySet::iterator(chunk_size)` for memory-bounded full-tree rebuilds, plus the `atomic!` + `on_commit` transaction surface.
-- **Auth + security** — CSPRNG sweep (`OsRng` at every token boundary), CSRF on every admin POST, and `@login_required`-equivalent gating on all of `/cms-admin/`.
-- **Real WYSIWYG** — the richtext fields now use a vendored [TipTap](https://tiptap.dev) editor (headless, MIT) with a formatting toolbar, tables, images, and **move-safe internal links** (`<a linktype="page|media" id="…">` resolved at render time, so links survive page/media moves). See `src/admin/static/vendor/tiptap.bundle.README.md` to rebuild it.
-- **Admin polish** — the page editor gained a three-action save footer (Save / Save & keep editing / Save & add another).
-
-## Quick start
-
-Add to your `Cargo.toml`:
+## Install
 
 ```toml
 [dependencies]
+rustango-cms = { git = "https://github.com/ujeenet/rustango-cms" }
 rustango     = { version = "0.60", default-features = false, features = ["admin", "auth_flows", "cache", "cache-page", "config", "email", "forms", "manage", "passwords", "runtime", "signals", "signed_url", "tenancy", "template_views"] }
-rustango-cms = { git = "https://github.com/ujeenet/rustango-cms" }   # crates.io release coming
 axum         = { version = "0.8", default-features = false, features = ["tokio", "http1", "json", "form", "query"] }
 tera         = { version = "1.20", default-features = false }
-async-trait  = "0.1"
+serde        = { version = "1", features = ["derive"] }
 ```
 
-> **Heads up:** rustango-cms tracks the current framework line and
-> requires `rustango 0.60`. Use the same rustango version as the CMS —
-> two semver-incompatible copies give you distinct `Tenant` / `Pool` types
-> that do not unify. Tri-dialect support landed back in 0.39
-> (dialect-agnostic transactions, tri-dialect `SchemaChange` DDL,
-> `SeedFn` lifted to `&Pool`), so the CMS boots on Postgres, MySQL 8+,
-> and SQLite from the same source. The framework's v0.40–v0.50 surface
-> (sitemaps, redirects, RSS/Atom syndication, `{% url %}` /
-> `{% csrf_token %}` / `{% querystring %}` / humanize Tera helpers,
-> named URL reversal, `atomic!` + `on_commit`, `Paginator` /
-> `CursorPaginator`, `QuerySet::first`/`iterator`, FTS + trigram
-> lookups) is now adopted through this crate — see the
-> [What's new](#whats-new) section below and
-> [issue #1](https://github.com/ujeenet/rustango-cms/issues/1) for the
-> per-section breakdown.
->
-> `tokio` no longer needs to be a direct dependency of your app —
-> `#[rustango::main]` resolves it through rustango's
-> `__private_runtime` re-export since 0.31.1.
+The crate is not on crates.io yet; until the first release, depend on the repository as above. Pick the database with a feature: `postgres` is the default, and `default-features = false, features = ["sqlite"]` (or `"mysql"`) switches it — on both `rustango-cms` and `rustango`.
 
-Register a page type:
+Use the same `rustango` minor version as the CMS (0.60 today). Two semver-incompatible copies give you two different `Tenant` and `Pool` types that do not unify. [UPGRADING.md](UPGRADING.md) has the notes for each version.
+
+The fastest start is the scaffolder, which writes a ready project for you — see [Getting started](docs/getting-started.md).
+
+## Quick start
+
+A page type is a rustango model with a link to its page and one `#[field]` per box in the editor:
 
 ```rust
-use async_trait::async_trait;
-use rustango_cms::{register_page_type, PageTypeHandler};
+use rustango::sql::Auto;
+use serde::{Deserialize, Serialize};
 
-#[derive(Default)]
-pub struct ArticlePage;
-
-#[async_trait]
-impl PageTypeHandler for ArticlePage {
-    fn app_label(&self) -> &'static str { "blog" }
-    fn type_name(&self) -> &'static str { "ArticlePage" }
-    fn verbose_name(&self) -> &'static str { "Article" }
-    fn default_template(&self) -> &'static str { "article.html" }
+#[derive(rustango::Model, rustango_cms::PageType, Default, Debug, Clone, Serialize, Deserialize)]
+#[rustango(table = "blog_article", app = "blog")]
+#[page_type(type_name = "ArticlePage", verbose_name = "Article", template = "article.html")]
+pub struct ArticlePage {
+    #[rustango(primary_key)]
+    pub id: Auto<i64>,
+    #[rustango(fk = "cms_page", on = "id", unique)]
+    pub page_id: i64,
+    #[field(widget = MediaPicker, label = "Photo")]
+    pub photo: Option<i64>,
+    #[field(widget = Stream, label = "Body", allowed(heading, paragraph, image, quote))]
+    pub body: Option<String>,
 }
 
-register_page_type!(ArticlePage);
+// Required; an empty impl keeps every default (parent/child rules,
+// extra template context, …).
+impl rustango_cms::PageTypeOverrides for ArticlePage {}
 ```
 
-Wire the routers into your `manage` runner:
+Then merge the CMS routers into your `manage` runner:
 
 ```rust
+use std::path::Path;
 use std::sync::Arc;
-use tera::Tera;
 
 #[rustango::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut tera = Tera::new("templates/**/*.html")?;
+    let mut tera = tera::Tera::new("templates/**/*.html")?;
     rustango_cms::admin::register_templates(&mut tera)?;
+    rustango_cms::block::tera_helpers::register_tera_function(&mut tera);
     let tera = Arc::new(tera);
 
-    // CMS admin at /cms-admin/...; public pages + /sitemap.xml at
-    // the site root. (rustango 0.31+ mounts the tenant admin via
-    // explicit routes for `routes.admin_url` only, so this
-    // `.fallback()`-based public router is allowed to claim
-    // everything else.)
-    // Protect every `/cms-admin/*` route with the framework's
-    // `auth_decorators::login_required`. Anonymous visitors are
-    // 302'd to `/login?next=<original>` and resumed after auth.
-    let cms_admin = rustango_cms::admin::with_login_required(
-        rustango_cms::admin::router(tera.clone()),
-        "/login",
-    );
-    let api = cms_admin.merge(rustango_cms::router(tera));
+    // The CMS ships its migrations; this copies them next to yours.
+    let migrations = Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    rustango_cms::migrations::materialize(&migrations)?;
 
-    // Every cms-admin POST form carries a `{{ csrf_token | csrf_input | safe }}`
-    // input; the matching `CsrfLayer` middleware on `Cli::with_csrf*`
-    // validates it on submit. Drop `allow_insecure_for_dev()` in
-    // production (it disables the cookie's `Secure` attribute,
-    // which is fine for `http://localhost` but unsafe on the open
-    // internet).
-    let csrf_cfg = rustango::forms::csrf::CsrfConfig::default().allow_insecure_for_dev();
+    // The admin router has no auth of its own — always wrap it.
+    let admin = rustango_cms::admin::public_router(tera.clone()).merge(
+        rustango_cms::admin::with_login_required(rustango_cms::admin::router(tera.clone()), "/login"),
+    );
+    let app = admin
+        .merge(rustango_cms::api::router())
+        .merge(rustango_cms::rendition_route::router())
+        .merge(rustango_cms::router(tera)); // public pages: claims every other path
+
+    let csrf = rustango::forms::csrf::CsrfConfig::default()
+        .exempt_prefix(rustango_cms::analytics::COLLECT_PATH)
+        .exempt_prefix(rustango_cms::api::PREFIX)
+        .allow_insecure_for_dev(); // local http only — remove in production
 
     rustango::manage::Cli::new()
         .tenancy()
-        .api(api)
-        // Serve your own static assets (public-template CSS/JS, favicons,
-        // …) at /static/. NOTE: the source path is resolved relative to
-        // the process's *current working directory* — unlike templates /
-        // migrations, which resolve via CARGO_MANIFEST_DIR. Pass a
-        // manifest-relative path so it works no matter where the binary
-        // is launched from. The cms-admin mounts its bundled assets
-        // separately, so this is purely for your host project.
-        .with_static("/static", concat!(env!("CARGO_MANIFEST_DIR"), "/static"))
-        // Explicit tracing setup. `#[rustango::main]` already installs a
-        // basic fmt subscriber via `try_init`, so this is idempotent — it
-        // matters when you don't use the macro, or want the Cli to own
-        // logging. Tune verbosity with `RUST_LOG` (see Logging below).
-        .with_logging()
-        // CSRF: `.with_csrf()` is the one-liner; `with_csrf_config` (here)
-        // additionally relaxes the cookie's `Secure` flag for local http
-        // dev — drop `allow_insecure_for_dev()` in production.
-        .with_csrf_config(csrf_cfg)
+        .api(app)
+        .migrations_dir(migrations)
+        .with_csrf_config(csrf)
         .seed(|registry| {
             let pool = registry.clone();
             async move { rustango_cms::ensure_seeded(&pool).await?; Ok(()) }
@@ -143,262 +123,117 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-After that:
+`templates/article.html` receives the page, its fields and the rendered body:
 
-- `/` → CMS root page
-- `/<slug>`, `/<slug>/<subslug>` → CMS resolver
-- `/sitemap.xml` → sitemaps.org XML of every published,
-  indexable page in the current tenant (powered by
-  [`rustango::sitemaps`](https://docs.rs/rustango))
-- `/admin/*` → rustango tenant admin
-- `/cms-admin/pages` → CMS-aware admin (path/depth/sort_order
-  computed correctly, type whitelists enforced — distinct from the
-  generic rustango admin, which won't compute the tree for you)
-- Anything else → CMS `404 — Page not found: /<path>`
-
-## Demo
-
-A working example lives under [`examples/cms_demo/`](examples/cms_demo/) with two page types and matching templates. Run end-to-end:
-
-```sh
-createdb rcms_demo
-export DATABASE_URL=postgres://localhost/rcms_demo
-cargo run --example cms_demo -- migrate-registry          # registry schema (orgs, …)
-cargo run --example cms_demo -- create-tenant demo --host-pattern demo.localhost
-cargo run --example cms_demo -- create-user demo admin --password 'change-me-please' --superuser
-RUSTANGO_APEX_DOMAIN=localhost cargo run --example cms_demo -- runserver
+```html
+<article>
+  <h1>{{ page.title }}</h1>
+  {% if extension.photo %}<img src="{{ rcms_image_url(media_id=extension.photo, filter='fill-1200x600') }}" alt="">{% endif %}
+  {{ _stream_html['body'] | safe }}
+</article>
 ```
 
-Then sign in at `http://demo.localhost:8080/login` as `admin` and manage pages through the R-CMS admin at `http://demo.localhost:8080/cms-admin/pages` (handles root + child creation, applies the type whitelist, computes materialized path / depth / sort order) and visit the rendered pages at `http://demo.localhost:8080/<slug>/`. `create-tenant` applies the tenant migrations itself, and without `--host-pattern` requests cannot be routed to the tenant (the login page answers 404). Browsers resolve `*.localhost` to loopback; for `curl`, pass `-H 'Host: demo.localhost'`. Set `RUSTANGO_BIND` to change the default `0.0.0.0:8080`.
+Generate the table with `cargo run -- makemigrations` and apply it with `cargo run -- migrate-tenants`. After that:
 
-> ⚠️ Don't use the framework admin at `/__admin/cms_page/` to create pages — it goes through a raw INSERT path that leaves `path` empty and skips type validation. Use `/cms-admin/` instead. Read-only viewing of `cms_page` rows in the framework admin is fine.
+| Path | What answers |
+|---|---|
+| `/`, `/<slug>`, `/<slug>/<child>` | the public site — each page rendered with its type's template |
+| `/cms-admin/` | the editor's admin (signed-in staff only) |
+| `/api/v2/` | the headless JSON API |
+| `/sitemap.xml`, `/robots.txt`, feeds | generated from the published pages |
 
-### Trying it on SQLite (no database server)
+Page types register themselves at start-up. In a small binary, name each type once (`let _ = std::any::type_name::<ArticlePage>();`) so the linker cannot drop it. The complete, runnable version of this is [`examples/cms_demo`](examples/cms_demo/); the [developer chapters](docs/shop-dev-helper-traits.md) of the tutorial cover the other helpers (menus, library types, taxonomies, site settings).
 
-The CMS is tri-dialect — the demo runs end-to-end on SQLite with **no DB server to install**: the registry and each tenant are just files. Build with the `sqlite` feature instead of the default `postgres`, and use database-mode tenancy (SQLite has no schemas, so each tenant is its own file):
+## Try the demo
+
+The demo runs on SQLite, so there is no database server to install — the registry and each tenant are files:
 
 ```sh
 export DATABASE_URL="sqlite:./var/registry.db?mode=rwc"
 ARGS="--no-default-features --features sqlite --example cms_demo"
 
-cargo run $ARGS -- migrate-registry    # create the registry schema (orgs, …)
+cargo run $ARGS -- migrate-registry
 cargo run $ARGS -- create-tenant demo \
     --mode database \
     --database-url "sqlite:./var/demo.db?mode=rwc" \
-    --host-pattern demo.localhost      # database-mode needs an explicit host
+    --host-pattern demo.localhost
 cargo run $ARGS -- create-user demo admin --password 'change-me-please' --superuser
 RUSTANGO_APEX_DOMAIN=localhost cargo run $ARGS -- runserver
 ```
 
-Then the admin is at `http://demo.localhost:8080/cms-admin/pages`, the sitemap at `http://demo.localhost:8080/sitemap.xml`, and pages render at `http://demo.localhost:8080/<slug>/`.
+Sign in at <http://demo.localhost:8080/login> as `admin`, then open <http://demo.localhost:8080/cms-admin/>. Browsers resolve `*.localhost` to your own machine; for `curl`, pass `-H 'Host: demo.localhost'`. `RUSTANGO_BIND` changes the default `0.0.0.0:8080`.
 
-**MySQL 8+** works the same way — swap the feature to `mysql` and use `mysql://user:pass@host/db` URLs (pre-create the registry + tenant databases, since MySQL won't auto-create them the way SQLite creates files). Verified against MySQL 8.0.
+**PostgreSQL** (the default feature): `createdb rcms_demo`, `DATABASE_URL=postgres://localhost/rcms_demo`, drop `ARGS`'s feature flags and leave out `--mode database --database-url …`. **MySQL 8+**: use the `mysql` feature and `mysql://user:pass@host/db` URLs, and create the databases first.
 
-### Auth on sqlite / mysql builds
+Create pages in `/cms-admin/`, not in the generic rustango admin at `/__admin/` — only the CMS admin builds the tree paths and checks the page-type rules.
 
-`rustango_cms::admin::with_login_required(...)` is tri-dialect as of
-#258 — anonymous traffic to `/cms-admin/*` 302s to the configured
-login URL on every backend. A signed-in user also needs the
-`cms_admin.access` codename (every seeded role carries it) or to be a
-superuser; anyone else — a self-registered member, say — is sent to
-`/cms-admin/no-access` (#671). The framework's `SessionUser` extractor
-(used by every save-flow guard in the admin) became tri-dialect in
-rustango #317, so a logged-in editor's session cookie decodes
-correctly under sqlite + mysql just like under postgres.
+The [ceramics shop](examples/ceramics_shop/) is the larger example: the site the tutorial builds, with product pages, categories, an order form, a members area, a second language and a sale.
 
-If a POST save returns a 401 "session expired" page on a non-PG
-build despite being logged in, double-check:
+## Translations: chrome vs content
 
-1. The login flow itself succeeded (browser carries a
-   `rustango_tenant_session` cookie scoped to the tenant slug).
-2. The CSRF middleware accepts the request — multipart forms hit
-   the JS hijack from #262 to send `X-CSRF-Token` as a header;
-   non-multipart admin forms include `{% raw %}{{ csrf_token | csrf_input | safe }}{% endraw %}`.
-3. The handler is reachable through `with_login_required`'s gate —
-   not bypassed by a custom router layer that drops the layer.
+Templates have two translation tools. Pick by where the text comes from:
 
-The framework's `auth_decorators::login_required` decorator is
-still PG-gated and `unimplemented` on sqlite/mysql, but
-`rustango-cms` no longer routes through it — see `with_login_required`
-in `src/admin/mod.rs`.
-
-### Developing against a local rustango checkout
-
-The workspace builds against crates.io rustango. To work on the framework
-and the CMS together, clone rustango beside this repo and copy
-`.cargo/config.toml.example` to `.cargo/config.toml` (gitignored) — it holds
-the `[patch.crates-io]` onto `../rustango`. Cargo then rewrites the two
-rustango entries in `Cargo.lock` to path sources; don't commit that diff.
-
-## Cookbook — building a typed blog (v0.2)
-
-A typed page in rustango-cms is one of two halves:
-
-1. The `PageTypeHandler` impl + `register_page_type!` registration (covered above).
-2. A user-authored **extension table** that holds the typed fields. Multi-table inheritance — `cms_page` has the shared tree-and-status fields; the extension table holds the per-type stuff.
-
-This chapter walks the `ArticlePage` shape — title + canonical metadata in `cms_page`, body Markdown + hero image FK in `cms_article_page`.
-
-### 1. Define the extension model
-
-```rust
-use chrono::{DateTime, Utc};
-use rustango::sql::Auto;
-use rustango::Model;
-use serde::{Deserialize, Serialize};
-
-#[derive(Model, Debug, Clone, Serialize, Deserialize)]
-#[rustango(table = "cms_article_page", app = "blog")]
-pub struct ArticlePageExt {
-    #[rustango(primary_key)]
-    pub id: Auto<i64>,
-    /// 1:1 with `cms_page.id`. Same row's `cms_article_page` carries
-    /// the typed body + hero image.
-    #[rustango(fk = "cms_page", on = "id", index, unique)]
-    pub page_id: i64,
-    /// Body content as raw Markdown. Renderer pipes through whichever
-    /// MD library the host crate prefers (Tera filter wired in main).
-    pub body_markdown: String,
-    /// Optional FK to `cms_media` for the lead image. Tera template
-    /// emits `{{ rcms_image_url(media_id=ext.hero_media_id, filter='fill-1200x600') }}`.
-    pub hero_media_id: Option<i64>,
-    #[rustango(auto_now)]
-    pub updated_at: Auto<DateTime<Utc>>,
-}
-```
-
-### 2. Wire `load_extension` on the handler
-
-Override the default `load_extension` to fetch the matching `cms_article_page` row and return it as JSON. Tera templates read it from `extension` in the context.
-
-```rust
-use async_trait::async_trait;
-use rustango::core::Column as _;
-use rustango::sql::Fetcher as _;
-use rustango_cms::{register_page_type, PageTypeHandler};
-
-#[derive(Default)]
-pub struct ArticlePage;
-
-#[async_trait]
-impl PageTypeHandler for ArticlePage {
-    fn app_label(&self) -> &'static str { "blog" }
-    fn type_name(&self) -> &'static str { "ArticlePage" }
-    fn verbose_name(&self) -> &'static str { "Article" }
-    fn default_template(&self) -> &'static str { "article.html" }
-    fn allowed_parent_types(&self) -> &'static [&'static str] { &["BlogIndexPage"] }
-
-    async fn load_extension(
-        &self,
-        pool: &rustango::sql::Pool,
-        page_id: i64,
-    ) -> Result<serde_json::Value, rustango::sql::ExecError> {
-        let mut hits: Vec<ArticlePageExt> = ArticlePageExt::objects()
-            .where_(ArticlePageExt::page_id.eq(page_id))
-            .fetch_pool(pool)
-            .await?;
-        Ok(hits
-            .pop()
-            .and_then(|ext| serde_json::to_value(ext).ok())
-            .unwrap_or(serde_json::Value::Null))
-    }
-}
-
-register_page_type!(ArticlePage);
-```
-
-### 3. Render the extension in the template
-
-```html
-{# templates/article.html #}
-<article>
-  <h1>{{ page.title | t(field="title", translations=translations) }}</h1>
-  {% if extension.hero_media_id %}
-    <img src="{{ rcms_image_url(media_id=extension.hero_media_id, filter='fill-1200x600') }}"
-         alt="{{ page.title }}">
-  {% endif %}
-  {{ extension.body_markdown }}
-</article>
-```
-
-The `t` filter is the Slice 4 translation substitution; `rcms_image_url` is the Slice 5b rendition resolver. Both no-op gracefully if their data is missing.
-
-### 4. Migration
-
-After defining the extension model, `cargo run -- makemigrations` emits the migration. Apply with `cargo run -- migrate`. The CMS-shipped migrations materialize automatically on first boot (see [`migrations.rs`](src/migrations.rs)) — your host project doesn't need to copy them by hand.
-
-### 5. Author content via the admin
-
-1. Upload a hero image: `/cms-admin/media/upload?kind=image`. Note the media id (visible in the grid).
-2. Create the page: `/cms-admin/pages/new` → `ArticlePage` type, fill in title + slug + SEO fields.
-3. Edit the extension fields **directly in the page editor**: when the handler declares `extension_fields()` / `widgets()` (with `save_extension()` / `preview_extension()`), the generic page-edit form renders those inputs and persists them on save — no framework-admin detour required.
-
-The framework admin at `/admin/cms_article_page/` still works as a raw-DB-CRUD fallback for any fields the handler doesn't surface.
-
-### 6. Verify
-
-- `/your-slug` → public render with hero image + body
-- Edit the page in `/cms-admin/pages/<id>/edit` → Revisions panel grows by one per save
-- Slug rename → URL changes, descendants cascade, old URL evicts from cache
-- Drag a row in the tree view → reorder / reparent + URL re-materialization
-- Add a translation row (`/admin/cms_translation/`) for `(page_id, locale_id, field_path='title')` → `?lang=<locale>` request swaps the title
-
-## i18n — chrome (`translate`) vs content (`t`)
-
-rustango-cms templates have **two** translation mechanisms, and they're easy to confuse because both read "translate the text." They operate at different layers — pick by *where the string comes from*:
-
-| | `translate` (framework) | `t` (CMS) |
+| | `translate` (rustango) | `t` (CMS) |
 |---|---|---|
-| **For** | UI **chrome** — fixed strings you wrote in the template (button labels, section headings) | page **content** — dynamic per-row values (this page's title, body, lead) |
-| **Backed by** | a gettext-shape message catalog, keyed by the string itself | `cms_translation` rows keyed by `(page_id, locale, field_path)` |
-| **Shape** | the `translate` function **or** filter, from `rustango::i18n::tera_tags` | the `t` filter, from `rustango_cms::translation` (see syntax below) |
-| **Locale** | picked from the request context (`LANG`) | the `translations` map is resolved for the active locale before render |
-
-**Rule of thumb:** a string you typed *into the template* is chrome → `translate`; a value that came *out of the database* is content → `t`.
+| **For** | text you typed into the template — buttons, headings | text from the database — this page's title, body, lead |
+| **Stored in** | a message catalog, keyed by the text itself | `cms_translation` rows, per page, locale and field |
+| **Locale** | the request's `LANG` | resolved for the active locale before render |
 
 ```html
-{# chrome — same label on every page, translated per locale #}
+{# chrome — the same label on every page #}
 <button>{{ translate(key="Save changes") }}</button>
 
-{# content — THIS page's title, translated via its cms_translation rows #}
+{# content — THIS page's title #}
 <h1>{{ page.title | t(field="title", translations=translations) }}</h1>
 
-{# content, loop form — each child translated against its own row #}
+{# content in a loop — each child against its own row #}
 {% for c in children %}
   <a href="{{ c.url_path }}">{{ c.title | t(field="title", by_page=translations_by_page, page_id=c.id) }}</a>
 {% endfor %}
 ```
 
-Register the framework helper once when you build Tera:
+Both fall back to the original text when a translation is missing, so a half-translated site still renders. Register them once when you build Tera:
 
 ```rust
-// `translator` is your loaded message catalog (Arc<rustango::i18n::Translator>).
-rustango::i18n::tera_tags::register(&mut tera, translator);
-rustango_cms::translation::register_tera_filter(&mut tera); // the `t` filter
+rustango::i18n::tera_tags::register(&mut tera, translator); // `translate`
+rustango_cms::translation::register_tera_filter(&mut tera); // `t`
 ```
-
-Both forms **fall back to the original / untranslated value** when a catalog entry or `cms_translation` row is missing, so a partially-translated site degrades gracefully rather than rendering blanks.
 
 ## Logging
 
-`#[rustango::main]` auto-installs a `tracing_subscriber::fmt`
-subscriber with env-filter (`info,sqlx=warn` default). Override with
-`RUST_LOG`:
+`#[rustango::main]` installs a `tracing` subscriber (`info,sqlx=warn` by default). Change it with `RUST_LOG`:
 
 ```sh
-# Verbose for one module
-RUST_LOG=info,rustango_cms::render=debug cargo run
-
-# Quiet upstream noise
-RUST_LOG=info,sqlx=warn,hyper=warn cargo run
-
-# Production JSON output (see docs/logging.md for the manual setup)
-RUSTANGO_LOG_FORMAT=json cargo run
+RUST_LOG=info,rustango_cms::render=debug cargo run   # one module in detail
+RUSTANGO_LOG_FORMAT=json cargo run                   # JSON lines for production
 ```
 
-The full target catalog (25 modules — `render`, `rendition_route`,
-`page_log`, `workflow_mail`, etc.) plus prod / OTel patterns are
-documented in [docs/logging.md](docs/logging.md).
+[docs/logging.md](docs/logging.md) lists every log target and the OpenTelemetry setup.
+
+## Cargo features
+
+| Feature | Effect |
+|---|---|
+| `postgres` (default), `sqlite`, `mysql` | Database backend, forwarded to rustango |
+| `storage_s3` | S3-compatible media storage (AWS S3, Cloudflare R2, MinIO, …) |
+| `cache_cloudflare`, `cache_varnish`, `cache_cloudfront`, `cache_gcp`, `cache_azure` | Purge a front cache when pages are published |
+| `search_elasticsearch` | Elasticsearch as the search backend |
+| `avif` | AVIF image renditions (pulls an AV1 encoder; slower build) |
+| `test_utils` | `Tenant::for_test` for your integration tests |
+
+## Documentation
+
+- **[cms.rustango.com](https://cms.rustango.com)** — everything below, as a website.
+- **[What is Rustango-CMS?](docs/cms-overview.md)** and **[Getting started](docs/getting-started.md)** — from an empty folder to a blog in about 20 minutes.
+- **For editors** — [find your way](docs/admin-find-your-way.md), [your first page](docs/admin-first-page.md), [live preview](docs/admin-live-preview.md).
+- **[Build a ceramics shop](docs/shop-overview.md)** — the tutorial, 15 editor chapters and 2 developer chapters.
+- **[Headless API](docs/api.md)**, **[per-tenant templates](docs/tenant-templates.md)**, **[Google sign-in](docs/sso-google-setup.md)**.
+- **[API reference on docs.rs](https://docs.rs/rustango-cms)** — every module, trait and type.
+- [CHANGELOG.md](CHANGELOG.md) and [UPGRADING.md](UPGRADING.md).
+
+## Contributing
+
+Issues and pull requests are welcome — [CONTRIBUTING.md](CONTRIBUTING.md) explains the local checks a change must pass. Please report security problems privately, as described in [SECURITY.md](SECURITY.md).
 
 ## License
 

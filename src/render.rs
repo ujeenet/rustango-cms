@@ -3,14 +3,14 @@
 //! The flow:
 //!
 //! 1. Look up the [`PageType`] row via `page.page_type_id`.
-//! 2. Find the registered [`PageTypeHandler`] by `type_name`.
+//! 2. Find the registered [`PageTypeHandler`](crate::page_type::PageTypeHandler) by `type_name`.
 //! 3. Ask the handler for its typed extension as JSON
 //!    (`load_extension`).
 //! 4. Build a Tera context with `page` / `page_type` / `extension`
 //!    / `children` / `ancestors` / `breadcrumbs`.
 //! 5. Render the page's own `template_override` when it names a
 //!    template that exists, else `page_type.default_template`
-//!    (see [`pick_template`]).
+//!    (see `pick_template`).
 
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};
@@ -98,7 +98,7 @@ pub async fn render_negotiated(
     .await
 }
 
-/// Render `page` as a routable-page hit (#198). The matched route's
+/// Render `page` as a routable-page hit. The matched route's
 /// name + named capture groups are exposed to the template as
 /// `route_name` and `route_captures`; the handler's
 /// `route_context` override gets a chance to inject additional ctx
@@ -890,8 +890,7 @@ async fn render_inner(
 
     // #247 — resolve any `*_id` field on the extension that points
     // at a `cms_page` row, exposing both a `_pages_by_id` ctx map AND
-    // the `pageurl(id=…)` Tera function (Wagtail's `{% pageurl %}`
-    // parity). The function reads from a thread-local that's set
+    // the `pageurl(id=…)` Tera function. The function reads from a thread-local that's set
     // here and cleared the moment the render returns, dodging Tera's
     // "functions can't see context" limitation without paying the
     // per-render `Tera::clone()` tax.
@@ -1094,7 +1093,7 @@ async fn render_inner(
 /// A rendered page as a response. A `degraded` page — one rendered with a
 /// failed lookup left empty — is marked `no-store`, which the page cache
 /// and any shared cache skip, so the gap lasts one request rather than a
-/// whole TTL (#723).
+/// whole TTL.
 fn page_response(html: String, degraded: bool) -> Response {
     let mut resp = Html(html).into_response();
     if degraded {

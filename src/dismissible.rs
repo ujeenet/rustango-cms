@@ -1,5 +1,4 @@
-//! Per-user persistent banner / announcement dismissals (#139,
-//! Wagtail parity D8).
+//! Per-user persistent banner / announcement dismissals.
 //!
 //! One row per `(user_id, key)` — when present, the banner with that
 //! `key` stays dismissed across sessions. The CMS itself ships no

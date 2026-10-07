@@ -1,12 +1,11 @@
-//! Inline comments on the page editor (#81, Wagtail parity A3).
+//! Inline comments on the page editor.
 //!
 //! Editors can leave a per-field comment thread on any page they're
 //! editing — `TODO: confirm date with marketing` on the body field,
 //! a reviewer reply, a resolve action when the concern is addressed.
 //!
-//! PR 1 of N lands the data model + the side-panel surface + thread
-//! API. PR 2 adds inline anchor pins (click-to-comment next to each
-//! field).
+//! Each comment is anchored to a field (`field_path`) and surfaces in
+//! the editor's side panel, with a reply-thread API.
 //!
 //! ## Shape
 //!

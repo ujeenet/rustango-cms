@@ -1,4 +1,4 @@
-//! Background driver for scheduled publishing and expiry (#680).
+//! Background driver for scheduled publishing and expiry.
 //!
 //! [`crate::page::run_schedule_sweep`] flips `scheduled` pages live and
 //! takes expired ones down, but nothing ran it except an editor opening

@@ -89,7 +89,7 @@ pub struct PageType {
     pub allowed_child_types: serde_json::Value,
 
     /// Slug of the workflow pages of this type go through, chosen on the
-    /// admin's page-type form (#843); empty means publish directly. A code
+    /// admin's page-type form; empty means publish directly. A code
     /// type's `PageTypeHandler::workflow_slug()` takes precedence.
     #[rustango(max_length = 100, default = "''")]
     pub workflow: String,
@@ -105,7 +105,7 @@ impl PageType {
     ///
     /// Read from the row, which holds the rule for every type: a code type
     /// writes its handler's list at seed, an admin-made type stores what was
-    /// entered on its form (#843).
+    /// entered on its form.
     #[must_use]
     pub fn allowed_parents(&self) -> Vec<String> {
         names(&self.allowed_parent_types)
@@ -113,7 +113,7 @@ impl PageType {
 
     /// The workflow pages of this type go through, by name, or `None` to
     /// publish directly. A code type's `workflow_slug()` comes first, then
-    /// the choice made on the admin's page-type form (#843).
+    /// the choice made on the admin's page-type form.
     #[must_use]
     pub fn workflow_name(&self) -> Option<String> {
         crate::page_type::find_handler(&self.type_name)

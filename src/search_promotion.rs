@@ -1,4 +1,4 @@
-//! Search query log + editor-pinned results (#143, Wagtail parity D6).
+//! Search query log + editor-pinned results.
 //!
 //! Two tables:
 //! - `cms_search_query` — one row per normalized query string, with
@@ -93,7 +93,7 @@ pub fn normalize_query(raw: &str) -> String {
 /// Longest visitor query that is logged; longer ones are noise or abuse.
 const MAX_LOGGED_QUERY: usize = 100;
 
-/// Log a visitor's search from the public API (#847), so the search report
+/// Log a visitor's search from the public API, so the search report
 /// shows what visitors look for, not only admin searches. First page only
 /// (paging through results isn't a new search), capped in length, run in
 /// the background, and errors only logged: it never slows or fails the

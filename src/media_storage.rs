@@ -1,4 +1,4 @@
-//! Pluggable storage backend for CMS media (Slice 8.x).
+//! Pluggable storage backend for CMS media.
 //!
 //! Media originals, renditions and staged (scratch) uploads used to be
 //! written and read with `std::fs` against a hardcoded `./var/media`
@@ -7,7 +7,7 @@
 //! between replicas, and every read/write did blocking I/O on an async
 //! worker thread.
 //!
-//! Everything now goes through the framework's [`Storage`] trait, so a
+//! Everything now goes through the framework's [`Storage`](rustango::storage::Storage) trait, so a
 //! host app can point media at any backend:
 //!
 //! ```ignore
@@ -83,7 +83,7 @@ pub fn install(registry: StorageRegistry) -> bool {
 /// Tenant disks live under this prefix so a slug can never select one of
 /// the host's other disks — a tenant provisioned with the slug `private`
 /// used to have its media read and written through a host disk named
-/// `private` (#740).
+/// `private`.
 #[must_use]
 pub fn tenant_disk_name(tenant_slug: &str) -> String {
     format!("tenant:{tenant_slug}")
@@ -198,8 +198,8 @@ pub fn origin_url(tenant_slug: &str, storage_key: &str) -> Option<String> {
 ///
 /// | value | backend |
 /// |---|---|
-/// | unset / `local` | `./var/media` on local disk — the pre-Slice-8 layout, byte-identical |
-/// | `memory` | [`InMemoryStorage`] — uploads and renditions round-trip with the filesystem never touched |
+/// | unset / `local` | `./var/media` on local disk — the original layout, byte-identical |
+/// | `memory` | [`InMemoryStorage`](rustango::storage::InMemoryStorage) — uploads and renditions round-trip with the filesystem never touched |
 /// | `s3` | any S3-compatible service (AWS, R2, MinIO, Supabase Storage); needs the `storage_s3` feature |
 ///
 /// `s3` reads `CMS_S3_BUCKET`, `CMS_S3_REGION`, `CMS_S3_ACCESS_KEY_ID`,
@@ -398,7 +398,7 @@ mod tests {
         );
     }
 
-    /// #740 — a slug that matches one of the host's own disk names does
+    /// A slug that matches one of the host's own disk names does
     /// not select that disk.
     #[test]
     fn a_slug_cannot_select_a_host_disk() {

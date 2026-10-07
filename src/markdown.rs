@@ -40,7 +40,7 @@ pub fn render(src: &str) -> String {
 /// The shared ammonia allow-list: the default policy PLUS `class` on
 /// `<code>` / `<pre>` so fenced code blocks keep their `language-…`
 /// hint (`pulldown-cmark` emits `<code class="language-rust">` for a
-/// ```rust fence) for client-side highlighters (#403). A class is
+/// ```rust fence) for client-side highlighters. A class is
 /// inert — no script / URL vector — so allowing it is XSS-safe.
 fn base_sanitizer() -> ammonia::Builder<'static> {
     let mut b = ammonia::Builder::default();
@@ -51,13 +51,13 @@ fn base_sanitizer() -> ammonia::Builder<'static> {
 
 /// Sanitize an HTML string for richtext storage / preview. Uses the same
 /// ammonia allow-list as the markdown renderer, PLUS the move-safe
-/// internal-link attributes `<a linktype="page|media" id="N">` (#294) that
+/// internal-link attributes `<a linktype="page|media" id="N">` that
 /// the `| richtext` filter resolves to real URLs at render time. Ammonia's
 /// default policy strips unknown `<a>` attributes, which would drop the
 /// `linktype`/`id` pair and turn move-safe links into broken ones the next
 /// time a page is moved — so they're explicitly allow-listed here. Both are
 /// inert (no script/URL vector), so allowing them is XSS-safe. Used by the
-/// richtext on-save sanitizer (`sanitized_extension_form`) and the #263
+/// richtext on-save sanitizer (`sanitized_extension_form`) and the
 /// preview pane.
 #[must_use]
 pub fn sanitize_html(src: &str) -> String {

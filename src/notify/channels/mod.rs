@@ -16,7 +16,7 @@ pub use teams::TeamsChannel;
 pub use telegram::TelegramChannel;
 pub use webhook::WebhookChannel;
 
-/// A client for one delivery to `url`, refusing internal destinations (#645).
+/// A client for one delivery to `url`, refusing internal destinations.
 ///
 /// A channel's URL is whatever its target was configured with, so without a
 /// guard the server POSTs, on every notification, to any address that URL

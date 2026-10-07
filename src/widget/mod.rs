@@ -5,14 +5,14 @@
 //!
 //! ## Why one shared primitive
 //!
-//! Wagtail's pain point #1 from the audit: custom inputs require a
-//! parallel Python class + JS class + Telepath adapter + template +
-//! CSS + media manifest. That's six artifacts per widget, with
-//! string-keyed adapter names that fail at runtime.
+//! A custom input should not need a stack of parallel artifacts
+//! (server class, client class, adapter, template, CSS, media
+//! manifest) wired together by string-keyed names that fail at
+//! runtime.
 //!
 //! Here a widget is **one Tera template + one `WidgetKind` enum
 //! variant** (or one inventory registration for custom widgets — see
-//! [`registry::register_widget!`]). Every widget is server-rendered;
+//! [`register_widget!`](crate::register_widget!)). Every widget is server-rendered;
 //! the only client JS the admin ships is generic add/remove/reorder
 //! for stream lists and doesn't know what a widget is.
 //!
@@ -108,20 +108,20 @@ pub enum WidgetKind {
     MediaPicker,
     /// Page chooser — modal `<dialog>` overlay listing pages by
     /// title; value is the `cms_page.id` as a stringified integer.
-    /// Empty = no selection. Backs the Wagtail-parity
+    /// Empty = no selection. Backs the
     /// `PageChooserBlock` + any FK-to-page extension field.
     PageChooser,
     /// Snippet chooser — modal `<dialog>` overlay listing snippets
     /// (optionally filtered to one `type_name` via
     /// [`Widget::custom_name`]); value is the `cms_snippet.id` as a
-    /// stringified integer. Backs the Wagtail-parity
+    /// stringified integer. Backs the
     /// `SnippetChooserBlock`.
     SnippetChooser,
     /// Snippet many-to-many chooser — multi-select chooser listing
     /// snippets of one `type_name` (in [`Widget::custom_name`]);
     /// value is a JSON-array string of selected `cms_snippet.id`
-    /// values in chooser order. Backs the Wagtail-parity
-    /// `ParentalManyToManyField` (#243). Storage lives in the
+    /// values in chooser order. Backs page ↔ snippet
+    /// many-to-many relations. Storage lives in the
     /// `cms_page_snippet_m2m` through-table — the widget's
     /// [`Widget::name`] is the M2M `relation_name`, [`Widget::value`]
     /// is the JSON array the editor submits. Hosts call
@@ -134,10 +134,10 @@ pub enum WidgetKind {
     /// Document chooser — modal `<dialog>` overlay listing media
     /// rows of `kind = "document"`; value is the `cms_media.id` as
     /// a stringified integer. Distinct from [`Self::MediaPicker`]
-    /// (which filters to images today). Backs the Wagtail-parity
+    /// (which filters to images today). Backs the
     /// `DocumentChooserBlock`.
     DocumentChooser,
-    /// Generic model chooser (#421) — modal overlay over any
+    /// Generic model chooser — modal overlay over any
     /// `register_chooser!`ed model. The registered chooser **slug**
     /// lives in [`Widget::custom_name`] and becomes the
     /// `data-chooser-kind`, which the cms-ux.js overlay resolves to
@@ -160,7 +160,7 @@ pub enum WidgetKind {
     MultiSelect,
 
     // ---- streamfield -----------------------------------------------
-    /// Wagtail-style StreamField — a list of composable blocks
+    /// StreamField — a list of composable blocks
     /// (Heading / Paragraph / Image / Quote / nested two-column / …).
     /// The list of *allowed* block types lives in [`Widget::allowed`];
     /// every entry must resolve to a registered [`crate::Block`].
@@ -337,8 +337,6 @@ pub struct Widget {
     /// canonical widget. Today only `"switch"` is recognised by the
     /// `_widget.html` macro (on [`WidgetKind::Boolean`], renders the
     /// checkbox as an iOS-style toggle). Empty = use the default.
-    ///
-    /// Wagtail parity: maps to widget-class swap (`SwitchInput` etc.).
     #[serde(default)]
     pub variant: String,
 }
@@ -468,7 +466,7 @@ impl Widget {
         self
     }
 
-    /// #243 — convenience constructor for the Page↔Snippet M2M
+    /// Convenience constructor for the Page↔Snippet M2M
     /// chooser. The widget's `name` becomes the M2M
     /// `relation_name` (the field on the page that this chooser
     /// populates), and `snippet_type_name` lands in
@@ -498,7 +496,7 @@ impl Widget {
         w
     }
 
-    /// Build a generic model-chooser widget (#421) for the
+    /// Build a generic model-chooser widget for the
     /// `register_chooser!`ed model registered under `chooser_slug`.
     /// The value is the chosen row's id (stringified). The slug rides
     /// in [`Self::custom_name`] → `data-chooser-kind` → the cms-ux.js

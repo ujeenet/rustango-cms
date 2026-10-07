@@ -1,7 +1,7 @@
-//! Embed provider discovery + responsive render (#402).
+//! Embed provider discovery + responsive render.
 //!
-//! Wagtail's `EmbedBlock` accepted a URL and emitted
-//! `<iframe src="{the raw url}">` — which is broken for the URLs
+//! Naively emitting a pasted URL as
+//! `<iframe src="{the raw url}">` is broken for the URLs
 //! people actually paste: a YouTube *watch* URL or a Vimeo page URL
 //! won't load in an `<iframe>` (you need the provider's *embed* URL),
 //! and an arbitrary URL in an iframe is both broken and a clickjacking

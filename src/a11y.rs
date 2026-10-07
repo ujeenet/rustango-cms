@@ -1,11 +1,11 @@
-//! Server-side accessibility heuristics (#116, Wagtail parity B7).
+//! Server-side accessibility heuristics.
 //!
 //! Walks the canonical [`Page`] row + the page's rendered extension
 //! HTML and flags common accessibility issues. Output is rendered
 //! as a side panel on the page editor.
 //!
 //! Contrast / ARIA checks run client-side instead: the admin serves a
-//! bundled axe-core against the preview pane (#208).
+//! bundled axe-core against the preview pane.
 //!
 //! ## Checks
 //!

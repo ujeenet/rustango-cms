@@ -65,17 +65,16 @@ pub struct Media {
     pub title: String,
 
     /// Alt text — the contextual accessibility string for images.
-    /// Optional on non-image kinds. Distinct from [`Self::description`]
-    /// (Wagtail 6.3 alt-text vs description split, #424).
+    /// Optional on non-image kinds. Distinct from [`Self::description`].
     #[rustango(max_length = 1024)]
     pub alt_text: String,
 
     /// Decorative / editorial description — longer metadata about the
     /// asset (credit, context, usage notes). NOT used as the image
     /// `alt`: `alt_text` carries the accessibility string, this is
-    /// human-facing metadata only (#424).
+    /// human-facing metadata only.
     ///
-    /// `default = "''"` so the #424 AddColumn migration can backfill
+    /// `default = "''"` so the AddColumn migration can backfill
     /// existing `cms_media` rows — a NOT NULL column added to a table
     /// with data needs a default (SQLite rejects it outright; the
     /// framework's migration guard rejects it on every dialect).
@@ -83,11 +82,11 @@ pub struct Media {
     pub description: String,
 
     /// FK to `rustango_users.id` of the operator who uploaded — left
-    /// as a plain Option<i64> (no compile-time FK) so the cms crate
+    /// as a plain `Option<i64>` (no compile-time FK) so the cms crate
     /// doesn't have to depend on the tenant-user model shape.
     pub uploaded_by: Option<i64>,
 
-    /// FK to the collection this row belongs to (#5). NULL means
+    /// FK to the collection this row belongs to. NULL means
     /// "uncategorized" — render as the root collection in the admin.
     /// The seed pass creates a default "Root" collection per tenant
     /// so most rows land there.
@@ -96,7 +95,7 @@ pub struct Media {
 
     /// Focal point — normalized x coordinate (0.0 = left edge,
     /// 1.0 = right edge). When NULL, `fill-*` renditions crop
-    /// around the geometric center (V1 default). #4.
+    /// around the geometric center.
     pub focal_point_x: Option<f32>,
 
     /// Focal point — normalized y coordinate (0.0 = top, 1.0 = bottom).

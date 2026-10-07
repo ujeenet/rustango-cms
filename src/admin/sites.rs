@@ -24,7 +24,7 @@
 //! this screen is a tenant permission. So a tenant puts a hostname live
 //! itself only under the operator's own domains (`CMS_SITE_HOST_SUFFIXES`);
 //! any other is added disabled and an operator enables it from the
-//! operator console once ownership is confirmed (#712).
+//! operator console once ownership is confirmed.
 
 use std::sync::Arc;
 
@@ -86,8 +86,7 @@ fn parse_page_id(raw: &str) -> Result<i64, AdminError> {
 ///
 /// **Any** page qualifies, not only a root: the prefix is just that
 /// page's `url_path`, so binding a hostname to `/campaigns/spring`
-/// works exactly as binding one to a root does. Wagtail's `Site` model
-/// takes the same view. Existence is still checked, because a mapping
+/// works exactly as binding one to a root does. Existence is still checked, because a mapping
 /// to a page that was never there is a typo, not a configuration.
 async fn resolve_root(pool: &Pool, root_page_id: i64) -> Result<Option<i64>, AdminError> {
     if root_page_id == 0 {
@@ -244,7 +243,7 @@ pub(crate) struct HostForm {
 /// `CMS_SITE_HOST_SUFFIXES` (comma-separated, e.g. `sites.example.com`).
 ///
 /// Any other hostname could belong to someone else — first claim would
-/// route their domain to this tenant (#712) — so it is added disabled and
+/// route their domain to this tenant — so it is added disabled and
 /// waits for an operator to enable it from the operator console.
 fn self_service_host(host: &str) -> bool {
     let suffixes = crate::config::var("SITE_HOST_SUFFIXES").unwrap_or_default();

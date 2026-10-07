@@ -58,9 +58,8 @@ async fn list_inner(
         Err(msg) => return Ok(crate::api::error::ApiError::bad_request(msg).into_response()),
     };
 
-    // Documents = every media row that ISN'T an image. Wagtail also
-    // splits "document" from "image" by content type, but rustango's
-    // discriminator is the `kind` column so we follow that.
+    // Documents = every media row that ISN'T an image. The
+    // discriminator is the `kind` column.
     let mut rows: Vec<Media> = Media::objects()
         .fetch(pool)
         .await?

@@ -1,10 +1,10 @@
 //! Form submissions: model, boot-time table ensure, and the public submit
-//! handler (#544 / FB-11).
+//! handler.
 //!
 //! The submission table is created at boot via `CREATE TABLE IF NOT EXISTS`
 //! (the framework's audit_log/cache pattern) because repo-wide
 //! `gen_migration` is blocked by pre-existing framework FK-snapshot drift.
-//! A fresh table name (`cms_form_entry`) sidesteps the dead legacy #80
+//! A fresh table name (`cms_form_entry`) sidesteps the dead legacy
 //! `cms_form_submission` table.
 //!
 //! Provenance: the source page is resolved from the `Referer` at submit;
@@ -70,7 +70,7 @@ pub async fn ensure_table(pool: &rustango::sql::Pool) -> Result<(), rustango::sq
 }
 
 /// `POST /forms/submit/{form_id}` — validate, store, notify, and redirect.
-/// The largest form submission accepted, uploads included (#666). Set on
+/// The largest form submission accepted, uploads included. Set on
 /// the route itself, so a host that raises or disables axum's default body
 /// limit for its own upload routes doesn't let an anonymous visitor buffer
 /// an arbitrarily large file into memory here.
@@ -569,7 +569,7 @@ fn upload_dir(slug: &str) -> std::path::PathBuf {
 }
 
 /// Write an accepted upload under its [`upload_key`]. Async I/O: this runs
-/// inside an anonymous request (#727). A failed write is logged and the
+/// inside an anonymous request. A failed write is logged and the
 /// submission is kept without the file.
 async fn write_upload(slug: &str, key: &str, bytes: &[u8]) -> bool {
     let dir = upload_dir(slug);

@@ -1,4 +1,4 @@
-//! Cloudflare-purge backend for [`crate::cache_invalidate::PageCacheInvalidator`] (#193).
+//! Cloudflare-purge backend for [`crate::cache_invalidate::PageCacheInvalidator`].
 //!
 //! Wires the per-page cache-invalidation hook to Cloudflare's
 //! [purge_cache] API. After a CMS save, the public URL is dropped
@@ -180,7 +180,7 @@ impl CloudflareInvalidator {
     /// POST to `/client/v4/zones/{zone_id}/purge_cache` with the
     /// exact-URL `files` list. Best-effort. Chunked at
     /// [`Self::MAX_FILES_PER_REQUEST`] so large subtree purges don't
-    /// 400 on the non-Enterprise per-request cap (#428). Exposed at
+    /// 400 on the non-Enterprise per-request cap. Exposed at
     /// module scope (vs the trait fn) so the integration tests can
     /// drive it without juggling an `Arc<dyn Trait>` cast.
     async fn purge(&self, urls: Vec<String>) {
@@ -196,7 +196,7 @@ impl CloudflareInvalidator {
         }
     }
 
-    /// Purge by **cache-tag** (#428). Cloudflare Enterprise stamps
+    /// Purge by **cache-tag**. Cloudflare Enterprise stamps
     /// responses with `Cache-Tag` headers; purging a tag drops every
     /// edge entry carrying it in one call — far cheaper than
     /// enumerating URLs. The CMS doesn't auto-tag responses, so this
@@ -214,7 +214,7 @@ impl CloudflareInvalidator {
         self.send_purge(&Body { tags }, "tags").await;
     }
 
-    /// Purge by **URL prefix** (#428) — Enterprise-only. Drops every
+    /// Purge by **URL prefix** — Enterprise-only. Drops every
     /// edge entry whose URL starts with one of `prefixes`
     /// (`example.com/blog/`), i.e. a true subtree purge without
     /// enumerating each descendant. No-op on non-Enterprise zones.

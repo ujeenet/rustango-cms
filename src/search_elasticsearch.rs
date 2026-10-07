@@ -1,4 +1,4 @@
-//! Elasticsearch full-text [`SearchBackend`] (#408).
+//! Elasticsearch full-text [`SearchBackend`].
 //!
 //! Opt-in (the `search_elasticsearch` cargo feature pulls the
 //! framework's reqwest-based HTTP client). When installed via
@@ -53,8 +53,8 @@ impl ElasticsearchBackend {
     }
 
     /// Bulk-(re)index every published page for `tenant_slug`. A one-shot
-    /// way to populate the index (the auto-on-save path lands with the
-    /// #432 search-index job).
+    /// way to populate the index (the auto-on-save path is the
+    /// search-index background job).
     ///
     /// # Errors
     /// Driver / query failures fetching the pages.
@@ -225,7 +225,7 @@ mod tests {
         assert_eq!(sanitize_index("a.b/c"), "a_b_c");
     }
 
-    /// Real-Elasticsearch round-trip (#408). Gated on `RCMS_TEST_ES_URL`
+    /// Real-Elasticsearch round-trip. Gated on `RCMS_TEST_ES_URL`
     /// (e.g. `http://localhost:9201`); skips cleanly otherwise.
     /// Indexes 3 docs, refreshes, searches, asserts ranking + fuzzy
     /// match + filtering, then drops the throwaway index.

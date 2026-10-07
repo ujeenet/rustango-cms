@@ -1,4 +1,4 @@
-//! Password hashing off the async runtime (#693).
+//! Password hashing off the async runtime.
 //!
 //! `rustango::passwords` is synchronous argon2id, slow by design (tens of
 //! milliseconds of CPU per call). Called inline in a handler it parks a

@@ -1,5 +1,4 @@
-//! `routable_page` — Wagtail's `wagtail.contrib.routable_page`
-//! parity. A single `Page` row can serve multiple URL patterns
+//! `routable_page` — routable pages. A single `Page` row can serve multiple URL patterns
 //! under its canonical url_path.
 //!
 //! ## Why
@@ -20,15 +19,15 @@
 //! `url_path`) and a stable name. When the public router can't
 //! find an exact `url_path` match, it walks ancestor candidates
 //! looking for a handler whose routes match the remaining suffix.
-//! On match, the matched [`Page`] is rendered with two extra ctx
-//! keys: `route_name` (the matched [`RouteSpec.name`]) and
+//! On match, the matched [`Page`](crate::page::Page) is rendered with two extra ctx
+//! keys: `route_name` (the matched [`RouteSpec::name`]) and
 //! `route_captures` (a `{name → value}` map of regex named groups).
 //!
 //! Handlers can also override [`crate::PageTypeHandler::route_context`]
 //! to inject route-specific data (e.g. fetch the year's posts when
 //! `archive_year` matched) — the returned map is merged into the
 //! Tera context before render. Same precedence rule as
-//! [`crate::PageTypeHandler::public_context`] (#246): framework
+//! [`crate::PageTypeHandler::public_context`]: framework
 //! keys land last and win every collision.
 
 use std::collections::HashMap;
@@ -112,7 +111,7 @@ pub fn match_routes(routes: &[RouteSpec], suffix: &str) -> Option<RouteMatch> {
 }
 
 /// Reverse a named route into the URL suffix below the page's
-/// `url_path` (Wagtail's `RoutablePageMixin.reverse_subpage`). Returns
+/// `url_path`. Returns
 /// `None` when no route has `name` or its pattern isn't reversible
 /// (see [`reverse_pattern`]). Combine the suffix with the page's
 /// `url_path` for a full URL — the `routable_url()` Tera function does
@@ -223,8 +222,7 @@ pub fn reverse_pattern(pattern: &str, captures: &HashMap<String, String>) -> Opt
     Some(out)
 }
 
-/// Register the `routable_url(…)` Tera function (#442) — Wagtail's
-/// `routablepageurl` parity. Two call shapes (extra kwargs are the
+/// Register the `routable_url(…)` Tera function. Two call shapes (extra kwargs are the
 /// named captures):
 ///
 /// ```tera

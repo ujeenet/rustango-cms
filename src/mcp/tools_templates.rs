@@ -1,4 +1,4 @@
-//! MCP tools for per-tenant templates (#587).
+//! MCP tools for per-tenant templates.
 //!
 //! An agent can **list, read, create and modify** a tenant's template
 //! overrides, and point a page type at a template. It funnels into the

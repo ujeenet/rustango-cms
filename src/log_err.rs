@@ -1,4 +1,4 @@
-//! Logging for best-effort side effects (#704).
+//! Logging for best-effort side effects.
 //!
 //! A write the caller chooses not to fail on — a revision capture, a blob
 //! delete, an analytics row — still has to leave a trace when it fails.

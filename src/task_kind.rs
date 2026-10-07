@@ -1,4 +1,4 @@
-//! Custom workflow task kinds (#191, Wagtail parity).
+//! Custom workflow task kinds.
 //!
 //! `WorkflowTask` rows carry a `kind` discriminator (default
 //! `"group_approval"` — a role member clicks approve). The

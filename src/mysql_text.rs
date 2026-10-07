@@ -1,16 +1,16 @@
-//! Long content columns on MySQL (#683).
+//! Long content columns on MySQL.
 //!
 //! The framework renders an unbounded `String` as `TEXT` on MySQL, which
 //! holds 65,535 bytes; Postgres `text` and SQLite `TEXT` are unbounded. A
 //! long StreamField body, translation blob or snippet overflows it: strict
 //! mode refuses the save (ERROR 1406) and non-strict mode truncates the
-//! JSON. Until the framework maps these to a long type (rustango#1708),
+//! JSON. Until the framework maps these to a long type,
 //! [`widen_long_text`] converts them in place.
 //!
 //! Its text columns also inherit MySQL's default collation, which is
 //! case- and accent-insensitive, so `/ABOUT` served `/about` and slugs
-//! `Hero` and `hero` could not coexist (#726). Until the framework sets a
-//! binary collation (rustango#1742), [`exact_identity_columns`] gives the
+//! `Hero` and `hero` could not coexist. Until the framework sets a
+//! binary collation, [`exact_identity_columns`] gives the
 //! columns the CMS looks things up by one.
 
 use rustango::sql::{ExecError, Pool};

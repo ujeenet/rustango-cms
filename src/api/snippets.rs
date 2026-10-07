@@ -1,4 +1,4 @@
-//! `GET /api/v2/snippets/` + `GET /api/v2/snippets/{id}/` (#431).
+//! `GET /api/v2/snippets/` + `GET /api/v2/snippets/{id}/`.
 //!
 //! Read-only snippet access for headless consumers, mirroring the
 //! pages / images / documents endpoints. Snippets are the reusable
@@ -24,7 +24,7 @@ use crate::snippet::Snippet;
 pub struct SnippetListQuery {
     #[serde(flatten)]
     pub list: q::ListQuery,
-    /// Optional `type_name` scope — Wagtail filters snippets by model.
+    /// Optional `type_name` scope — filters snippets by type.
     #[serde(default, rename = "type")]
     pub type_name: Option<String>,
 }

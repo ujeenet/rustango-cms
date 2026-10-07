@@ -54,7 +54,7 @@ pub fn render_stream_editor(
     render_stream_editor_with(widget, tera, None)
 }
 
-/// [`render_stream_editor`] with a page-builder dyn-block overlay (#559):
+/// [`render_stream_editor`] with a page-builder dyn-block overlay:
 /// UI-defined block types resolve through `dyn_set` before the inventory
 /// registry, so their entries + clone-templates render exactly like code
 /// blocks — `stream_editor.js` needs no changes.
@@ -171,7 +171,7 @@ pub fn render_stream_editor_with(
 /// Process-wide memo of rendered clone-templates for **code-registered**
 /// blocks, keyed by block type — bounded by the registered block types.
 /// Image blocks render the shared chooser, not an option list, so the
-/// media library is no part of the key (#717).
+/// media library is no part of the key.
 type TemplateCache = std::sync::Mutex<std::collections::HashMap<String, String>>;
 
 fn template_cache() -> &'static TemplateCache {
@@ -306,7 +306,7 @@ fn render_block_inline(
                     .iter()
                     .map(|(v, l)| (v.clone(), l.clone()))
                     .collect();
-                // Phase A (Wagtail-parity validators) — thread the
+                // Phase A (field validators) — thread the
                 // BlockFieldMeta sub-struct into the rendered Widget.
                 // Meta entries win when both meta + widget-level slot
                 // are set; defaults preserve existing behaviour.
@@ -470,7 +470,7 @@ pub fn render_widget_via_macro(w: &Widget, tera: &Tera) -> String {
     render_widget_via_macro_with(w, tera, &[])
 }
 
-/// [`render_widget_via_macro`] with an explicit block picker (#564).
+/// [`render_widget_via_macro`] with an explicit block picker.
 /// A `Stream` widget's `_widget.html` arm reads `picker_options` from
 /// context to populate its block-picker dialog; the plain macro path
 /// leaves it empty. Page-builder flex zones / repeaters need their

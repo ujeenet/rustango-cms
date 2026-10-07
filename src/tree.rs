@@ -11,7 +11,7 @@ use thiserror::Error;
 ///
 /// A segment is the node's **row id**, not its position under its parent,
 /// so this bounds ids per tenant, not children per parent. Larger ids use
-/// [`WIDE_MARKER`] + [`WIDE_WIDTH`] hex chars instead (#678).
+/// [`WIDE_MARKER`] + [`WIDE_WIDTH`] hex chars instead.
 pub const SEGMENT_WIDTH: usize = 4;
 
 /// Marks a segment for an id above 65 535. `~` sorts after every hex

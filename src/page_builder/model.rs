@@ -1,4 +1,4 @@
-//! Page-builder storage models (#559/#561) — migration-tracked, versioned.
+//! Page-builder storage models — migration-tracked, versioned.
 //!
 //! No DDL runs when a Developer edits a schema: a structure change writes
 //! a new **draft** row, and publishing flips draft→published (version+1)
@@ -62,7 +62,7 @@ pub struct PageTypeSchema {
     pub updated_at: Auto<DateTime<Utc>>,
 }
 
-/// A reusable field-group (Strapi component / ACF clone), referenced from
+/// A reusable field-group (a component), referenced from
 /// schemas by slug (`c_<slug>`).
 #[derive(Model, Debug, Clone, Serialize, Deserialize)]
 #[rustango(
@@ -272,7 +272,7 @@ pub async fn all_components(pool: &Pool) -> Result<Vec<Component>, rustango::sql
 }
 
 /// Component library as a `slug → entry` map for [`crate::page_builder::validate_schema`]
-/// / [`crate::page_builder::compile`]. Malformed component docs are skipped.
+/// / [`crate::page_builder::compile()`]. Malformed component docs are skipped.
 ///
 /// # Errors
 /// Propagates query failures.
@@ -374,7 +374,7 @@ pub async fn delete_component(pool: &Pool, id: i64) -> Result<(), rustango::sql:
 
 /// Page types whose non-archived (draft or published) schema references
 /// a component slug — returns `(page_type_id, status)` pairs. Used to
-/// block deletion of an in-use component (#563).
+/// block deletion of an in-use component.
 ///
 /// # Errors
 /// Propagates query failures.

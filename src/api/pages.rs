@@ -47,7 +47,7 @@ pub struct PageFilters {
     /// `?locale=en` — restrict to a specific locale.
     #[serde(default, deserialize_with = "q::empty_string_as_none")]
     pub locale: Option<String>,
-    /// `?tag=release` — restrict to pages carrying this tag (#189).
+    /// `?tag=release` — restrict to pages carrying this tag.
     #[serde(default, deserialize_with = "q::empty_string_as_none")]
     pub tag: Option<String>,
     /// `?id_in=3,9,14` — fetch several pages by id in one request.
@@ -82,7 +82,7 @@ pub struct FindQuery {
 /// Query for the page detail endpoint.
 #[derive(Default, Deserialize)]
 pub struct DetailQuery {
-    /// #430 — a signed preview token (from the admin mint endpoint).
+    /// A signed preview token (from the admin mint endpoint).
     /// When valid for this page id, the endpoint serves the page even
     /// if it isn't published, so a decoupled frontend can render the
     /// draft.
@@ -275,8 +275,8 @@ async fn list_inner(
     // ----- translation_of (locale-variant siblings) ---------------------
     if let Some(canon_id) = qs.filters.translation_of {
         // The *other* translations, not the anchor — asking for a page's
-        // translations and getting the page back is Wagtail's contract
-        // and the only useful answer.
+        // translations and getting the page back is the only useful
+        // answer.
         pages.retain(|p| p.locale_variant_of == Some(canon_id));
     }
 
@@ -329,7 +329,7 @@ async fn list_inner(
     // #408 — relevance-ranked search. An installed external backend
     // (Elasticsearch) takes priority; else Postgres full-text; else
     // (None) the substring filter below. The ranked hit list also drives
-    // result order (Wagtail-style relevance default).
+    // result order (relevance by default).
     let mut fts_ordered = false;
     if let Some(needle) = search_needle {
         crate::search_promotion::log_public_query(pool, needle, offset);
@@ -528,10 +528,9 @@ pub async fn detail(
 }
 
 /// `GET /api/v2/pages/find/?html_path=/about` — resolve a public URL
-/// path to its page and 302-redirect to the detail endpoint. Wagtail's
-/// `/api/v2/pages/find/` parity. Resolves **published** pages only; view
+/// path to its page and 302-redirect to the detail endpoint. Resolves **published** pages only; view
 /// restrictions are enforced by the detail endpoint the client follows
-/// to (matching Wagtail — `find` itself doesn't pre-check them).
+/// to (`find` itself doesn't pre-check them).
 pub async fn find(
     tenant: Tenant,
     SessionUser(session_user): SessionUser,
@@ -849,7 +848,7 @@ pub(crate) fn echo_locale(
 /// itself*: the published check and `view_restriction_guard::enforce`
 /// live in the callers, because a draft preview must bypass exactly
 /// those gates. `viewer` is used only to filter the `children` listing —
-/// see [`child_summaries`].
+/// see `child_summaries`.
 pub async fn detail_object_with_type(
     pool: &rustango::sql::Pool,
     page: &Page,

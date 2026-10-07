@@ -216,10 +216,9 @@
         });
     }
 
-    // -- preview reload (Wagtail-shape) --
+    // -- preview reload --
     //
-    // Wagtail's flow (audited at
-    // wagtail/admin/views/generic/preview.py:91-136): client POSTs
+    // Flow: client POSTs
     // form data to the preview endpoint, server renders a virtual
     // (unsaved) page from those values + returns the rendered HTML,
     // client writes the HTML into the iframe via `srcdoc` so we get
@@ -465,7 +464,7 @@
         });
     }
 
-    // -- viewport buttons — Wagtail-style fit-to-pane scaling --
+    // -- viewport buttons — fit-to-pane scaling --
     //
     // The iframe DOM stays at the chosen DEVICE WIDTH (375 / 768 /
     // 1280) so the embedded page's media queries fire as on a real

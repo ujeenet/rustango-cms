@@ -1,4 +1,4 @@
-//! Forms as a snippet-backed library type (#536 / FB-03).
+//! Forms as a snippet-backed library type.
 //!
 //! Registering [`FormLibraryType`] makes every `Snippet` of `type_name`
 //! `"form"` a managed library row: the existing Library admin gives us
@@ -6,7 +6,7 @@
 //! free. The form's structure ([`super::schema::Form`]) lives in the
 //! snippet's `data` JSON — so there is **no extension table**.
 //!
-//! The dedicated visual builder replaces the default edit form in FB-04
+//! The dedicated visual builder replaces the default edit form
 //! (via `edit_template` / a dedicated build route); here we only wire the
 //! type so forms can be created and listed.
 
@@ -37,7 +37,7 @@ impl LibraryTypeHandler for FormLibraryType {
     }
 
     /// Title + structure counts + last-updated. The submission count is
-    /// surfaced here in FB-12 (it needs a DB query, which `render_cell`
+    /// not surfaced here (it needs a DB query, which `render_cell`
     /// can't do — it only sees the row).
     fn list_display(&self) -> Vec<ListColumn> {
         vec![
@@ -64,8 +64,8 @@ impl LibraryTypeHandler for FormLibraryType {
         vec!["title", "slug"]
     }
 
-    /// Versioned forms: every save snapshots a revision (FB-15 builds the
-    /// draft/publish flow on top of this).
+    /// Versioned forms: every save snapshots a revision (the
+    /// draft/publish flow builds on top of this).
     fn revisions_enabled(&self) -> bool {
         true
     }

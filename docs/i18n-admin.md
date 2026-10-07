@@ -103,7 +103,7 @@ grep -rhoE '"[^"]*"[[:space:]]*\|[[:space:]]*translate\(' src/admin/templates/ \
 
 ## Plurals (count-aware strings)
 
-Count-based strings use CLDR plural rules (framework `translate_plural`, #1102):
+Count-based strings use CLDR plural rules (the framework's `translate_plural`):
 
 ```rust
 // handler: pick the form for `n` in the request locale + interpolate

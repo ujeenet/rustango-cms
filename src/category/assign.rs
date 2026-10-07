@@ -1,4 +1,4 @@
-//! Page ↔ category assignments (#557) — the `cms_page_category` M2M,
+//! Page ↔ category assignments — the `cms_page_category` M2M,
 //! mirroring [`crate::page_snippet_m2m`] / [`crate::page_tag`]. A page can
 //! be filed under many categories across many vocabularies; the join row
 //! denormalizes `taxonomy_id` so the editor can replace one vocabulary's
@@ -192,7 +192,7 @@ pub async fn delete_for_page(pool: &Pool, page_id: i64) -> Result<(), rustango::
     Ok(())
 }
 
-/// A page's category as templates see it (#842): enough to show it and
+/// A page's category as templates see it: enough to show it and
 /// to filter or group by it (`{% if "mugs" in p.categories | map(attribute="slug") %}`).
 #[derive(Debug, Clone, Serialize)]
 pub struct CategoryRef {
@@ -269,7 +269,7 @@ pub async fn prefetch_for_pages(
     Ok(by_page)
 }
 
-/// Save a page's categories from the editor's `categories` field (#842):
+/// Save a page's categories from the editor's `categories` field:
 /// a JSON array of category ids across every vocabulary. `None` (the
 /// field wasn't posted, e.g. a partial MCP save) leaves the page's
 /// categories alone; an empty array clears them. Ids that aren't
@@ -312,7 +312,7 @@ pub async fn save_from_form(
     Ok(())
 }
 
-/// One vocabulary's choices in the page editor (#842).
+/// One vocabulary's choices in the page editor.
 #[derive(Debug, Serialize)]
 pub struct EditorGroup {
     pub taxonomy: String,
@@ -420,7 +420,7 @@ mod prefetch_tests {
     use super::*;
     use rustango::core::Model as _;
 
-    /// #842 — the render gets each page's categories, in chooser order,
+    /// The render gets each page's categories, in chooser order,
     /// with their vocabulary; a page with none is absent.
     #[tokio::test]
     async fn prefetch_groups_categories_by_page_in_order() {

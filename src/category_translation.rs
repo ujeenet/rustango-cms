@@ -1,4 +1,4 @@
-//! Per-field, per-locale translation overrides for **categories** (#862).
+//! Per-field, per-locale translation overrides for **categories**.
 //!
 //! The fourth member of the family, after [`crate::translation`] (pages),
 //! [`crate::snippet_translation`] (snippets) and

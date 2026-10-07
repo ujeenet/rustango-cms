@@ -1,32 +1,31 @@
-//! `| richtext` Tera filter — Wagtail
-//! `{{ page.body | richtext }}` parity.
+//! `| richtext` Tera filter — `{{ page.body | richtext }}`.
 //!
-//! Wagtail's `expand_db_html` rewrites the storage shape the editor
+//! The filter rewrites the storage shape the editor
 //! emits — `<a linktype="page" id="42">…</a>` — into the renderable
 //! shape — `<a href="/about/team">…</a>` — at template-render time.
 //! Storing page-id references in rich-text bodies means anchors keep
-//! working when pages move (Wagtail's whole reason for the dance).
+//! working when pages move.
 //!
-//! This filter does the same:
+//! Concretely, the filter:
 //!   - rewrites `<a linktype="page" id="N">` → `<a href="<page url>">`
 //!   - rewrites `<a linktype="media" id="N">` → `<a href="<media url>">`
 //!   - marks the output safe (`is_safe = true`) so Tera doesn't
 //!     double-escape on top of the editor's already-HTML-escaped
 //!     content
 //!   - missing / unresolvable ids fall back to `href="#"` — the
-//!     anchor still renders, just inert (matches Wagtail's "broken
-//!     link" placeholder)
+//!     anchor still renders, just inert (a "broken link"
+//!     placeholder)
 //!
 //! Resolution maps:
 //!   - **Page urls** — reuses [`crate::page_url`]'s thread-local
 //!     (populated by the public-render handler via
-//!     [`crate::page_url::install`] in [`crate::render`]). Any
+//!     [`crate::page_url::install`] in [`crate::render`](mod@crate::render)). Any
 //!     extension-level `*_id` field that pointed at a page is
 //!     resolvable through here too.
 //!   - **Everything else** — anchors the filter cannot resolve are left
 //!     intact, and [`resolve_internal_links`] rewrites them over the
 //!     page's final HTML, where stream blocks' links are visible too:
-//!     one query for the pages, one for the media (#682).
+//!     one query for the pages, one for the media.
 //!
 //! ## Usage
 //!
@@ -157,7 +156,7 @@ fn anchor_attrs(html: &str) -> impl Iterator<Item = &str> {
     })
 }
 
-/// Rewrite every internal-link anchor in a rendered page (#682).
+/// Rewrite every internal-link anchor in a rendered page.
 ///
 /// Rich text stores links as `<a linktype="page|media" id="N">` so they
 /// survive moves. The `| richtext` filter only knows the pages an

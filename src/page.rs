@@ -20,10 +20,10 @@ pub enum PageStatus {
     /// Superseded but preserved: served publicly at 200, stays searchable
     /// and in the sitemap (capped priority), frozen against unpublish/
     /// delete. Archiving prevents content from becoming *unavailable* —
-    /// it is a preservation lock, not a step toward deletion (#556).
+    /// it is a preservation lock, not a step toward deletion.
     Archived,
-    /// Terminal takedown state reached when `expire_at` passes (#556,
-    /// option a). Unlike [`Self::Archived`] it is NOT served — it 404s
+    /// Terminal takedown state reached when `expire_at` passes.
+    /// Unlike [`Self::Archived`] it is NOT served — it 404s
     /// exactly as an expired page did before archived became serve-able.
     /// Sweep-set only; not selectable in the editor.
     Expired,
@@ -67,7 +67,7 @@ impl PageStatus {
     }
 
     /// Statuses served to anonymous visitors (200). `archived` joins
-    /// `published` (#556); `expired` stays excluded so takedown still
+    /// `published`; `expired` stays excluded so takedown still
     /// 404s.
     #[must_use]
     pub fn is_public(self) -> bool {
@@ -90,7 +90,7 @@ impl PageStatus {
     /// now, or on a schedule the sweep will publish. That takes the
     /// publish right whichever status gets there: archived is served like
     /// published, so gating on the `published` literal alone let an
-    /// edit-only user make a draft public (#761).
+    /// edit-only user make a draft public.
     #[must_use]
     pub fn str_goes_live(from: &str, to: &str) -> bool {
         from != to && (Self::str_is_public(to) || to == Self::Scheduled.as_str())
@@ -99,7 +99,7 @@ impl PageStatus {
 
 /// The abstract page record. Each row points at a `cms_page_type` registry
 /// row via `page_type_id`; per-type extension data lives in a separate
-/// table authored by user code (Wagtail/Django multi-table inheritance).
+/// table authored by user code (multi-table inheritance).
 ///
 /// Tree shape: `path` is a materialized path (e.g. `0001/0003/`), `depth` is
 /// the number of segments, `parent_id` is the immediate parent (nullable for
@@ -143,11 +143,10 @@ pub struct Page {
     /// non-root pages: `/`, `/about`, `/about/team`. Maintained by
     /// `tree_ops` whenever a page is created or its slug / parent
     /// changes. The resolver short-circuits via this column instead
-    /// of walking ancestor-by-ancestor (Wagtail's `Page.route()`
-    /// pattern), turning N queries into 1.
+    /// of walking ancestor-by-ancestor, turning N queries into 1.
     ///
     /// Default `''` so AddColumn on existing tables doesn't need a
-    /// backfill — pre-Slice-1 rows fall through to the slug-walk
+    /// backfill — older rows fall through to the slug-walk
     /// resolver until their next save populates the column.
     #[rustango(max_length = 510, index, default = "''")]
     pub url_path: String,
@@ -159,7 +158,7 @@ pub struct Page {
     #[rustango(fk = "self", on = "id")]
     pub parent_id: Option<i64>,
 
-    /// **DEPRECATED (#275)** — the structural-variant escape hatch was
+    /// **DEPRECATED** — the structural-variant escape hatch was
     /// retired in favor of per-field translations. The supported path
     /// for localizing a page is the `cms_translation` table (one row
     /// per `(page_id, locale_id, field_path)` override); see
@@ -174,7 +173,7 @@ pub struct Page {
     #[rustango(fk = "self", on = "id")]
     pub locale_variant_of: Option<i64>,
 
-    /// #75 — live alias. When set, this row contributes only the
+    /// Live alias. When set, this row contributes only the
     /// URL (slug / url_path / sort_order / parent_id); content
     /// fields (title, seo_*, status, page-type extension data) come
     /// from the row this FK points at. Edits via the page editor
@@ -183,9 +182,9 @@ pub struct Page {
     /// the source's last-known content frozen in place.
     ///
     /// Differentiation from neighbouring features:
-    ///   * Clone (#29) is a deep copy — divergent edits, separate
+    ///   * Clone is a deep copy — divergent edits, separate
     ///     revisions, no link back to the original.
-    ///   * Redirect (#64) is a 301 from old path to new path with
+    ///   * Redirect is a 301 from old path to new path with
     ///     no separate page row at all.
     ///   * Alias is one row, two (or more) URLs, content always in
     ///     sync because there's only one source-of-truth.
@@ -208,7 +207,7 @@ pub struct Page {
 
     /// Set when status transitions to `Published`. Null otherwise.
     ///
-    /// Wagtail-parity note (#251): semantically this is
+    /// Note: semantically this is
     /// `first_published_at` — the renderer + sweep set it once on
     /// the first published transition and never touch it again, so
     /// `order_by('-published_at')` is the canonical chronological
@@ -313,14 +312,14 @@ pub struct Page {
     #[rustango(max_length = 255, default = "''")]
     pub template_override: String,
 
-    /// Opt-in flag — the navigation-menu editor (#22) shows this page
+    /// Opt-in flag — the navigation-menu editor shows this page
     /// in its picker as a suggested entry. Editors flip it in the
     /// Promote tab; defaults to `false` so the suggestion list stays
     /// curated and doesn't surface every page in the tree.
     #[rustango(default = "false")]
     pub show_in_menus: bool,
 
-    /// Social-sharing fields (#183, Wagtail parity). All optional;
+    /// Social-sharing fields. All optional;
     /// the renderer falls back to title / seo_description / first
     /// body image when empty.
     #[rustango(max_length = 120, default = "''")]
@@ -334,7 +333,7 @@ pub struct Page {
     #[rustango(max_length = 32, default = "'summary_large_image'")]
     pub twitter_card: String,
 
-    /// Pre-publish reminder flag (#207). Set by
+    /// Pre-publish reminder flag. Set by
     /// [`run_schedule_sweep_with_mailer`] when the sweep sends a
     /// "publishes in N minutes" notification to subscribers; cleared
     /// when an editor moves the `go_live_at`. Prevents duplicate
@@ -352,22 +351,22 @@ pub struct Page {
 #[derive(Debug, Clone, Default)]
 pub struct ScheduleSweepResult {
     pub published: usize,
-    /// #556 — pages taken down this tick (`published → expired` at
+    /// Pages taken down this tick (`published → expired` at
     /// `expire_at`). Named `expired` since archiving is now a *manual*,
     /// content-preserving action, distinct from expiry-as-takedown.
     pub expired: usize,
-    /// #432 — `url_path`s of every page whose public visibility flipped
+    /// `url_path`s of every page whose public visibility flipped
     /// this tick (published or expired). The caller purges these from
     /// the frontend cache (see [`run_schedule_sweep_and_purge`]).
     pub changed_urls: Vec<String>,
-    /// #692 — the pages that went live this tick, as read before the flip.
+    /// The pages that went live this tick, as read before the flip.
     pub went_live: Vec<Page>,
-    /// #692 — ids of the pages taken down this tick.
+    /// Ids of the pages taken down this tick.
     pub taken_down: Vec<i64>,
 }
 
-/// What must happen once a page has gone live, whichever path put it there
-/// (#692): the search index learns about it and the host's after-publish
+/// What must happen once a page has gone live, whichever path put it there:
+/// the search index learns about it and the host's after-publish
 /// hooks run. An editor's save, a bulk publish, a workflow finish and the
 /// schedule sweep each did their own subset — the sweep did neither, so a
 /// scheduled page never reached an external search index.
@@ -389,7 +388,7 @@ pub async fn apply_sweep_effects(tenant_slug: &str, result: &ScheduleSweepResult
 
 /// Flip the status of any page whose `go_live_at` has passed (draft
 /// or scheduled → published) and any page whose `expire_at` has
-/// passed (published → **expired**, #556 — a terminal 404 takedown,
+/// passed (published → **expired** — a terminal 404 takedown,
 /// no longer conflated with the serve-able `archived` state).
 /// Idempotent — running it twice in a row produces zero changes on
 /// the second call.
@@ -498,7 +497,7 @@ async fn flip(
 }
 
 /// [`run_schedule_sweep`] + a frontend-cache purge of every page whose
-/// visibility flipped this tick (#432). A scheduled page going live (or
+/// visibility flipped this tick. A scheduled page going live (or
 /// an expired one going away) must evict its previously-cached
 /// 404/draft/live entry; the bare sweep can't, since it has no cache
 /// context. The purge routes through [`crate::task_queue::purge_urls`],
@@ -526,8 +525,8 @@ pub async fn run_schedule_sweep_and_purge(
     Ok(result)
 }
 
-/// Sweep with a mailer attached — adds a pre-publish reminder pass
-/// (#207). Every page with `status = scheduled` and `go_live_at` in
+/// Sweep with a mailer attached — adds a pre-publish reminder pass.
+/// Every page with `status = scheduled` and `go_live_at` in
 /// (now, now + 1h] that hasn't already received the reminder gets a
 /// notification to subscribers + the flag set so future ticks within
 /// the same window don't duplicate.
@@ -595,7 +594,7 @@ pub async fn run_schedule_sweep_with_mailer(
 }
 
 /// A planned archive / unarchive of a selection and (optionally) its
-/// subtree (#556). Pure read output — the caller applies `to_flip`
+/// subtree. Pure read output — the caller applies `to_flip`
 /// inside its own transaction, then purges `changed_urls`.
 #[derive(Debug, Default)]
 pub struct ArchivePlan {
@@ -610,7 +609,7 @@ pub struct ArchivePlan {
 }
 
 /// Plan an archive (`archive = true`) or unarchive of the already-loaded
-/// `selected` rows (#556).
+/// `selected` rows.
 ///
 /// - **Archive**: the selected pages flip to `archived`. Descendants
 ///   inherit the archived treatment at render time, so ALL currently-

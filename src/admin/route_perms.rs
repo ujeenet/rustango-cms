@@ -1,4 +1,4 @@
-//! Which role-matrix codename each admin route needs (#672).
+//! Which role-matrix codename each admin route needs.
 //!
 //! The matrix in [`super::resources`] used to decide only which sidebar
 //! links render: any user who could open the admin could POST to every

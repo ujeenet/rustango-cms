@@ -4,8 +4,8 @@
 //! This used to be a hand-written `const MIGRATIONS` in `src/main.rs` naming
 //! five files by hand. When the migration set was squashed (0002..0005 folded
 //! into `0001_cms_initial`), every `include_str!` target vanished and the
-//! scaffolder stopped compiling — `rcms new` was dead for anyone who tried it
-//! (#613). A hand-maintained list of filenames that must match a directory is
+//! scaffolder stopped compiling — `rcms new` was dead for anyone who tried it.
+//! A hand-maintained list of filenames that must match a directory is
 //! a rot machine, so we read the directory instead: add, remove or squash a
 //! migration and the scaffolder simply follows.
 

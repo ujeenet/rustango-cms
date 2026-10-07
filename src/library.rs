@@ -1,4 +1,4 @@
-//! `Library` — Wagtail-shape reusable content (renamed from "snippets").
+//! `Library` — reusable content (renamed from "snippets").
 //!
 //! Library items are non-page records that pages reference by id —
 //! authors, FAQ entries, hero banners, callout blocks, etc. The
@@ -61,7 +61,7 @@ pub struct LibraryType {
 }
 
 /// One column shown in the snippet list view for a given type.
-/// Mirrors Django admin's `list_display` shape — a column can be a
+/// A column can be a
 /// scalar field on `cms_snippet`, a `data.<key>` JSON lookup, a
 /// method-field rendered by the handler, or a computed value
 /// derived at render time.
@@ -111,7 +111,7 @@ impl ListColumn {
         }
     }
 
-    /// Stable identifier — used by the per-user column picker (#133)
+    /// Stable identifier — used by the per-user column picker
     /// to persist hide/show state across reloads.
     #[must_use]
     pub fn key(&self) -> &'static str {
@@ -194,7 +194,7 @@ impl BulkAction {
 }
 
 /// One row contributed by [`LibraryTypeHandler::menu_picker_entries`]
-/// to the WP-style menu builder's Library tab (#49). Each entry
+/// to the WP-style menu builder's Library tab. Each entry
 /// renders as a draggable picker card; dropping one into the tree
 /// creates a MenuItem with `external_url = url` and `label`
 /// inherited.
@@ -246,7 +246,7 @@ pub enum ListColumnKind {
 /// per-tenant seeding pass.
 #[async_trait]
 pub trait LibraryTypeHandler: Send + Sync + 'static {
-    /// Django-shape app label.
+    /// App label.
     fn app_label(&self) -> &'static str;
     /// Canonical type name. Unique per tenant.
     fn type_name(&self) -> &'static str;
@@ -387,8 +387,8 @@ pub trait LibraryTypeHandler: Send + Sync + 'static {
         None
     }
 
-    /// Opt this library type in to versioned snapshots (#123,
-    /// Wagtail parity B12). When `true`, every successful save on a
+    /// Opt this library type in to versioned snapshots.
+    /// When `true`, every successful save on a
     /// snippet of this type also captures a [`crate::snippet::SnippetRevision`]
     /// row, and the editor surfaces a History card with revert.
     /// Defaults to `false` — fixed-shape snippet types keep the
@@ -397,8 +397,8 @@ pub trait LibraryTypeHandler: Send + Sync + 'static {
         false
     }
 
-    /// Opt this library type in to preview-on-save (#123, Wagtail
-    /// parity B12). When `true`, the editor surfaces an
+    /// Opt this library type in to preview-on-save.
+    /// When `true`, the editor surfaces an
     /// \"Open preview\" action that renders the unsaved form state.
     /// Defaults to `false`. Hosts that want preview implement their
     /// own preview route + override this.
@@ -407,20 +407,20 @@ pub trait LibraryTypeHandler: Send + Sync + 'static {
     }
 
     /// Permission hook — return `false` to hide a row from the list
-    /// view + reject direct GET access to its edit page. V1 grants
+    /// view + reject direct GET access to its edit page. The default grants
     /// every row (true). Hosts wire role-aware logic by overriding.
     fn can_view(&self, _snippet: &crate::snippet::Snippet) -> bool {
         true
     }
 
     /// Permission hook — return `false` to disable the Edit chip +
-    /// reject POST edits on the row. V1 grants every row (true).
+    /// reject POST edits on the row. The default grants every row (true).
     fn can_edit(&self, _snippet: &crate::snippet::Snippet) -> bool {
         true
     }
 
     /// Permission hook — return `false` to hide the Delete chip +
-    /// reject DELETE on the row. V1 grants every row (true).
+    /// reject DELETE on the row. The default grants every row (true).
     fn can_delete(&self, _snippet: &crate::snippet::Snippet) -> bool {
         true
     }
@@ -436,7 +436,7 @@ pub trait LibraryTypeHandler: Send + Sync + 'static {
         Ok(())
     }
 
-    /// Opt-in hook for the WP-style menu builder (#49). Return a
+    /// Opt-in hook for the WP-style menu builder. Return a
     /// list of [`MenuPickerEntry`] values to surface this library
     /// type's snippets in the **Library** picker tab on the menu
     /// edit screen. Each entry contributes a draggable picker card

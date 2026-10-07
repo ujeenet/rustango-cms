@@ -2426,7 +2426,7 @@ table.rcms-data .rcms-actions .rcms-btn-small,
  * 11. Stream editor + block picker
  * ============================================================ */
 
-/* #273 — Wagtail-style StreamField. The outer editor is flat —
+/* #273 — StreamField editor. The outer editor is flat —
    no box around the body — so the tree guide line is the only
    structural visual. Individual block cards are also flat (no
    border, no background): the dashed guide line on the left of
@@ -2468,7 +2468,7 @@ table.rcms-data .rcms-actions .rcms-btn-small,
     border-bottom: 2px dotted var(--md-sys-color-outline);
 }
 .rcms-stream-block-icon {
-    /* Circular badge in the brand colour. Mirrors the Wagtail
+    /* Circular badge in the brand colour. Acts as the
        block-type indicator that anchors each row to its tree
        lineage at-a-glance. */
     display: inline-flex;
@@ -2515,13 +2515,13 @@ table.rcms-data .rcms-actions .rcms-btn-small,
 }
 /* `.rcms-stream-field > label` is styled by the canonical form-label rule
    (M3 form fields section). */
-/* #273 — Wagtail-style tree nesting. Each `.rcms-stream-nested` is a
+/* #273 — tree nesting. Each `.rcms-stream-nested` is a
    level of depth; its DASHED left border becomes a vertical guide
    that visually owns the indented column of nested blocks
    beneath it. Multiple levels stack naturally because
    `.rcms-stream-nested` is recursive — every nested level draws its
    own guide, so 3-deep nesting reads as three indented columns
-   side-by-side. The dashed style mirrors Wagtail's tree-guide
+   side-by-side. The dashed style follows the tree-guide
    convention (vs. solid lines which read as borders). */
 .rcms-stream-nested {
     border: none;
@@ -3072,7 +3072,7 @@ table.rcms-data .rcms-actions .rcms-btn-small,
     overflow: hidden;
 }
 
-/* Wagtail-style preview scaling: the sizer carries the SCALED
+/* Fit-to-pane preview scaling: the sizer carries the SCALED
  * footprint (so flex layout reserves the right space + the iframe
  * appears centered), while the iframe inside keeps its DOM at the
  * device-pixel width and is `transform: scale()`-d to fit. JS
@@ -3323,7 +3323,7 @@ table.rcms-data .rcms-actions .rcms-btn-small,
 }
 
 /* #269 — page-type breadcrumb strip. Slim, muted, sits above the
-   title field so the type reads as page-context (Wagtail-style)
+   title field so the type reads as page-context
    rather than a same-weight form input. The `title` attr carries
    the machine name + "permanent" note so editors can still see
    the detail on hover without it dominating the layout. */
@@ -3396,7 +3396,7 @@ table.rcms-data .rcms-actions .rcms-btn-small,
    subsection). #270 — each heading except the first carries a top
    divider so logical groups on non-Content tabs (Schedule / Tags /
    Social sharing on the Promote tab; equivalent splits elsewhere)
-   read as Wagtail-style sectioned panels rather than a single jumbled
+   read as sectioned panels rather than a single jumbled
    block. */
 .rcms-page-form-subheading {
     /* h3 is block-level so the border spans the full container
@@ -4783,7 +4783,7 @@ select:not(.rcms-field select) {
     font-size: 11px;
     color: var(--md-sys-color-on-surface-variant);
 }
-/* Wagtail-parity Meta.preview_value — inline mini-render of the
+/* Block preview value — inline mini-render of the
    block with a sample value so editors see "what does this look
    like" before inserting. Scoped down + opacity-muted so it
    doesn't distract from the tile's primary label. */
@@ -4992,8 +4992,8 @@ select:not(.rcms-field select) {
     .rcms-picker__grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
 }
 
-/* Phase 6 — Wagtail-parity MultiFieldPanel / FieldRowPanel /
- * HelpPanel. TabBody::Group + TabBody::Help in the page editor's
+/* Phase 6 — grouped-field / field-row /
+ * help panels. TabBody::Group + TabBody::Help in the page editor's
  * custom tabs. */
 .rcms-panel-group {
     border: 1px solid var(--md-sys-color-outline-variant);
@@ -5047,7 +5047,7 @@ select:not(.rcms-field select) {
     margin-bottom: 0;
 }
 
-/* Phase 7 — SwitchInput. Wagtail-style iOS toggle on
+/* Phase 7 — SwitchInput. iOS-style toggle on
  * `WidgetKind::Boolean` when `variant = "switch"`. The native
  * checkbox stays in the DOM (hidden but accessible to AT) so the
  * form submission shape is identical to the default checkbox. */

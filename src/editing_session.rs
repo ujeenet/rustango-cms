@@ -1,6 +1,6 @@
-//! Concurrent-editor tracking (#106, Wagtail parity B11).
+//! Concurrent-editor tracking.
 //!
-//! Pairs with the editor lock (#72): the lock prevents conflicting
+//! Pairs with the editor lock: the lock prevents conflicting
 //! writes; the editing-session model surfaces a banner so people
 //! *see* each other before they collide. Every time the editor JS
 //! pings the lock heartbeat (`POST /cms-admin/pages/{id}/lock-heartbeat`),
@@ -11,8 +11,7 @@
 //!
 //! A session is "active" when `last_seen_at` is within the last
 //! [`ACTIVE_WINDOW_SECS`] seconds. Older rows are garbage-collected
-//! lazily on heartbeat. Wagtail's GC threshold is 1 hour; we mirror
-//! that — long enough to survive transient network blips, short
+//! lazily on heartbeat. The GC threshold is 1 hour — long enough to survive transient network blips, short
 //! enough that a closed-tab session falls off in reasonable time.
 //!
 //! ## "Viewing" vs "Editing"

@@ -19,7 +19,7 @@
 //! The CMS public [`router`] mounts `GET /sitemap.xml` automatically.
 //! No extra handler registration is required.
 //!
-//! [`router`]: crate::router
+//! [`router`]: crate::router()
 //! [`Page`]: crate::Page
 
 use axum::http::{header, HeaderMap, StatusCode};
@@ -128,7 +128,7 @@ pub async fn collect_custom_entries(pool: &rustango::sql::Pool, base: &str) -> V
     out
 }
 
-/// Register a [`SitemapSource`] (#441). Pair with a `Default` impl.
+/// Register a [`SitemapSource`]. Pair with a `Default` impl.
 ///
 /// ```ignore
 /// #[derive(Default)]
@@ -155,7 +155,7 @@ macro_rules! register_sitemap_source {
 }
 
 /// `<lastmod>` source for a page: `last_published_at` (set only on
-/// public-visible changes, #251) preferred over `updated_at`.
+/// public-visible changes) preferred over `updated_at`.
 fn page_lastmod(p: &Page) -> Option<chrono::DateTime<chrono::Utc>> {
     if let Some(ts) = p.last_published_at {
         Some(ts)
@@ -187,7 +187,7 @@ fn shard_window(total: usize, shard_one_based: usize) -> Option<(usize, usize)> 
     Some((start, (start + SHARD_SIZE).min(total)))
 }
 
-/// The part of the tree a host's sitemap covers (#839).
+/// The part of the tree a host's sitemap covers.
 ///
 /// A host mapped to a page (Sites screen) serves only that page's
 /// subtree, at paths relative to it, so its sitemap lists the same. A
@@ -248,7 +248,7 @@ impl SiteScope {
 ///
 /// Includes `xhtml:link rel="alternate" hreflang=…` clustering for
 /// locale variants + an `<image:image>` extension when the page-type
-/// handler surfaces a hero media id (#99).
+/// handler surfaces a hero media id.
 // The public router mounts this automatically and supplies `PublicState`
 // (a crate-internal type); consumers never call it directly, so exposing
 // the private state in the signature is intentional.
@@ -380,8 +380,8 @@ pub async fn handle_sitemap_shard(
         custom[start.saturating_sub(p)..end.saturating_sub(p)].to_vec();
     // Re-use the same renderer the flat path uses. hreflang grouping is
     // scoped to this shard's rows (so a translation in a different
-    // shard won't emit a cross-shard link — acceptable per Wagtail's
-    // approach + the sitemaps.org spec doesn't require cross-shard
+    // shard won't emit a cross-shard link — acceptable, since the
+    // sitemaps.org spec doesn't require cross-shard
     // grouping).
     let xml = build_urlset(t.pool(), &base, &page_slice, &custom_slice, mode).await;
     (
@@ -393,7 +393,7 @@ pub async fn handle_sitemap_shard(
 }
 
 /// Build a `<sitemapindex>` over the unified URL list (pages then
-/// custom-source entries, #441), pointing at /sitemap/1, /sitemap/2, …
+/// custom-source entries), pointing at /sitemap/1, /sitemap/2, …
 /// `lastmods[i]` is the `<lastmod>` of the i-th URL; each shard's
 /// `<lastmod>` is the max across its window.
 fn build_sitemap_index(base: &str, lastmods: &[Option<chrono::DateTime<chrono::Utc>>]) -> Response {
@@ -689,7 +689,7 @@ struct ImageRow {
 /// Resolve every page's `<image:image>` rows in a bounded number of
 /// queries — one `PageType` fetch, one `ReferenceIndex` fetch and one
 /// `Media` fetch for the whole page set — instead of the former
-/// per-page N+1 (#405 emitted those three queries *per page*, so a
+/// per-page N+1 (which emitted those three queries *per page*, so a
 /// large sitemap fired thousands and, under concurrency, held the
 /// tenant pool long enough to deadlock it).
 ///
@@ -697,7 +697,7 @@ struct ImageRow {
 /// (v0 convention: a `hero_media_id` key in the extension JSON), which
 /// has no batch form: one query per page of a type with an extension
 /// table. Those run [`HERO_LOADS`] at a time rather than one after
-/// another (#691). Id lists are sent in [`IN_CHUNK`]-sized pieces, under
+/// another. Id lists are sent in [`IN_CHUNK`]-sized pieces, under
 /// SQLite's bind limit. Returns a `page_id -> rows` map; pages with no
 /// images are absent.
 async fn collect_images_for_pages(
@@ -843,7 +843,7 @@ async fn collect_images_for_pages(
 }
 
 /// Order-preserving dedup of a page's media ids — hero first, then the
-/// indexed stream/body references; drops non-positive ids. #405
+/// indexed stream/body references; drops non-positive ids.
 fn collect_media_ids(hero: Option<i64>, indexed: Vec<i64>) -> Vec<i64> {
     let mut seen = std::collections::HashSet::new();
     let mut out = Vec::new();
@@ -977,7 +977,7 @@ fn format_iso8601(ts: chrono::DateTime<chrono::Utc>) -> String {
 /// localhost-shape host).
 ///
 /// The host is the `Host` header — the one the tenant was resolved from.
-/// `X-Forwarded-Host` is not read (#736): nothing here knows whether a
+/// `X-Forwarded-Host` is not read: nothing here knows whether a
 /// trusted proxy set it, so a client could get tenant A's sitemap with
 /// every URL on a host of its choosing, and a shared cache would keep it.
 pub(crate) fn base_url(headers: &HeaderMap) -> String {
@@ -1022,7 +1022,7 @@ mod base_url_tests {
         h
     }
 
-    /// #736 — the host is the one the tenant was resolved from.
+    /// The host is the one the tenant was resolved from.
     #[test]
     fn a_forwarded_host_cannot_move_the_urls() {
         let h = headers(&[("host", "victim.example"), ("x-forwarded-host", "evil.example")]);
@@ -1091,7 +1091,7 @@ mod site_scope_tests {
         rows.into_iter().map(|p| p.url_path).collect()
     }
 
-    /// #839 — a mapped host lists only its subtree, at the paths it serves.
+    /// A mapped host lists only its subtree, at the paths it serves.
     #[tokio::test]
     async fn a_mapped_host_lists_its_own_subtree_relative_to_its_root() {
         let pool = pool_with_tree().await;

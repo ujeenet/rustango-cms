@@ -1,7 +1,7 @@
-//! Pluggable background task queue for CMS heavy work (#432).
+//! Pluggable background task queue for CMS heavy work.
 //!
-//! Wagtail moved heavy post-request work (cache purge, search/reference
-//! indexing, scheduled publish) onto a pluggable, retriable queue. The
+//! Heavy post-request work (cache purge, search/reference indexing,
+//! scheduled publish) belongs on a pluggable, retriable queue. The
 //! `rustango` framework already ships the execution machinery —
 //! [`rustango::jobs`]: a [`Job`] trait + a [`JobQueue`] with an
 //! in-memory backend and a persistent Postgres backend
@@ -20,7 +20,7 @@
 //! ## Inline default
 //!
 //! With no sink installed (the common single-process deploy) the work
-//! runs **inline** (synchronously) — identical to the pre-#432
+//! runs **inline** (synchronously) — identical to the old
 //! detached-spawn behavior, just without retry/persistence.
 //!
 //! ## Context-free jobs
@@ -130,19 +130,19 @@ fn resolve_invalidator(tenant_slug: &str) -> Option<Arc<dyn PageCacheInvalidator
 
 /// The invalidator a job falls back to when its tenant has no entry in
 /// this process — a durable queue drained by a worker that never served
-/// the tenant, or a job run after a restart (#732). Set automatically by
+/// the tenant, or a job run after a restart. Set automatically by
 /// [`crate::admin::router_with_invalidator`]; a worker-only process calls
 /// [`set_default_invalidator`] itself.
 static DEFAULT_INVALIDATOR: OnceLock<Arc<dyn PageCacheInvalidator>> = OnceLock::new();
 
 /// The process-wide invalidator, if one is set — for paths with no admin
-/// state of their own, such as MCP tools (#692).
+/// state of their own, such as MCP tools.
 #[must_use]
 pub fn default_invalidator() -> Option<Arc<dyn PageCacheInvalidator>> {
     DEFAULT_INVALIDATOR.get().cloned()
 }
 
-/// Set the fallback cache invalidator for queued purge jobs (#732). The
+/// Set the fallback cache invalidator for queued purge jobs. The
 /// first call wins.
 pub fn set_default_invalidator(invalidator: Arc<dyn PageCacheInvalidator>) {
     let _ = DEFAULT_INVALIDATOR.set(invalidator);
@@ -168,10 +168,10 @@ fn registered_pool(tenant_slug: &str) -> Option<rustango::sql::Pool> {
 }
 
 /// The tenant registry, recorded by the boot-time seed so a job can find
-/// a tenant this process never served (#732).
+/// a tenant this process never served.
 static REGISTRY: OnceLock<rustango::sql::Pool> = OnceLock::new();
 
-/// Record the tenant registry pool for [`resolve_pool`]'s fallback.
+/// Record the tenant registry pool for `resolve_pool`'s fallback.
 /// Called by [`crate::seed::ensure_seeded`]; the first call wins.
 pub fn set_registry(registry: rustango::sql::Pool) {
     let _ = REGISTRY.set(registry);
@@ -220,7 +220,7 @@ async fn scoped_pool_for(
 // ---- cache-purge job ---------------------------------------------
 
 /// Drop the public-cache entries for `urls` on one tenant. Enqueued
-/// after a page mutation commits (#317/#432). Retriable — a transient
+/// after a page mutation commits. Retriable — a transient
 /// backend hiccup is retried with backoff; a missing tenant
 /// registration is fatal (a startup-wiring gap, not transient).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -293,7 +293,7 @@ async fn purge_inline(invalidator: &dyn PageCacheInvalidator, tenant_slug: &str,
 /// Serializable form of [`crate::reference_index::Reference`]. The
 /// `Reference` itself can't be deserialized (its `to_kind` is a
 /// `&'static str`); the job payload carries owned strings and
-/// [`to_reference`] maps `to_kind` back to the interned constant.
+/// `to_reference` maps `to_kind` back to the interned constant.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OwnedRef {
     pub to_kind: String,
@@ -329,7 +329,7 @@ fn kind_const(s: &str) -> Option<&'static str> {
         .find(|k| *k == s)
 }
 
-/// Rebuild a page's outbound reference rows (#146/#432). Carries the
+/// Rebuild a page's outbound reference rows. Carries the
 /// already-scanned refs in its payload, so `run()` only needs the
 /// tenant pool (resolved from the registry) to replace the rows —
 /// retriable if that write hits a transient error.
@@ -432,7 +432,7 @@ pub enum SearchIndexAction {
 }
 
 /// Keep an external [`crate::search::SearchBackend`] (Elasticsearch) in
-/// sync with a page change (#408). A no-op at run time when no backend
+/// sync with a page change. A no-op at run time when no backend
 /// is installed — the built-in Postgres FTS path queries live data and
 /// needs no index. Retriable: an ES hiccup is retried rather than
 /// silently dropping the update.
@@ -461,7 +461,7 @@ impl Job for SearchIndexJob {
 }
 
 /// Keep the external search index in step with a saved page: a page in
-/// a public status (published or archived, #556) is indexed, any other
+/// a public status (published or archived) is indexed, any other
 /// status is removed (so draft / scheduled / expired pages drop out of
 /// search — archived pages now STAY findable). **No-op when no external
 /// [`crate::search::SearchBackend`] is installed** — the Postgres FTS

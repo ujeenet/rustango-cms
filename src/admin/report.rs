@@ -1,5 +1,5 @@
-//! Extensible report framework (#439) — a registerable `Report` trait
-//! (Wagtail's `ReportView` parity) + the three reports the hardcoded
+//! Extensible report framework — a registerable `Report` trait
+//! + the three reports the hardcoded
 //! set was missing: **page-types usage**, **unpublished changes**, and
 //! **your pages in a workflow**.
 //!
@@ -9,7 +9,7 @@
 //! admin serves every registered report through one chrome'd dispatcher
 //! at `/cms-admin/report/<slug>` (+ a `.csv` export), and `_base.html`
 //! lists them under the Reports sidebar group via the registry — so a
-//! host adds a report with [`register_report!`] and it appears in the
+//! host adds a report with [`register_report!`](crate::register_report!) and it appears in the
 //! nav with no routing or template work.
 //!
 //! The seven pre-existing reports (aging / locked / scheduled /
@@ -93,7 +93,7 @@ impl ReportColumn {
 }
 
 /// A registerable admin report. Implementors are zero-field structs
-/// registered with [`register_report!`].
+/// registered with [`register_report!`](crate::register_report!).
 #[async_trait]
 pub trait Report: Send + Sync + 'static {
     /// URL slug under `/cms-admin/report/<slug>` + the registry key.
@@ -141,7 +141,7 @@ pub fn find_report(slug: &str) -> Option<Box<dyn Report>> {
     registered_reports().into_iter().find(|r| r.slug() == slug)
 }
 
-/// Register a [`Report`] implementation (#439).
+/// Register a [`Report`] implementation.
 ///
 /// ```ignore
 /// #[derive(Default)]
@@ -171,7 +171,7 @@ fn rfc3339<Tz: chrono::TimeZone>(dt: &chrono::DateTime<Tz>) -> String {
     dt.to_rfc3339()
 }
 
-/// **Page-types usage** (Wagtail 6.0) — how many pages exist of each
+/// **Page-types usage** — how many pages exist of each
 /// registered page type. Surfaces unused types + content distribution.
 #[derive(Default)]
 pub struct PageTypesUsageReport;

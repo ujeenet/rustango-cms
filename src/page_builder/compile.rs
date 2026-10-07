@@ -1,5 +1,5 @@
-//! Schema → runtime compilation (#559/#560). Turns a validated
-//! [`Document`](crate::page_builder::schema::Document) into the shapes the
+//! Schema → runtime compilation. Turns a validated
+//! [`Document`] into the shapes the
 //! existing engines consume:
 //!
 //! - fixed fields / rows / groups → [`Widget`]s (rendered by the shared

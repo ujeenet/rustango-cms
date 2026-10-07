@@ -1,5 +1,5 @@
 //! `snippet_html(type=…, id=N)` Tera helper — per-snippet template
-//! rendering, Wagtail-snippet parity (#250).
+//! rendering.
 //!
 //! Pairs with [`crate::library::LibraryTypeHandler::render_template`]:
 //! handlers that declare a template have their rows pre-rendered
@@ -216,7 +216,7 @@ pub async fn prefetch(
 /// [`crate::library::LibraryTypeHandler::allows_element_template`].
 ///
 /// The name must pass [`crate::tenant_templates::safe_name`], the rule for
-/// every editor-supplied template name (#661): relative, `.html`, no
+/// every editor-supplied template name: relative, `.html`, no
 /// traversal. Tera resolves names against its registered set, so a bad
 /// name could not load a file anyway; refusing it keeps a broken value
 /// from looking like a working one.
@@ -225,8 +225,8 @@ fn element_template(snippet_value: &Value) -> Option<String> {
     crate::tenant_templates::safe_name(name).ok()
 }
 
-/// Apply per-locale translation `overrides` onto a snippet's JSON value
-/// (#409). Top-level fields (`title`, `body_markdown`, …) are replaced
+/// Apply per-locale translation `overrides` onto a snippet's JSON value.
+/// Top-level fields (`title`, `body_markdown`, …) are replaced
 /// in place; a `data.<key>` path writes into the snippet's `data`
 /// object. Non-object values + missing `data` are created as needed.
 fn apply_overrides(value: &mut Value, overrides: &HashMap<String, String>) {

@@ -1,7 +1,7 @@
 //! Demo page-type handlers.
 //!
 //! `ArticlePage` carries a **typed extension table** (`cms_article_page`)
-//! with a Markdown body + optional hero image — Wagtail-shape multi-table
+//! with a Markdown body + optional hero image — multi-table
 //! inheritance: the shared tree/status fields live on `cms_page`, the
 //! typed fields live here. The extension is edited inline in the page
 //! editor via `extension_fields` / `save_extension`.

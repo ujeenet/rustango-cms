@@ -12,12 +12,12 @@
 //! **Administrator**, deliberately not Editor or Viewer.
 //!
 //! A template is not content. Tera cannot call arbitrary Rust, spawn a
-//! process or read the filesystem, so this is nothing like WordPress's
-//! theme editor handing out remote code execution — but every function
+//! process or read the filesystem, so editing one does not hand out
+//! remote code execution — but every function
 //! and filter the host registered is callable from a template, and
 //! `{% include %}` reaches anything in the instance. That is enough to
-//! keep it off the roles that only touch content, which is also why
-//! WordPress ships `DISALLOW_FILE_EDIT` as standard hardening.
+//! keep it off the roles that only touch content; turning in-browser
+//! file editing off is standard hardening.
 //!
 //! ## Safety
 //!

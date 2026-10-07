@@ -1,19 +1,19 @@
-//! Extensible content-checks framework (#417).
+//! Extensible content-checks framework.
 //!
-//! The accessibility panel (#116, [`crate::a11y`]) runs a fixed set of
+//! The accessibility panel ([`crate::a11y`]) runs a fixed set of
 //! server-side heuristics. This module generalises that idea into a
-//! *registerable* check framework (Wagtail 7.3's custom checks parity):
+//! *registerable* check framework:
 //! a host implements [`ContentCheck`], registers it with
-//! [`register_content_check!`], and its findings show up in the editor's
+//! [`register_content_check!`](crate::register_content_check!), and its findings show up in the editor's
 //! "Content & SEO" panel alongside the built-ins.
 //!
-//! Ships the SEO checks Wagtail added by default — most notably the
-//! **empty meta-description** check (Wagtail 7.4) — plus a thin /
+//! Ships built-in SEO checks — most notably the
+//! **empty meta-description** check — plus a thin /
 //! missing social-image heuristic.
 //!
 //! Checks are synchronous and run against the saved [`Page`] (the panel
 //! is server-rendered on editor open, same as the a11y heuristics). The
-//! [`Severity`](crate::a11y::Severity) levels are shared with the a11y
+//! [`Severity`] levels are shared with the a11y
 //! panel so the two read consistently.
 
 use crate::a11y::Severity;
@@ -35,7 +35,7 @@ pub struct Finding {
 }
 
 /// A registerable content check. Implementors are zero-field structs
-/// registered with [`register_content_check!`].
+/// registered with [`register_content_check!`](crate::register_content_check!).
 pub trait ContentCheck: Send + Sync + 'static {
     /// Stable code prefix / identifier for the check.
     fn code(&self) -> &'static str;
@@ -51,7 +51,7 @@ pub struct ContentCheckRegistration {
 
 inventory::collect!(ContentCheckRegistration);
 
-/// Register a [`ContentCheck`] implementation (#417).
+/// Register a [`ContentCheck`] implementation.
 ///
 /// ```ignore
 /// #[derive(Default)]
@@ -120,7 +120,7 @@ pub fn count_by_severity(findings: &[Finding]) -> (usize, usize, usize) {
 /// search engines have little to work with.
 const MIN_SEO_DESCRIPTION_CHARS: usize = 50;
 
-/// **Empty meta description** (Wagtail 7.4 SEO check). A page with no
+/// **Empty meta description** (SEO check). A page with no
 /// `seo_description` lets the search engine synthesise a snippet from
 /// the body — usually worse than an authored one. Warning (it's
 /// recommended, not required).

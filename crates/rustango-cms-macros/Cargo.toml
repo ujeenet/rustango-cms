@@ -1,7 +1,7 @@
 [package]
 name = "rustango-cms-macros"
 version = "0.1.0"
-description = "Proc-macro derive crate for rustango-cms (#[derive(PageType)], #[field(...)])."
+description = "Derive macros for rustango-cms: #[derive(PageType)] and #[derive(Block)]"
 readme = "README.md"
 keywords = ["cms", "rustango", "derive", "proc-macro"]
 categories = ["web-programming", "development-tools::procedural-macro-helpers"]

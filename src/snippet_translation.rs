@@ -1,4 +1,4 @@
-//! Per-field, per-locale translation overrides for **snippets** (#409).
+//! Per-field, per-locale translation overrides for **snippets**.
 //!
 //! Mirrors [`crate::translation`] (which localizes pages) for the
 //! `cms_snippet` library. The canonical `cms_snippet` row holds the

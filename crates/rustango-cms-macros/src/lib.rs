@@ -1,10 +1,12 @@
-//! `rustango-cms-macros` — proc-macro derive(s) for rustango-cms.
+//! `rustango-cms-macros` — the derive macros of rustango-cms. Use them
+//! through the `rustango_cms` re-exports; this crate is not added on its own.
 //!
-//! Today: `#[derive(PageType)]` only. The derive walks the struct's
-//! `#[page_type(...)]` + `#[field(...)]` attributes and emits the
-//! full `PageTypeHandler` trait impl + an `inventory::submit!`
-//! registration so the type joins the global handler registry at
-//! link time.
+//! - `#[derive(PageType)]` walks the struct's `#[page_type(...)]` +
+//!   `#[field(...)]` attributes and emits the full `PageTypeHandler`
+//!   trait impl + an `inventory::submit!` registration, so the type
+//!   joins the global handler registry at link time.
+//! - `#[derive(Block)]` does the same for a StreamField block: a
+//!   `#[block(...)]` attribute plus one `#[field(...)]` per child value.
 //!
 //! ## Author surface
 //!
@@ -40,7 +42,7 @@ mod page_type;
 
 use proc_macro::TokenStream;
 
-/// `#[derive(PageType)]` — generates the [`rustango_cms::PageTypeHandler`]
+/// `#[derive(PageType)]` — generates the `rustango_cms::PageTypeHandler`
 /// trait impl from `#[page_type(...)]` and `#[field(...)]` attributes
 /// plus a global inventory registration so the type is reachable from
 /// `rustango_cms::find_handler(type_name)`.
@@ -54,7 +56,7 @@ pub fn derive_page_type(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// `#[derive(Block)]` — generates the [`rustango_cms::Block`] trait
+/// `#[derive(Block)]` — generates the `rustango_cms::Block` trait
 /// impl from `#[block(...)]` and `#[field(...)]` attributes plus a
 /// global inventory registration so the block joins the registry at
 /// link time.

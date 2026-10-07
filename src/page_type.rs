@@ -160,7 +160,7 @@ impl From<ExtensionFieldKind> for crate::WidgetKind {
 ///
 /// It used to return every child, drafts included, into the public
 /// template context — so a fresh site listed unpublished titles to
-/// anonymous visitors (#688). A type that really wants drafts listed
+/// anonymous visitors. A type that really wants drafts listed
 /// overrides `children_query` with [`all_children`].
 ///
 /// # Errors
@@ -232,7 +232,7 @@ pub async fn published_children(
 ///
 /// Each impl owns the typed extension table that backs its kind, the
 /// template used to render it, its admin form, and the parent/child
-/// type whitelist, Wagtail-style.
+/// type whitelist.
 ///
 /// **Registering.** Prefer `#[derive(PageType)]`, which emits this impl
 /// plus the inventory registration and forwards the overridable hooks
@@ -273,8 +273,6 @@ pub trait PageTypeHandler: Send + Sync + 'static {
 
     /// Page types that are allowed as a parent for instances of this
     /// type. Empty slice = no restriction (the *child-side* guard).
-    ///
-    /// Wagtail equivalent: `Page.parent_page_types`.
     fn allowed_parent_types(&self) -> &'static [&'static str] {
         &[]
     }
@@ -283,8 +281,6 @@ pub trait PageTypeHandler: Send + Sync + 'static {
     /// this type. Empty slice = no restriction (the *parent-side*
     /// guard). Symmetric with [`Self::allowed_parent_types`]: both
     /// sides must agree at create / move time.
-    ///
-    /// Wagtail equivalent: `Page.subpage_types`.
     fn allowed_child_types(&self) -> &'static [&'static str] {
         &[]
     }
@@ -292,10 +288,10 @@ pub trait PageTypeHandler: Send + Sync + 'static {
     /// Whether this type is a **leaf** — it accepts no child pages at
     /// all. Distinct from `allowed_child_types() == []`, which means "no
     /// restriction" (any type may be a child). Returning `true` is the
-    /// first-class way to say "this page can't have children" (Wagtail's
-    /// `subpage_types = []`) without the sentinel hack of whitelisting a
+    /// first-class way to say "this page can't have children"
+    /// without the sentinel hack of whitelisting a
     /// non-existent child type. Enforced parent-side at create / move
-    /// time. #448
+    /// time.
     fn is_leaf(&self) -> bool {
         false
     }
@@ -340,7 +336,7 @@ pub trait PageTypeHandler: Send + Sync + 'static {
         None
     }
 
-    /// Opt this page type in to a multi-step approval workflow (#73).
+    /// Opt this page type in to a multi-step approval workflow.
     /// Returns the [`Workflow`](crate::workflow::Workflow) `name` of the workflow
     /// to apply to pages of this type, or `None` to leave them on the
     /// direct-publish path.
@@ -361,7 +357,7 @@ pub trait PageTypeHandler: Send + Sync + 'static {
     }
 
     /// Gate every page of this type behind an access requirement — the
-    /// per-**type** analogue of the per-page Privacy tab (#76). Return
+    /// per-**type** analogue of the per-page Privacy tab. Return
     /// `None` (the default) to leave the type public; return
     /// [`crate::view_restriction::TypeViewRestriction::login`] to require
     /// any authenticated member, or
@@ -409,7 +405,7 @@ pub trait PageTypeHandler: Send + Sync + 'static {
     }
 
     /// URL patterns this page type serves IN ADDITION to its
-    /// canonical `url_path`. Wagtail's `routable_page` parity (#198).
+    /// canonical `url_path`.
     ///
     /// Each [`crate::routable::RouteSpec`] declares a regex pattern
     /// (matched against the suffix BELOW the page's `url_path`) and
@@ -450,7 +446,7 @@ pub trait PageTypeHandler: Send + Sync + 'static {
     }
 
     /// Inject handler-computed values into the public render's Tera
-    /// context. Wagtail's `Page.get_context()` parity for hand-rolled
+    /// context, for hand-rolled
     /// data — e.g. a `HomePage` that exposes a `latest_posts` list
     /// to its template without baking the query into the template
     /// layer.
@@ -475,15 +471,13 @@ pub trait PageTypeHandler: Send + Sync + 'static {
     }
 
     /// Build the `children` ctx var the public renderer hands to the
-    /// page template. Wagtail parity for
-    /// `Page.get_context()` overriding `context['posts'] =
-    /// page.get_children().live().order_by('-first_published_at')`
+    /// page template (by default the live children, newest first)
     /// — index-style pages (BlogIndexPage, ArchivePage, …) lean on
     /// this to surface only published rows in a meaningful order.
     ///
     /// The default returns every immediate child sorted by
     /// `sort_order, id` (matches the pre-existing `children` shape
-    /// before #249 — drafts INCLUDED, ordering NOT chronological).
+    /// — drafts INCLUDED, ordering NOT chronological).
     /// Overriding handlers typically:
     /// - filter by `status = published`
     /// - filter by `expire_at IS NULL OR expire_at > now`
@@ -552,11 +546,11 @@ pub trait PageTypeHandler: Send + Sync + 'static {
     }
 
     /// Declared Page↔Snippet many-to-many relations as
-    /// `(relation_name, snippet_type)` pairs (#243). Macro-generated
+    /// `(relation_name, snippet_type)` pairs. Macro-generated
     /// from the struct-level `#[page_type(snippet_m2m(name = "Type", …))]`
     /// attribute; the default is none. The public renderer resolves each
     /// relation's chosen rows into `snippet_relations.<name>` so templates
-    /// can iterate the related snippets (Wagtail's `page.categories`).
+    /// can iterate the related snippets.
     fn snippet_m2m_relations(&self) -> Vec<(&'static str, &'static str)> {
         Vec::new()
     }
@@ -639,8 +633,7 @@ pub trait PageTypeHandler: Send + Sync + 'static {
     }
 
     /// Inline panels — 1-N collections of sub-rows that the page
-    /// editor renders as a sortable list of cards (#117, Wagtail
-    /// parity B14). Each [`InlinePanelSpec`] declares the panel's
+    /// editor renders as a sortable list of cards. Each [`InlinePanelSpec`] declares the panel's
     /// stable `name`, the human `label`, the per-row `fields`, and
     /// optional cardinality bounds.
     ///
@@ -697,9 +690,9 @@ pub trait PageTypeHandler: Send + Sync + 'static {
     /// row counts, word counts, derived flags, audit timestamps,
     /// linked-snippet previews, etc.
     ///
-    /// This is the first-class hook for the Wagtail pain point #2
-    /// (`FieldPanel(read_only=True)` reads only model fields, no
-    /// computed properties; `HelpPanel` is static-text only).
+    /// This is the first-class hook for read-only computed values
+    /// in the editor (static help text and plain model fields can't
+    /// show them).
     /// `display_fields` runs at edit-form GET, so each value is
     /// recomputed every load and reflects the latest DB state.
     ///
@@ -766,7 +759,7 @@ impl DisplayField {
     }
 }
 
-/// How a custom tab's body is supplied (#20). Three shapes:
+/// How a custom tab's body is supplied. Three shapes:
 ///
 /// - `Html(s)` — pre-rendered HTML (backwards-compatible escape
 ///   hatch; what `TabSpec::new(..., html)` produces).
@@ -789,7 +782,7 @@ pub enum TabBody {
         context: serde_json::Map<String, serde_json::Value>,
     },
     Widgets(Vec<crate::widget::Widget>),
-    /// Wagtail's `MultiFieldPanel` / `FieldRowPanel`. Groups widgets
+    /// Field group panel. Groups widgets
     /// under a heading; `layout` picks vertical stack vs side-by-side.
     /// Optional `help` renders as a hint paragraph between the
     /// heading and the field grid.
@@ -801,7 +794,7 @@ pub enum TabBody {
         layout: PanelLayout,
         widgets: Vec<crate::widget::Widget>,
     },
-    /// Wagtail's `HelpPanel`. Static informational block — no form
+    /// Help panel. Static informational block — no form
     /// fields. The body is HTML emitted via `| safe` after CMS-side
     /// authoring; trust source is the handler author.
     Help {
@@ -810,8 +803,6 @@ pub enum TabBody {
 }
 
 /// Layout direction for [`TabBody::Group`].
-///
-/// Wagtail parity: `MultiFieldPanel` ≈ Column; `FieldRowPanel` ≈ Row.
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PanelLayout {
@@ -1006,11 +997,9 @@ impl TabSpec {
         }
     }
 
-    /// MultiFieldPanel-shaped tab — heading + (optional help) +
+    /// Field-group tab — heading + (optional help) +
     /// widgets stacked under one section. Use [`Self::with_layout`]
-    /// to switch to row layout (FieldRowPanel).
-    ///
-    /// Wagtail parity: `MultiFieldPanel(heading=..., children=[...])`.
+    /// to switch to row layout.
     #[must_use]
     pub fn group(
         name: impl Into<String>,
@@ -1032,10 +1021,8 @@ impl TabSpec {
         }
     }
 
-    /// HelpPanel-shaped tab — static HTML content, no form fields.
+    /// Help tab — static HTML content, no form fields.
     /// The body is emitted via `| safe`, so authors control the markup.
-    ///
-    /// Wagtail parity: `HelpPanel(content=mark_safe('<p>...</p>'))`.
     #[must_use]
     pub fn help(
         name: impl Into<String>,
@@ -1303,7 +1290,7 @@ mod preview_tests {
         }
     }
 
-    /// #660 — live preview types every chooser id as the saved page does.
+    /// Live preview types every chooser id as the saved page does.
     #[tokio::test]
     async fn preview_types_chooser_ids_like_the_saved_value() {
         let pool = Pool::connect("sqlite::memory:").await.expect("pool");

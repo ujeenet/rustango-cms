@@ -1,5 +1,4 @@
-//! Per-user opt-in subscriptions to page publish events (#115,
-//! Wagtail parity B3).
+//! Per-user opt-in subscriptions to page publish events.
 //!
 //! Editors / stakeholders subscribe to pages they care about and
 //! receive an email when the page transitions into Published. Fires
@@ -36,7 +35,7 @@ pub struct PageSubscription {
     #[rustango(fk = "rustango_users", on = "id", index)]
     pub user_id: i64,
 
-    /// Bonus track — when set, also notify on new comments (#81).
+    /// Bonus track — when set, also notify on new comments.
     /// Defaults to false so subscriptions stay scoped to publish
     /// events; opt-in to broader notifications explicitly.
     #[rustango(default = "false")]
@@ -235,7 +234,7 @@ pub async fn notify_publish(
     crate::workflow_mail::notify_many(mailer, from, &pairs, &subject, &body).await;
 }
 
-/// Compose the subject + body for the pre-publish reminder (#207).
+/// Compose the subject + body for the pre-publish reminder.
 /// Mirrors `render_publish_notification` but flags that the publish
 /// hasn't happened yet so subscribers can intervene.
 #[must_use]
@@ -257,7 +256,7 @@ pub fn render_pre_publish_notification(
     (subject, body)
 }
 
-/// Fan out a pre-publish reminder (#207). Called from the schedule
+/// Fan out a pre-publish reminder. Called from the schedule
 /// sweep when a page's `go_live_at` is within the next hour. Same
 /// muting + actor-skip semantics as [`notify_publish`].
 pub async fn notify_pre_publish(

@@ -1,4 +1,4 @@
-//! Per-user notification preferences (#197, Wagtail parity).
+//! Per-user notification preferences.
 //!
 //! Editors opt out of categories of notifications they don't want
 //! to receive. Every fire-site (`workflow_mail`, `page_subscription`,
@@ -15,7 +15,7 @@ use rustango::Model;
 use serde::{Deserialize, Serialize};
 
 /// Every category an editor can mute. String keys (not an enum)
-/// because the set is editor-facing and Wagtail-style consumers may
+/// because the set is editor-facing and host plugins may
 /// register their own kinds via the same table.
 pub const WORKFLOW_SUBMITTED: &str = "workflow_submitted";
 pub const WORKFLOW_APPROVED: &str = "workflow_approved";

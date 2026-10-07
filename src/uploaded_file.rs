@@ -1,7 +1,6 @@
-//! Scratch storage for multi-step media uploads (#142, Wagtail
-//! parity D9).
+//! Scratch storage for multi-step media uploads.
 //!
-//! Mirrors `wagtail.models.media.UploadedFile`: the editor uploads
+//! The editor uploads
 //! bytes first, then fills in title / alt / collection on a follow-up
 //! form, then the row commits to [`crate::media::Media`]. If the
 //! editor cancels or closes the tab mid-step, the scratch row is

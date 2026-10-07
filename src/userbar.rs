@@ -1,4 +1,4 @@
-//! On-site editor userbar (#148, Wagtail parity D4).
+//! On-site editor userbar.
 //!
 //! Floating overlay that appears on the bottom-right of every
 //! PUBLIC page when the visitor is logged into the CMS admin. Gives

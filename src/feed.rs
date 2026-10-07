@@ -1,4 +1,4 @@
-//! Per-page-type RSS 2.0 + Atom 1.0 feeds — Wagtail-shape
+//! Per-page-type RSS 2.0 + Atom 1.0 feeds —
 //! "syndication on demand", powered by [`rustango::syndication`].
 //!
 //! ## Opt-in
@@ -33,7 +33,7 @@
 //! ## Feed metadata
 //!
 //! `<channel>`-level title is derived from `tenant.org.display_name`;
-//! description is a generic "Latest <handler verbose_name>" line.
+//! description is a generic "Latest `<handler verbose_name>`" line.
 //! Neither is overridable per tenant: the feed does not read
 //! `SiteSetting` rows.
 
@@ -49,11 +49,11 @@ use crate::page::Page;
 
 /// Most items a feed carries. Readers poll feeds on a timer, so an
 /// uncapped feed made every poll load and serialise the type's whole
-/// history (#718); syndication convention is the latest 10-50.
+/// history; syndication convention is the latest 10-50.
 pub const FEED_MAX_ITEMS: i64 = 50;
 
 /// The newest published, indexable, non-variant pages of `type_id` an
-/// anonymous reader may see (#644), at most [`FEED_MAX_ITEMS`].
+/// anonymous reader may see, at most [`FEED_MAX_ITEMS`].
 async fn feed_pages(
     pool: &rustango::sql::Pool,
     type_id: i64,
@@ -282,7 +282,7 @@ mod tests {
         p.id.get().copied().expect("page id")
     }
 
-    /// #718 — a type with more pages than the cap yields the newest cap.
+    /// A type with more pages than the cap yields the newest cap.
     #[tokio::test]
     async fn a_feed_carries_only_the_newest_items() {
         let (pool, type_id) = setup().await;
@@ -297,7 +297,7 @@ mod tests {
         assert_eq!(pages[0].title, format!("p{}", total - 1), "newest first");
     }
 
-    /// #644 — a members-only page and its subtree stay out of the feed.
+    /// A members-only page and its subtree stay out of the feed.
     #[tokio::test]
     async fn a_feed_leaves_out_restricted_pages() {
         let (pool, type_id) = setup().await;

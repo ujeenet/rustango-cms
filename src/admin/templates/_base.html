@@ -422,7 +422,7 @@
             {% endif %}
 
             {# #107 — runtime-hook sidebar entries (`register_admin_menu_item!`).
-               Wagtail parity for the `register_admin_menu_item` hook. Lighter
+               Backs the `register_admin_menu_item` hook. Lighter
                than `AdminPageHandler` — just a label + icon + href. #}
             {% if plugin_admin_menu_items and plugin_admin_menu_items | length > 0 %}
                 <div class="rcms-sidebar-section">{{ "Plugins" | translate(locale=LANG) }}</div>

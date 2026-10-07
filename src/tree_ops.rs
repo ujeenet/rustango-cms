@@ -67,7 +67,7 @@ pub enum TreeError {
 }
 
 /// Run `f` inside a framework [`rustango::sql::atomic`] scope while
-/// letting it return [`TreeError`] — the bridge that lets the #317
+/// letting it return [`TreeError`] — the bridge that lets the
 /// `on_commit` cache-invalidation pattern reach the tree-write paths.
 ///
 /// `rustango::sql::atomic` fixes its closure's error to [`ExecError`],
@@ -348,7 +348,7 @@ impl Page {
     /// so content can be seeded / scripted outside an HTTP request on any
     /// dialect. `create_root` needs a `&Tenant`, but `Tenant` is only
     /// publicly constructible on Postgres (test-gated), leaving no way to
-    /// seed pages on SQLite/MySQL; this is that way. #450
+    /// seed pages on SQLite/MySQL; this is that way.
     pub async fn create_root_pool(pool: &Pool, new: NewPage) -> Result<Self, TreeError> {
         let mut tx = transaction_pool(pool).await?;
         // #317 — compute sort_order inside the tx under a FOR UPDATE lock
@@ -388,7 +388,7 @@ impl Page {
 
     /// Backend-agnostic [`Self::create_child`] — takes a `&Pool` directly
     /// so content can be seeded / scripted outside an HTTP request on any
-    /// dialect (see [`Self::create_root_pool`]). #450
+    /// dialect (see [`Self::create_root_pool`]).
     pub async fn create_child_pool(
         pool: &Pool,
         parent: &Page,
@@ -519,13 +519,13 @@ impl Page {
         Ok(())
     }
 
-    /// Transaction-scoped core of [`move_to`]. Assumes cycle / placement
+    /// Transaction-scoped core of [`move_to`](Self::move_to). Assumes cycle / placement
     /// validation has already run and `subtree` (this page's descendants)
     /// was read on the pool **before** the transaction opened — so this
     /// makes **no pool reads**. That matters: reading the pool while
     /// holding a tx connection can deadlock a single-connection SQLite
     /// pool. Pre-reading lets a batch (bulk move) reparent many pages in
-    /// one transaction. #317.
+    /// one transaction.
     ///
     /// # Errors
     /// Driver errors from the lock / saves, or [`TreeError`] from path
@@ -603,7 +603,7 @@ fn page_id(page: &Page) -> Result<i64, TreeError> {
 
 /// Next `sort_order` for a new root, read inside `tx` after taking a
 /// `FOR UPDATE` lock on **one** deterministic root row (the lowest id) so
-/// concurrent root inserts serialize (#317).
+/// concurrent root inserts serialize.
 ///
 /// Roots have no parent row to lock, but we must NOT lock the whole roots
 /// set: concurrent transactions acquire the multiple row locks in

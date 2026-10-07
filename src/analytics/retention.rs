@@ -72,7 +72,7 @@ mod tests {
         }
     }
 
-    /// #654 — an event minutes past the cutoff is deleted on SQLite, even
+    /// An event minutes past the cutoff is deleted on SQLite, even
     /// on the cutoff's own calendar day.
     #[tokio::test]
     async fn prune_deletes_right_up_to_the_cutoff() {

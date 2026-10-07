@@ -1,7 +1,7 @@
 //! How the public router resolves which locale a request is asking for.
 //!
 //! Three modes; query mode is the v0.1/v0.2 default for back-compat.
-//! Path mode (Wagtail-shape) puts the locale code as the first URL
+//! Path mode puts the locale code as the first URL
 //! segment, with the default locale living at the unprefixed root.
 //!
 //! - `/about`          → default locale (regardless of mode)
@@ -15,7 +15,7 @@
 //!
 //! When no explicit locale is given (no `?lang=`, no path prefix), the
 //! request's `Accept-Language` header is negotiated against the active
-//! locales before falling through to the tenant default (#397). So
+//! locales before falling through to the tenant default. So
 //! precedence is: explicit query > explicit path > Accept-Language >
 //! default.
 
@@ -23,7 +23,7 @@ use rustango::core::Column as _;
 
 use crate::locale::Locale;
 
-/// Locale-resolution strategy for [`crate::router`] builders.
+/// Locale-resolution strategy for [`crate::router`](mod@crate::router) builders.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum LocaleMode {
     /// `?lang=es` only. The v0.1 / v0.2 default — no path
@@ -112,7 +112,7 @@ pub fn locale_cookie_value(cookie_header: Option<&str>) -> Option<String> {
 /// Precedence: **explicit `?lang=` > explicit `/<code>/` path prefix >
 /// `Accept-Language` negotiation > tenant default** (`None`). An
 /// explicit choice always wins; the header is a fallback for
-/// first-visit/unlinked requests (#397).
+/// first-visit/unlinked requests.
 ///
 /// At most two DB queries, both conditional: the path-segment lookup
 /// (only in path mode when the first segment looks like a code) and the

@@ -26,7 +26,7 @@
        data-preview-scope="{{ preview_scope | default(value=tenant_slug | default(value='default')) }}"
        data-preview-variant="{{ preview_variant | default(value='0') }}"
        aria-label="{{ preview_label | default(value='Preview') }}">
-    {# Wagtail-style preview scaling. The iframe DOM stays at the SELECTED
+    {# Fit-to-pane preview scaling. The iframe DOM stays at the SELECTED
        DEVICE WIDTH so the framed document's media queries fire as on a
        real device; a CSS transform scales the visual output to fit. The
        sizer carries the scaled footprint so flex reserves the right space. #}

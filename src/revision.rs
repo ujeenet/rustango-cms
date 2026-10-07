@@ -1,7 +1,7 @@
 //! `Revision` — versioned snapshots of `cms_page` rows.
 //!
 //! Captured on every page save in the admin. Each revision stores the
-//! full page state as JSON; [`prune`] bounds storage (#122).
+//! full page state as JSON; [`prune`] bounds storage.
 
 use chrono::{DateTime, Utc};
 use rustango::sql::Auto;
@@ -119,7 +119,7 @@ fn is_unique_violation(e: &rustango::sql::ExecError) -> bool {
 /// Name of the UNIQUE (page_id, sequence) index on `cms_revision`.
 const UNIQUE_SEQUENCE_INDEX: &str = "cms_revision_page_sequence_uniq";
 
-/// Give `cms_revision` its UNIQUE (page_id, sequence) index (#762), so a
+/// Give `cms_revision` its UNIQUE (page_id, sequence) index, so a
 /// concurrent save can't reuse a sequence. Pages that already hold
 /// duplicates are renumbered first, in (sequence, id) order, which keeps
 /// their history's order. Idempotent.

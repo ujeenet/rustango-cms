@@ -1,4 +1,4 @@
-//! Category models (#557) — real, migration-tracked tables (not a JSON
+//! Category models — real, migration-tracked tables (not a JSON
 //! blob). Two models:
 //!
 //! - [`Taxonomy`] (`cms_taxonomy`) — the vocabulary registry, mirroring
@@ -537,7 +537,7 @@ pub async fn delete(
 
 /// Build a nested [`CategoryNode`] tree from a flat, path-ordered row
 /// list. **Loop-safe**: groups by `parent_id`, materializes generation by
-/// generation with a visited-set + a hard depth cap ([`WALK_DEPTH_CAP`]).
+/// generation with a visited-set + a hard depth cap (`WALK_DEPTH_CAP`).
 /// A corrupted `parent_id` cycle yields a truncated tree + a single
 /// `tracing::error!`, never an infinite loop / OOM.
 #[must_use]

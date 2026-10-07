@@ -152,7 +152,7 @@ fn localized_or_canonical(
 /// under it; we look them up by the widget's `name`. `translations`
 /// carries the active locale's per-field overrides — a stream field
 /// with a localized body in that map renders the translated blocks
-/// (see [`localized_or_canonical`]); pass an empty map for the
+/// (see `localized_or_canonical`); pass an empty map for the
 /// canonical (default-locale) render.
 ///
 /// # Errors
@@ -423,7 +423,7 @@ impl ChooserRows {
 }
 
 /// A form's (snippet id, schema) — the schema localized for the render
-/// locale (#550 FB-17).
+/// locale.
 async fn localized_form(
     pool: &rustango::sql::Pool,
     form: &crate::snippet::Snippet,

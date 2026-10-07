@@ -35,7 +35,7 @@ struct StructConfig {
     template: String,
     feed_kind: Option<String>,
     /// `#[page_type(workflow = "Editorial review")]` — opt in to a
-    /// multi-step approval workflow by name (#73). `None` ⇒ direct-publish.
+    /// multi-step approval workflow by name. `None` ⇒ direct-publish.
     workflow: Option<String>,
     /// Extension-table name. `None` ⇒ unit-struct (no extension row).
     /// Inferred from `#[rustango(table = …)]` when the struct has
@@ -66,7 +66,7 @@ struct StructConfig {
     /// `<Self as PageTypeOverrides>::view_mode`.
     view_mode: Option<String>,
     /// `#[page_type(snippet_m2m(categories = "Category", authors = "Author"))]`
-    /// — declarative Page↔Snippet many-to-many relations (#243 AC3).
+    /// — declarative Page↔Snippet many-to-many relations.
     /// Each pair is `(relation_name, snippet_type_name)`: the key is the
     /// editor-facing relation / form field, the value is the
     /// `cms_snippet.type_name` the chooser lists. Declared at the struct
@@ -1391,7 +1391,7 @@ fn option_inner(ty: &Type) -> Option<String> {
     None
 }
 
-/// Derive a human display label from a relation name, Wagtail-style:
+/// Derive a human display label from a relation name:
 /// `"categories"` → `"Categories"`, `"featured_authors"` → `"Featured
 /// Authors"`. Used as the SnippetM2M widget label when the author
 /// declares the relation at the struct level (no per-field label).

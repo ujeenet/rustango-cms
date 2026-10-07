@@ -14,7 +14,7 @@
 //!
 //! The mapped page need not be a root. The prefix is only ever its
 //! `url_path`, so `/campaigns/spring` binds to a hostname exactly as a
-//! root does — which is also how Wagtail's `Site` model behaves.
+//! root does.
 //!
 //! The translation is done at the edges rather than in the stored data:
 //!

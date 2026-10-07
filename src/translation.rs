@@ -4,10 +4,10 @@
 //! TL;DR: the canonical `cms_page` row holds the default-locale
 //! content; `cms_translation` overrides individual fields per locale.
 //! This table is the sole supported localization path — the
-//! `cms_page.locale_variant_of` escape hatch was retired in #275.
+//! `cms_page.locale_variant_of` escape hatch was retired.
 //!
 //! Storage rationale: a wide JSON blob per page works for
-//! document-shaped DBs (Sanity) but is awkward in PG/MySQL where
+//! document-shaped DBs but is awkward in PG/MySQL where
 //! ordinary SELECT + indexes want columns. The narrow tall table is
 //! easier to query, easier to migrate, and keeps the canonical
 //! `cms_page` row free of locale concerns.

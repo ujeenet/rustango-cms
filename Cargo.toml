@@ -9,6 +9,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://docs.rs/rustango-cms"
 authors.workspace = true
 rust-version.workspace = true
 # The crate ships its source, templates, static assets and migrations;
@@ -28,7 +29,7 @@ members = ["crates/rustango-cms-macros", "crates/rcms-scaffold"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/ujeenet/rustango-cms"
-homepage = "https://github.com/ujeenet/rustango-cms"
+homepage = "https://cms.rustango.com"
 authors = ["Ievgenii Svyryd <ujeenet2@gmail.com>"]
 rust-version = "1.88"
 
@@ -42,8 +43,10 @@ workspace = true
 
 [package.metadata.docs.rs]
 # Build the docs with every backend and the optional integrations, so
-# feature-gated modules appear on docs.rs (#719).
-features = ["postgres", "sqlite", "mysql", "storage_s3", "cache_cloudflare", "cache_varnish", "cache_gcp", "cache_azure", "search_elasticsearch", "test_utils"]
+# feature-gated modules appear on docs.rs. `avif` only switches an image
+# encoder on (no public items) and needs an assembler, so it stays off.
+features = ["postgres", "sqlite", "mysql", "storage_s3", "cache_cloudflare", "cache_varnish", "cache_cloudfront", "cache_gcp", "cache_azure", "search_elasticsearch", "test_utils"]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["postgres"]
@@ -53,27 +56,27 @@ default = ["postgres"]
 postgres = ["rustango/postgres"]
 mysql = ["rustango/mysql"]
 sqlite = ["rustango/sqlite"]
-# #321 — exposes the framework's `Tenant::for_test(...)` constructor so
+# Exposes the framework's `Tenant::for_test(...)` constructor so
 # DATABASE_URL-gated integration tests can build a tenant + drive the
 # write paths directly. Off by default; enable with `--features test_utils`.
 test_utils = ["rustango/test_utils"]
-# #193 — opt-in frontend-cache invalidator backends. Each backend
+# Opt-in frontend-cache invalidator backends. Each backend
 # pulls in only the dependencies it needs (reqwest for the HTTP-based
 # ones via `rustango/http-client`; the AWS SDK crates for CloudFront).
 # Default build pulls none.
 cache_cloudflare = ["rustango/http-client"]
 cache_varnish = ["rustango/http-client"]
 cache_cloudfront = ["dep:aws-config", "dep:aws-sdk-cloudfront"]
-# #428 — Google Cloud CDN + Azure CDN purge backends. Both POST to a
+# Google Cloud CDN + Azure CDN purge backends. Both POST to a
 # cloud management API via the framework's reqwest client; auth is a
 # short-lived OAuth2 bearer token supplied by an `AccessTokenSource`.
 cache_gcp = ["rustango/http-client"]
 cache_azure = ["rustango/http-client"]
-# #398 — AVIF rendition output. Off by default because it pulls the
+# AVIF rendition output. Off by default because it pulls the
 # `ravif`/`rav1e` AV1 encoder (heavy build + binary). `format-avif`
 # specs return a clear error until this is enabled.
 avif = ["image/avif"]
-# #408 — Elasticsearch full-text backend (`search::elasticsearch`).
+# Elasticsearch full-text backend (`search::elasticsearch`).
 # Off by default; pulls the framework's reqwest-based HTTP client. When
 # enabled + `search::set_backend(...)` is wired, search routes to ES
 # instead of the built-in Postgres FTS path.
@@ -103,14 +106,14 @@ chrono = { version = "0.4", default-features = false, features = ["serde", "cloc
 async-trait = "0.1"
 inventory = "0.3"
 # Already in the tree through rustango's http-client; declared to build the
-# notification channels' egress-guarded client (#645): redirects off and the
+# notification channels' egress-guarded client: redirects off and the
 # vetted address pinned, which the framework's wrapper doesn't expose.
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 thiserror = "2.0.18"
 tracing = "0.1"
 sha2 = "0.11.0"
 mime_guess = "2"
-# #198 — routable_page URL patterns. `regex` is already a transitive
+# URL patterns for routable pages. `regex` is already a transitive
 # dep via `tracing`; declaring it directly keeps the dependency edge
 # explicit. `std`+`unicode` only — `perf` (which adds ~200KB of
 # precompiled tables) is unnecessary for the typically-tiny set of
@@ -122,18 +125,18 @@ regex = { version = "1", default-features = false, features = ["std", "unicode-p
 # Already in the dep graph via rustango; named explicitly here so
 # the import is greppable.
 rand = { version = "0.10", default-features = false, features = ["std", "std_rng", "thread_rng"] }
-# #319 — explicit OS CSPRNG at auth/URL-identifier boundaries (signing key,
+# Explicit OS CSPRNG at auth/URL-identifier boundaries (signing key,
 # flash-cookie HMAC secret). Already transitive via rand; named here for the
 # direct `getrandom::fill` calls. rand 0.10 removed the `OsRng` type.
 getrandom = "0.4"
-# v0.2 Slice 5b — image renditions. `default-features = false` +
+# Image renditions. `default-features = false` +
 # the codec list keeps the build slim; add formats as needed.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
-# #193 — AWS SDK for the CloudFront invalidator backend. Optional;
+# AWS SDK for the CloudFront invalidator backend. Optional;
 # only pulled when the `cache_cloudfront` feature is on. Both crates
 # already depend on tokio + rustls — no extra runtime alignment work
 # beyond the framework's default rustls / tokio defaults.
-# Default features off (#699): the CloudFront crate's default `rustls`
+# Default features off: the CloudFront crate's default `rustls`
 # feature selects the legacy hyper 0.14 / rustls 0.21 client, a second
 # HTTP/TLS stack beside the one everything else uses. `default-https-client`
 # is the current hyper 1 / rustls 0.23 client.
@@ -148,11 +151,11 @@ aws-sdk-cloudfront = { version = "1", optional = true, default-features = false,
 # against the *test* crate's deps, not the framework's re-export.
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 # Test-only — `ServiceExt::oneshot` for router-level HTTP tests
-# (#258 anonymous-redirect smoke test). Axum already pulls tower
+# (anonymous-redirect smoke test). Axum already pulls tower
 # into the build graph; this just makes the trait import work in
 # the test crate.
 tower = { version = "0.5", default-features = false, features = ["util"] }
-# #193 — httpmock for the Cloudflare / Varnish backend tests. Mock
+# httpmock for the Cloudflare / Varnish backend tests. Mock
 # server stubs the upstream API so the tests run offline.
 httpmock = "0.8"
 

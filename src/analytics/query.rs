@@ -1,6 +1,6 @@
 //! Dashboard aggregates over `cms_analytics_event`.
 //!
-//! Built on the ORM's Django-style aggregate API (`rustango::core::aggregates`
+//! Built on the ORM's aggregate API (`rustango::core::aggregates`
 //! + `QuerySet::{aggregate,values,annotate}`): typed columns, conditional
 //! `.filter()` aggregates, and `count_distinct`. Results come back as
 //! `Vec<HashMap<String, SqlValue>>` (the shape is dynamic), decoded by alias.
@@ -289,7 +289,7 @@ pub async fn compute(
 mod tests {
     use super::*;
 
-    /// #716 — a SUM over BIGINT comes back as a Decimal on Postgres and
+    /// A SUM over BIGINT comes back as a Decimal on Postgres and
     /// MySQL; reading it as 0 made "avg. time on page" 0s there.
     #[test]
     fn a_decimal_sum_reads_as_its_integer_value() {

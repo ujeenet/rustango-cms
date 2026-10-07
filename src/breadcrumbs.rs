@@ -1,7 +1,7 @@
-//! Breadcrumb engine (#31) — walks the page tree once and returns an
+//! Breadcrumb engine — walks the page tree once and returns an
 //! ordered list of `(title, url, is_current)` crumbs.
 //!
-//! Powers both public templates (via [`register_tera_function`]) and
+//! Powers both public templates (via [`to_context_value`]) and
 //! the admin chrome (admin handlers can call [`resolve_breadcrumbs`]
 //! directly and stuff the result into Tera context). The shared
 //! `_breadcrumbs.html` macro in [`crate::admin::register_templates`]
@@ -10,11 +10,11 @@
 //!
 //! ## Public-side example
 //!
-//! ```ignore
-//! // In a Tera template:
-//! //   {% set crumbs = breadcrumbs(page_id=page.id) %}
-//! //   {% import "_breadcrumbs.html" as bc %}
-//! //   {{ bc::render(crumbs=crumbs) | safe }}
+//! ```text
+//! {# In a Tera template: #}
+//! {% set crumbs = breadcrumbs(page_id=page.id) %}
+//! {% import "_breadcrumbs.html" as bc %}
+//! {{ bc::render(crumbs=crumbs) | safe }}
 //! ```
 //!
 //! ## Options
@@ -35,7 +35,7 @@ use crate::page::Page;
 pub struct Crumb {
     pub title: String,
     /// Tenant-absolute, like `url_path`. On a hostname-mapped site, pass it
-    /// through [`crate::site::to_public_path`] with the site's prefix (#640).
+    /// through [`crate::site::to_public_path`] with the site's prefix.
     pub url: String,
     pub is_current: bool,
     pub page_id: Option<i64>,

@@ -1,18 +1,18 @@
-//! Generic model-admin (#420) — a `ModelViewSet`-style CRUD admin for
+//! Generic model-admin — a `ModelViewSet`-style CRUD admin for
 //! arbitrary `#[derive(Model)]` types, rendered inside the CMS admin
 //! chrome.
 //!
 //! The framework's own `ListView`/`ViewSet` can't inject the CMS's
 //! async, DB-backed `add_chrome`, so they can't back a chrome'd admin
 //! screen. This is a CMS-native path: a host registers a model with
-//! [`register_model_admin!`], which captures the model's
-//! [`rustango::core::schema::ModelSchema`] + a type-erased "list rows
+//! [`register_model_admin!`](crate::register_model_admin!), which captures the model's
+//! [`rustango::core::ModelSchema`] + a type-erased "list rows
 //! as JSON" thunk, and the admin serves a chrome'd index at
 //! `/cms-admin/model/<slug>` driven by the model's `list_display`.
 //!
-//! PR 1 ships the registry + the read-only index. Create / edit /
+//! It ships the registry + the read-only index. Create / edit /
 //! delete (generic forms from `FieldSchema`) + filter / search / order
-//! follow.
+//! are not implemented yet.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -21,7 +21,7 @@ use rustango::core::ModelSchema;
 use rustango::sql::Pool;
 
 /// Type-erased "fetch every row of the model as JSON" — the index
-/// data source. Built by [`register_model_admin!`] from the concrete
+/// data source. Built by [`register_model_admin!`](crate::register_model_admin!) from the concrete
 /// model's `objects().fetch()` (a derive-generated inherent
 /// method, so it can't be reached generically — hence the thunk).
 pub type ListRowsFn = fn(Pool) -> Pin<Box<dyn Future<Output = Vec<serde_json::Value>> + Send>>;
@@ -96,7 +96,7 @@ pub fn row_cell(row: &serde_json::Value, col: &str) -> String {
     }
 }
 
-/// Register a generic admin for a `#[derive(Model)]` type (#420).
+/// Register a generic admin for a `#[derive(Model)]` type.
 ///
 /// ```ignore
 /// rustango_cms::register_model_admin!(crate::Author, "author", "Authors");

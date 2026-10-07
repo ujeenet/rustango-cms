@@ -1,7 +1,7 @@
-//! UI-created page-type fallback handler (#559/#566).
+//! UI-created page-type fallback handler.
 //!
-//! When a `cms_page_type` row has no code-registered handler (Phase-2,
-//! Strapi-style types authored entirely in the UI), this synthetic
+//! When a `cms_page_type` row has no code-registered handler (types
+//! authored entirely in the UI), this synthetic
 //! handler lets the render + editor pipelines treat it like any other
 //! page type. It supplies the trait's required `&'static str`s (interned
 //! from the row — leak-once + bounded, same pool as [`super::dyn_block`])

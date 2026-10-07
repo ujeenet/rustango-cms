@@ -91,7 +91,7 @@ pub(crate) use handlers::{
 };
 
 /// Admin-handler state — the Tera instance the handlers render
-/// against, plus an optional page-cache invalidator (#78). When the
+/// against, plus an optional page-cache invalidator. When the
 /// host registers an invalidator, admin saves and deletes fire
 /// purges on the affected URLs so editors don't have to wait for the
 /// public-side TTL to elapse.
@@ -104,14 +104,14 @@ pub(crate) struct AdminState {
     /// `Arc<Vec<u8>>` (not `&[u8]`) so the state is `Clone` for
     /// axum's per-request state cloning.
     pub(crate) signing_secret: Arc<Vec<u8>>,
-    /// Page-cache invalidator (#78). Defaults to
+    /// Page-cache invalidator. Defaults to
     /// [`cache_invalidate::Noop`] — the public layer's TTL is the
     /// only invalidation signal. Hosts that wire a real cache into
     /// the public router pass a matching [`crate::cache_invalidate::BoxedCacheInvalidator`]
     /// via [`router_with_invalidator`] so admin saves purge those
     /// keys immediately.
     pub(crate) cache_invalidator: Arc<dyn crate::cache_invalidate::PageCacheInvalidator>,
-    /// Workflow notification mailer (#85). Defaults to `None` — no
+    /// Workflow notification mailer. Defaults to `None` — no
     /// email is sent. Hosts wire a real backend
     /// (`rustango::email::ConsoleMailer`, an SMTP one, an SES one)
     /// via [`router_with_mailer`].
@@ -145,7 +145,7 @@ pub fn router(tera: Arc<Tera>) -> Router {
     }))
 }
 
-/// Like [`router`] but takes a page-cache invalidator (#78). Hosts
+/// Like [`router`] but takes a page-cache invalidator. Hosts
 /// using the public router's `CachePageLayer` should wire the same
 /// cache backend into a [`crate::cache_invalidate::BoxedCacheInvalidator`]
 /// so admin saves purge the matching cache keys immediately.
@@ -167,8 +167,8 @@ pub fn router_with_invalidator(
     })
 }
 
-/// Like [`router`] but takes both a cache invalidator AND a mailer
-/// (#85). The mailer powers workflow notifications — submit /
+/// Like [`router`] but takes both a cache invalidator AND a mailer.
+/// The mailer powers workflow notifications — submit /
 /// approve / reject / cancel each fire emails to the relevant
 /// parties. `from_addr` is the `From:` address stamped onto every
 /// notification.
@@ -212,7 +212,7 @@ pub fn public_router(tera: Arc<Tera>) -> Router {
 }
 
 /// Like [`public_router`], with the mailer that sends password-reset
-/// emails (#846). Without it `/cms-admin/password-reset` accepts the
+/// emails. Without it `/cms-admin/password-reset` accepts the
 /// request but can't send anything. Pass the same mailer and `From:`
 /// address as [`router_with_mailer`].
 pub fn public_router_with_mailer(
@@ -382,8 +382,8 @@ fn public_router_inner(
         .with_state(state)
 }
 
-/// Licence notices for the third-party assets compiled into the admin
-/// (#710). Embedded so they travel with every binary, as MIT and the
+/// Licence notices for the third-party assets compiled into the admin.
+/// Embedded so they travel with every binary, as MIT and the
 /// SIL OFL require.
 async fn serve_third_party_notices() -> impl axum::response::IntoResponse {
     (
@@ -438,13 +438,12 @@ fn load_or_generate_signing_secret(path: &std::path::Path) -> Vec<u8> {
 /// Layer [`rustango::auth_decorators::login_required`] on top of the
 /// supplied router. Every protected route 302s anonymous visitors to
 /// `login_url` with `?next=<original_url>` so the framework's login
-/// handler can resume them after auth. Same pattern Django ships out
-/// of the box (`@login_required(login_url=login_url)`).
+/// handler can resume them after auth.
 ///
 /// A signed-in user also needs the `cms_admin.access` codename (or to be
 /// a superuser); anyone else is redirected to `/cms-admin/no-access`.
 /// Members sign up publicly and get an ordinary user row, so "has a
-/// session" must never mean "may use the admin" (#671).
+/// session" must never mean "may use the admin".
 ///
 /// Use as:
 ///
@@ -457,11 +456,11 @@ fn load_or_generate_signing_secret(path: &std::path::Path) -> Vec<u8> {
 ///
 /// Tri-dialect on every backend. Built on
 /// [`rustango::extractors::SessionUser`], which became tri-dialect
-/// in rustango #317 — anonymous requests get 302'd to `login_url`
+/// in the framework — anonymous requests get 302'd to `login_url`
 /// with the original path preserved in `?next=` exactly like the
 /// framework's PG-only `auth_decorators::login_required` decorator.
 ///
-/// Closes #258 — the previous non-PG arm was a silent no-op that
+/// An earlier non-PG arm was a silent no-op that
 /// left `/cms-admin/*` fully accessible without a session cookie on
 /// `default = ["sqlite"]` builds.
 pub fn with_login_required(router: Router, login_url: impl Into<String> + 'static) -> Router {
@@ -510,7 +509,7 @@ pub fn with_login_required(router: Router, login_url: impl Into<String> + 'stati
     ))
 }
 
-/// Gate the CMS-admin router on the `cms_admin.access` codename (#35).
+/// Gate the CMS-admin router on the `cms_admin.access` codename.
 ///
 /// A logged-in tenant user is allowed through only when:
 /// 1. they're a superuser, OR
@@ -528,7 +527,7 @@ pub fn with_cms_admin_access(router: Router, no_access_url: impl Into<String>) -
     with_codename_gate(router, "cms_admin.access", no_access_url)
 }
 
-/// Hard-gate `router` on an arbitrary permission codename (#559/#561) —
+/// Hard-gate `router` on an arbitrary permission codename —
 /// the generalized form of [`with_cms_admin_access`]. A non-superuser
 /// lacking `codename` is redirected to `no_access_url`; superusers pass;
 /// anonymous flows fall through to the layered `login_required` bounce.
@@ -570,14 +569,14 @@ enum AccessResult {
     DeniedNoUser,
 }
 
-/// Tri-dialect check that the request's user holds `codename`. After
-/// rustango#317 landed (SessionUser is no longer PG-gated), we delegate
+/// Tri-dialect check that the request's user holds `codename`. Now that
+/// `SessionUser` is no longer PG-gated, we delegate
 /// the cookie decode + user fetch to the framework's `SessionUser`
 /// extractor instead of duplicating the logic here. The middleware
 /// resolves the user, then checks for `codename` via
 /// `permissions::user_codenames`. Superusers always pass.
 /// The in-handler form of the codename gate, for screens gated per
-/// handler rather than per router (#714): `None` to proceed, otherwise
+/// handler rather than per router: `None` to proceed, otherwise
 /// where to send the user — anonymous to the login page, a signed-in user
 /// without `codename` to no-access, so they aren't bounced through a login
 /// form that wouldn't help. Superusers pass. One copy of the policy for
@@ -659,7 +658,7 @@ pub(crate) async fn request_user_and_pool(
 
 fn router_with_state(state: AdminState) -> Router {
     Router::new()
-        // Pages tab — Wagtail-style tree CRUD.
+        // Pages tab — tree CRUD.
         .route("/cms-admin", get(redirect_root))
         .route("/cms-admin/", get(redirect_root))
         .route("/cms-admin/pages", get(handlers::page_list))
@@ -796,7 +795,7 @@ fn router_with_state(state: AdminState) -> Router {
             "/cms-admin/pages/{id}/workflow/cancel",
             post(handlers::page_workflow_cancel),
         )
-        // Library tab — reusable content blocks (Wagtail "snippets").
+        // Library tab — reusable content blocks ("snippets").
         .route("/cms-admin/library", get(handlers::library_list))
         // Forms tab — dedicated list of form snippets with per-form
         // submission counts (the generic library table can't surface
@@ -1244,7 +1243,7 @@ fn router_with_state(state: AdminState) -> Router {
             "/cms-admin/navigation/{id}/save-tree",
             post(handlers::navigation_save_tree_submit),
         )
-        // #257 — Wagtailmenus parity Option B: seed the menu's items
+        // #257 — Option B: seed the menu's items
         // from every `show_in_menus = true AND status = published` page.
         // Idempotent rebuild — drops + re-inserts so a fresh menu
         // can be hand-curated from the implicit tree.
@@ -1446,7 +1445,7 @@ async fn redirect_root() -> axum::response::Redirect {
 /// A bundled admin asset, cached for a year as immutable. Only safe
 /// because every URL that loads one carries `?v={{ cms_asset_version() }}`
 /// (or, for a bundle loaded from script, the loader's own `?v=`), so a
-/// new build is a new URL. The one place that policy is written (#696).
+/// new build is a new URL. The one place that policy is written.
 fn immutable_asset<B: axum::response::IntoResponse>(
     content_type: &'static str,
     body: B,
@@ -1485,7 +1484,7 @@ async fn serve_block_tree_js() -> impl axum::response::IntoResponse {
     immutable_asset("text/javascript; charset=utf-8", include_str!("static/block_tree.js"))
 }
 
-/// Bundled UX helper script (#25). Hosts `rcmsConfirm` modal +
+/// Bundled UX helper script. Hosts `rcmsConfirm` modal +
 /// `rcmsToast` notification stack + the auto-wiring that intercepts
 /// `data-confirm` forms / links and hoists server-rendered flash
 /// banners into toasts. Cached for one day so the asset doesn't
@@ -1494,14 +1493,14 @@ async fn serve_cms_ux_js() -> impl axum::response::IntoResponse {
     immutable_asset("text/javascript; charset=utf-8", include_str!("static/cms-ux.js"))
 }
 
-/// Bundled WP-style menu builder script (#44). Hosts the
+/// Bundled WP-style menu builder script. Hosts the
 /// drag-and-drop tree + JSON save POST. Loaded only on
 /// `/cms-admin/navigation/{id}/edit` via an inline `<script src>`.
 async fn serve_menu_builder_js() -> impl axum::response::IntoResponse {
     immutable_asset("text/javascript; charset=utf-8", include_str!("static/menu-builder.js"))
 }
 
-/// #533 FB-04 — the visual Form Builder editor engine. Loaded only on
+/// The visual Form Builder editor engine. Loaded only on
 /// `/cms-admin/forms/{id}/build` via an inline `<script src>`.
 async fn serve_form_builder_js() -> impl axum::response::IntoResponse {
     immutable_asset("text/javascript; charset=utf-8", include_str!("static/form_builder.js"))
@@ -1515,7 +1514,7 @@ async fn serve_page_builder_rules_js() -> impl axum::response::IntoResponse {
     immutable_asset("text/javascript; charset=utf-8", include_str!("static/page_builder_rules.js"))
 }
 
-/// #208 — bundled axe-core (553 KB minified). Self-hosted under
+/// Bundled axe-core (553 KB minified). Self-hosted under
 /// `/cms-admin/static/vendor/` to satisfy strict CSP setups that
 /// disable third-party CDN script-src. Loaded into the preview
 /// iframe by [`serve_cms_axe_preview_js`].
@@ -1523,7 +1522,7 @@ async fn serve_axe_core_js() -> impl axum::response::IntoResponse {
     immutable_asset("text/javascript; charset=utf-8", include_str!("static/vendor/axe-core.min.js"))
 }
 
-/// #208 — the small editor↔iframe glue that runs INSIDE the preview
+/// The small editor↔iframe glue that runs INSIDE the preview
 /// frame: waits for axe-core to load, fires `axe.run()`, and posts
 /// results back to the editor's parent window via `postMessage`.
 /// Also listens for `cms-axe-scroll-to` messages so the editor can
@@ -1540,14 +1539,14 @@ async fn serve_cms_preview_guard_js() -> impl axum::response::IntoResponse {
     immutable_asset("text/javascript; charset=utf-8", include_str!("static/cms-preview-guard.js"))
 }
 
-/// #615 — self-hosted admin typography. The admin used to pull Hanken
+/// Self-hosted admin typography. The admin used to pull Hanken
 /// Grotesk, Literata and Material Symbols from `fonts.googleapis.com`.
 /// Material Symbols is a LIGATURE icon font, so when that request failed —
 /// offline, air-gapped, strict CSP, or an ad blocker — every icon in the
 /// chrome rendered as its own name ("article", "error", "image"). It also
 /// sent each editor's IP to a third party on every page load. Vendored
 /// here and served from the admin's own static route, same rationale as
-/// the TipTap bundle below (#294).
+/// the TipTap bundle below.
 ///
 /// Subsets: latin, latin-ext, cyrillic, cyrillic-ext — enough for the
 /// shipped admin locales (de/fr/pl/uk). CJK was never covered by these
@@ -1622,7 +1621,7 @@ async fn serve_admin_brand_file(axum::extract::Path(file): axum::extract::Path<S
     }
 }
 
-/// #294 — vendored TipTap (MIT) engine bundle exposing
+/// Vendored TipTap (MIT) engine bundle exposing
 /// `window.RcmsRichtext.create(...)`. Self-hosted under
 /// `/cms-admin/static/vendor/` (CSP-friendly, offline-capable). Content
 /// is content-addressed by the committed build, so cache hard.
@@ -1644,7 +1643,7 @@ async fn serve_codemirror_bundle_js() -> impl axum::response::IntoResponse {
     immutable_asset("text/javascript; charset=utf-8", include_str!("static/vendor/codemirror.bundle.js"))
 }
 
-/// #294 — hand-authored richtext glue: progressively enhances every
+/// Hand-authored richtext glue: progressively enhances every
 /// `<textarea data-widget-mode="richtext">` into a TipTap WYSIWYG with a
 /// toolbar, syncing HTML back into the textarea for submit. Loads after
 /// the engine bundle.
@@ -1774,7 +1773,7 @@ impl tera::Function for CmsAssetVersionFn {
 }
 
 /// `{{ value | json_script }}` — JSON for a `<script>` body or a quoted
-/// attribute (#760).
+/// attribute.
 ///
 /// `json_encode | safe` leaves `<`, `>`, `&` and `'` alone, so a stored
 /// string containing `</script>` ends the element in the HTML tokenizer.
@@ -1842,7 +1841,7 @@ fn json_script(value: &tera::Value) -> String {
 ///
 /// Customizing the stylesheet uses the same pattern but with
 /// `static/cms_admin/cms.css` (the bundled CSS handler does its own
-/// override discovery at request time — see [`serve_cms_css`]).
+/// override discovery at request time — see `serve_cms_css`).
 ///
 /// # Errors
 /// Propagates Tera errors from template registration (only fails on
@@ -2271,7 +2270,7 @@ pub fn register_templates(tera: &mut Tera) -> Result<(), tera::Error> {
             "blocks/code.html",
             include_str!("templates/blocks/code.html"),
         ),
-        // #194 — expanded block catalog (Wagtail parity).
+        // #194 — expanded block catalog.
         (
             "blocks/text.html",
             include_str!("templates/blocks/text.html"),
@@ -2305,7 +2304,7 @@ pub fn register_templates(tera: &mut Tera) -> Result<(), tera::Error> {
             "blocks/table.html",
             include_str!("templates/blocks/table.html"),
         ),
-        // Wagtail-parity routes.
+        // Further built-in blocks.
         (
             "blocks/float.html",
             include_str!("templates/blocks/float.html"),
@@ -2517,10 +2516,9 @@ pub struct PageForm {
     pub slug: String,
     pub page_type_id: i64,
     pub status: String,
-    /// #318 — which submit button the editor pressed: `save` (→ page
+    /// Which submit button the editor pressed: `save` (→ page
     /// list), `continue` (→ keep editing this page), or `addanother`
-    /// (→ a fresh new-page form under the same parent). Mirrors
-    /// Django/Wagtail's three-action ModelForm footer. Missing or
+    /// (→ a fresh new-page form under the same parent). Missing or
     /// unknown values fall back to `save` in `redirect_after_page_save`.
     #[serde(rename = "_action", default)]
     pub action: String,
@@ -2532,7 +2530,7 @@ pub struct PageForm {
     pub robots_index: Option<String>,
     #[serde(default)]
     pub sitemap_priority: Option<f32>,
-    /// "Show in menus" opt-in checkbox (#22). Pages with this flag
+    /// "Show in menus" opt-in checkbox. Pages with this flag
     /// set surface in the navigation editor's page picker as
     /// suggested entries.
     #[serde(default)]
@@ -2548,9 +2546,9 @@ pub struct PageForm {
     pub theme_id: Option<i64>,
     /// Schedule — page auto-publishes at this moment when the chosen
     /// status is `scheduled`. Empty string from the datetime input
-    /// → None. Local-time per the editor's browser; we parse with
-    /// `chrono::NaiveDateTime::parse_from_str("%Y-%m-%dT%H:%M")` and
-    /// stamp UTC. Per-user timezone override lands with #13.
+    /// → None. The admin's form script converts the editor's local time
+    /// to UTC before submit; a value without an offset is read as UTC
+    /// (see `parse_datetime_local`).
     #[serde(default)]
     pub go_live_at: Option<String>,
     /// Schedule — page auto-archives at this moment.
@@ -2566,7 +2564,7 @@ pub struct PageForm {
     /// Empty means "use the type's template".
     #[serde(default)]
     pub template_override: String,
-    /// #183 — Social sharing fields. All optional; the renderer
+    /// Social sharing fields. All optional; the renderer
     /// falls back to title / seo_description / first body image
     /// when empty.
     #[serde(default)]
@@ -2577,11 +2575,11 @@ pub struct PageForm {
     pub og_image_media_id: Option<i64>,
     #[serde(default)]
     pub twitter_card: Option<String>,
-    /// Comma-separated tags (#189). Read by the create path; an edit reads
+    /// Comma-separated tags. Read by the create path; an edit reads
     /// the raw form.
     #[serde(default)]
     pub tags: Option<String>,
-    /// JSON array of category ids (#842), as `tags`.
+    /// JSON array of category ids, as `tags`.
     #[serde(default)]
     pub categories: Option<String>,
 }
@@ -2630,7 +2628,7 @@ impl PageForm {
 
     /// Parse an HTML5 `datetime-local` value (`YYYY-MM-DDTHH:MM`)
     /// into a UTC instant. Empty / unparseable → `None`. The browser
-    /// emits naive local time; until per-user timezones (#13) land
+    /// emits naive local time; until per-user timezones land
     /// we treat the value as UTC. Editors set realistic times in
     /// their own zone and accept the small offset for now.
     fn parsed_go_live_at(&self) -> Option<chrono::DateTime<chrono::Utc>> {
@@ -2694,7 +2692,7 @@ mod admin_error_tests {
         (status, String::from_utf8(bytes.to_vec()).expect("utf8"))
     }
 
-    /// #711 — a 500 names no table, host or template; a 4xx keeps its
+    /// A 500 names no table, host or template; a 4xx keeps its
     /// user-facing message.
     #[tokio::test]
     async fn server_errors_hide_their_cause_and_client_errors_do_not() {
@@ -2713,7 +2711,7 @@ mod admin_error_tests {
 
 #[cfg(test)]
 mod template_shape_tests {
-    /// #760 — JSON inlined into a script body cannot end the element, and
+    /// JSON inlined into a script body cannot end the element, and
     /// still parses back to the same value.
     #[test]
     fn json_script_cannot_close_the_script_element() {
@@ -2736,7 +2734,7 @@ mod template_shape_tests {
         assert_eq!(back, hostile);
     }
 
-    /// Guard: `json_encode | safe` is how #760 got in. Script and
+    /// Guard: `json_encode | safe` let raw JSON break out of a script. Script and
     /// attribute contexts use `json_script`.
     #[test]
     fn no_admin_template_inlines_raw_json() {
@@ -2817,14 +2815,14 @@ mod template_shape_tests {
         );
     }
 
-    /// #641 — an authored template must not be able to read the process
+    /// An authored template must not be able to read the process
     /// environment through Tera's `get_env` builtin. `register_templates`
     /// overrides it; here we prove a template calling it cannot leak one.
     /// Removing the override makes this fail.
     ///
     /// Probes `CARGO_PKG_NAME`, which cargo sets for every test binary,
     /// rather than setting a variable: `set_var` while other tests run in
-    /// parallel is a data race (#749).
+    /// parallel is a data race.
     #[test]
     fn get_env_is_disabled_in_the_render_engine() {
         let secret = std::env::var("CARGO_PKG_NAME").expect("cargo sets CARGO_PKG_NAME");

@@ -49,7 +49,7 @@ pub enum SeedError {
 /// matches the active variant and builds a `TenantPools<DB>` parameterized
 /// by the concrete sqlx backend — the seeding loop itself is fully
 /// dialect-agnostic because [`TenantPools::scoped_pool_dyn`] and
-/// [`upsert_page_type`] both speak the erased [`rustango::sql::Pool`].
+/// `upsert_page_type` both speak the erased [`rustango::sql::Pool`].
 ///
 /// Pre-conditions:
 /// - The registry DB is reachable via `registry`.
@@ -123,7 +123,7 @@ fn is_seeded(slug: &str) -> bool {
     g.as_ref().is_some_and(|set| set.contains(slug))
 }
 
-/// Seed `org` if this process hasn't yet (#689). A tenant provisioned
+/// Seed `org` if this process hasn't yet. A tenant provisioned
 /// while the server runs — operator console, provisioning webhook,
 /// `create-tenant` — gets its tracked migrations but missed the boot-time
 /// seed, so it had no page types, roles or locale until a restart. One
@@ -184,7 +184,7 @@ pub(crate) async fn lazy_seed_layer(
 /// for page, library and taxonomy types, themes, roles, the default
 /// locale, the ensure-only tables and columns, MCP skills and the host's
 /// seeders. Idempotent. Run for every tenant at boot, and for a tenant
-/// provisioned while the server runs on its first request (#689).
+/// provisioned while the server runs on its first request.
 ///
 /// # Errors
 /// The first failing step.
@@ -416,7 +416,7 @@ pub async fn grant_codename(
     backfill_codename(pool, role_name, codename).await
 }
 
-/// The built-in MCP skill set (#587): codename, label, description,
+/// The built-in MCP skill set: codename, label, description,
 /// prompt instructions, tools, and the permission codenames (any-of)
 /// that entitle a user's key to the skill.
 type McpSkillSpec = (
@@ -570,7 +570,7 @@ pub async fn ensure_mcp_skills(pool: &rustango::sql::Pool) -> Result<(), rustang
 }
 
 /// Seed three baseline roles per tenant so the permissions matrix is
-/// usable without an admin having to hand-craft codenames (#33):
+/// usable without an admin having to hand-craft codenames:
 ///
 /// - **Viewer** — `view` on every resource except Users + Roles.
 /// - **Editor** — view/add/edit on content + media + library +
@@ -807,7 +807,7 @@ async fn seed_role_with_codenames(
 /// `cms_media_collection` rows yet. New uploads default to it; the
 /// admin shows orphan media (NULL `collection_id`) under it too.
 /// Seed a default `en` locale when the tenant has none, so the
-/// "exactly one is_default" invariant holds from first boot (#452).
+/// "exactly one is_default" invariant holds from first boot.
 /// Idempotent: no-op once any locale row exists.
 async fn ensure_default_locale(pool: &rustango::sql::Pool) -> Result<(), ExecError> {
     let existing: Vec<crate::locale::Locale> = crate::locale::Locale::objects().fetch(pool).await?;

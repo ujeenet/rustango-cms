@@ -1,4 +1,4 @@
-//! Admin UI i18n foundation (#524 / epic #523).
+//! Admin UI i18n foundation.
 //!
 //! Wires the framework's message-catalog i18n (`rustango::i18n`) into the
 //! admin Tera so templates can localize chrome with the `translate`
@@ -15,8 +15,8 @@
 //!
 //! This module owns: the locale set ([`UI_LOCALES`]), per-request resolution
 //! ([`negotiate`] — cookie → per-user pref → Accept-Language → tenant default →
-//! English, #525/#526), server-string translation ([`tr`], #528), the embedded
-//! [`admin_translator`], and the completeness/extraction tooling (#529, tests).
+//! English), server-string translation ([`tr`]), the embedded
+//! [`admin_translator`], and the completeness/extraction tooling (tests).
 //! See `docs/i18n-admin.md` for the authoring workflow.
 
 use crate::log_err::LogErr as _;
@@ -48,11 +48,11 @@ pub(crate) fn is_ui_locale(code: &str) -> bool {
     UI_LOCALES.iter().any(|(c, _)| *c == code)
 }
 
-/// Resolve the active admin UI locale. Precedence (#525 + #526):
+/// Resolve the active admin UI locale. Precedence:
 ///   1. sticky `rcms_admin_lang` cookie (explicit, most recent choice)
-///   2. durable per-user preference (`rustango_users.data.admin_lang`, #526)
+///   2. durable per-user preference (`rustango_users.data.admin_lang`)
 ///   3. `Accept-Language` — exact, then base-language (`fr-FR`→`fr`, `zh-*`→`zh-Hans`)
-///   4. per-tenant default (#526)
+///   4. per-tenant default
 ///   5. English
 /// Only ever returns a shipped locale. `user_pref`/`tenant_default` are `None`
 /// in pre-auth / userless contexts (e.g. server-side `tr()` flashes).
@@ -105,7 +105,7 @@ pub(crate) fn negotiate(
     "en".to_owned()
 }
 
-/// Per-tenant default admin locale (#526). Sourced from
+/// Per-tenant default admin locale. Sourced from
 /// `RUSTANGO_CMS_DEFAULT_ADMIN_LOCALE` so multi-tenant deployments can pin a
 /// regional default without a schema change — mirrors the tenant-default
 /// timezone pattern. Returns `None` unless the env var names a shipped locale.
@@ -126,14 +126,14 @@ fn parse(json: &str) -> HashMap<String, String> {
     serde_json::from_str(json).unwrap_or_default()
 }
 
-/// Parse a plural catalog: `key → (CLDR category → template)` (#528/#1102).
+/// Parse a plural catalog: `key → (CLDR category → template)`.
 fn parse_plural(json: &str) -> HashMap<String, HashMap<String, String>> {
     serde_json::from_str(json).unwrap_or_default()
 }
 
 /// The shipped catalog JSON for `code` (source-embedded, same set as
 /// [`admin_translator`]). Returns `"{}"` for unknown codes. Kept here so the
-/// completeness tooling (#529) and the translator build read one source.
+/// completeness tooling and the translator build read one source.
 fn catalog_json(code: &str) -> &'static str {
     match code {
         "en" => include_str!("locales/en.json"),
@@ -147,7 +147,7 @@ fn catalog_json(code: &str) -> &'static str {
     }
 }
 
-/// The shipped **plural** catalog JSON for `code` (#528/#1102) — count-aware
+/// The shipped **plural** catalog JSON for `code` — count-aware
 /// flash strings keyed by CLDR category. Returns `"{}"` for unknown codes.
 fn plural_catalog_json(code: &str) -> &'static str {
     match code {
@@ -163,7 +163,7 @@ fn plural_catalog_json(code: &str) -> &'static str {
 }
 
 /// The launch locales that must be fully translated — every UI locale we ship
-/// except the English source. Drives the completeness check (#529).
+/// except the English source. Drives the completeness check.
 #[cfg(test)]
 #[must_use]
 pub(crate) fn launch_locales() -> Vec<&'static str> {
@@ -189,7 +189,7 @@ pub(crate) fn admin_translator() -> Arc<Translator> {
 /// Tera `translate`/`translate_plural` bindings (via `register_templates`) and
 /// the server-string `tr`/`tr_plural` helpers, so a DB override applied to it is
 /// visible everywhere. The embedded catalogs are immutable; only the override
-/// layer (#532) mutates, via [`maybe_refresh_overrides`].
+/// layer mutates, via [`maybe_refresh_overrides`].
 pub(crate) fn cached_translator() -> &'static Arc<Translator> {
     static T: OnceLock<Arc<Translator>> = OnceLock::new();
     T.get_or_init(admin_translator)
@@ -204,7 +204,7 @@ pub(crate) fn cached_translator() -> &'static Arc<Translator> {
 /// `extra` is `{ locale_code -> { english_key -> translated } }`. The shipped
 /// admin catalog wins on any shared key, so admin UI strings are never
 /// overwritten. Only the catalog layer is touched — the DB override layer
-/// (#532, `maybe_refresh_overrides`) is independent and keeps working.
+/// (`maybe_refresh_overrides`) is independent and keeps working.
 ///
 /// Call once at boot AFTER [`crate::admin::register_templates`] (which
 /// registers the binding against this same cached translator).
@@ -221,7 +221,7 @@ pub fn extend_ui_catalog(extra: HashMap<String, HashMap<String, String>>) {
     }
 }
 
-/// Live admin-translation overrides (#532): reload the editable DB layer
+/// Live admin-translation overrides: reload the editable DB layer
 /// (`rustango_translations`) into the shared translator, at most once per TTL.
 /// Called from `add_chrome`, so an operator's edit in the admin takes effect
 /// within ~10s without a redeploy. Best-effort — a missing table or query error
@@ -250,7 +250,7 @@ pub(crate) async fn maybe_refresh_overrides(pool: &rustango::sql::Pool) {
 }
 
 /// Translate a server-emitted English string for the request's admin locale
-/// (#528 — flash messages, validation errors, content checks). The English
+/// (flash messages, validation errors, content checks). The English
 /// source IS the catalog key (gettext-style); an untranslated string falls back
 /// to itself, so wrapping a call site is always safe even before its catalog
 /// entry exists. `params` are `{name}`-style interpolation pairs.
@@ -267,7 +267,7 @@ pub(crate) fn tr(headers: &HeaderMap, source: &str, params: &[(&str, &str)]) -> 
     cached_translator().translate(&lang, source, params)
 }
 
-/// Count-aware server-string translation (#528/#1102) — the plural sibling of
+/// Count-aware server-string translation — the plural sibling of
 /// [`tr`]. `key` is a count-aware source key; the form is chosen for `n` in the
 /// request locale, then `params` interpolate (pass `("count", …)`). Falls back
 /// to the scalar source string when no plural entry exists.
@@ -338,7 +338,7 @@ mod tests {
         assert_eq!(negotiate(None, None, None, None), "en");
     }
 
-    /// Extract every admin-template translation key (#529). Scans both shapes:
+    /// Extract every admin-template translation key. Scans both shapes:
     ///   - filter:   `"Key" | translate(...)`
     ///   - function: `translate(key="Key", ...)`
     /// across every `*.html` under `src/admin/templates`.
@@ -374,7 +374,7 @@ mod tests {
         keys
     }
 
-    /// #529 — every shipped catalog parses and never maps a key to an empty
+    /// Every shipped catalog parses and never maps a key to an empty
     /// string (an empty value would render blank instead of falling back).
     #[test]
     fn catalogs_parse_with_no_empty_values() {
@@ -389,7 +389,7 @@ mod tests {
         }
     }
 
-    /// #529 — the CI completeness gate. Every key the admin templates actually
+    /// The CI completeness gate. Every key the admin templates actually
     /// use must have a non-empty translation in every launch locale. English is
     /// the source (its catalog may be empty — missing keys fall back to the key
     /// itself). New swept strings without translations fail here by design.
@@ -418,7 +418,7 @@ mod tests {
         );
     }
 
-    /// #527/#529 — every bundled admin template parses and its inheritance
+    /// Every bundled admin template parses and its inheritance
     /// chain resolves. `add_raw_templates` builds inheritance at the end, so a
     /// broken `{% extends %}`/`{% block %}` or any Tera syntax error introduced
     /// by the string sweep fails here rather than at runtime on a live page.
@@ -429,7 +429,7 @@ mod tests {
             .expect("admin templates parse + inheritance resolves");
     }
 
-    /// #529 — the fallback guarantee: an unknown key renders the source string
+    /// The fallback guarantee: an unknown key renders the source string
     /// (the key), never a blank or a raw id, in every shipped locale.
     #[test]
     fn unknown_key_falls_back_to_source_in_every_locale() {
@@ -442,7 +442,7 @@ mod tests {
         }
     }
 
-    /// #528/#1102 — every plural-flash key shipped in `en.plurals.json` has a
+    /// Every plural-flash key shipped in `en.plurals.json` has a
     /// non-empty form set in every launch locale (the plural analogue of the
     /// scalar completeness gate; plural keys live in Rust, not templates).
     #[test]
@@ -466,7 +466,7 @@ mod tests {
         }
     }
 
-    /// #1102 — the cms translator selects the correct CLDR form per locale.
+    /// The cms translator selects the correct CLDR form per locale.
     #[test]
     fn plural_flash_selects_form() {
         let t = admin_translator();

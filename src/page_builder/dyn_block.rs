@@ -1,9 +1,9 @@
-//! Dyn blocks (#559/#560) — UI-defined field groups that flow through the
-//! existing [`Block`](crate::block::Block) machinery without inventory
+//! Dyn blocks — UI-defined field groups that flow through the
+//! existing [`Block`] machinery without inventory
 //! registration.
 //!
 //! A [`DynBlockDef`] is compiled from a schema/component
-//! [`GroupDef`](crate::page_builder::schema::GroupDef) and **implements the
+//! [`GroupDef`] and **implements the
 //! `Block` trait**, so the admin stream editor (`render_block_inline`), the
 //! public renderer (`default_render`), and version migration all treat it
 //! exactly like a code block. The trait wants `&'static str` names — dyn
@@ -25,7 +25,7 @@ use crate::page_builder::schema::{FieldNode, GroupDef, Node};
 
 /// Intern a string into the process-lifetime pool. Each distinct string
 /// leaks exactly once; repeat calls return the cached `&'static str`.
-/// Shared with [`crate::page_builder::db_type`] (#566) so UI-created page
+/// Shared with [`crate::page_builder::db_type`] so UI-created page
 /// types can hand the trait its required `&'static str`s from DB rows.
 pub(crate) fn intern(s: &str) -> &'static str {
     static POOL: OnceLock<Mutex<HashSet<&'static str>>> = OnceLock::new();

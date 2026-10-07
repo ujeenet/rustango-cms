@@ -157,7 +157,7 @@
 
     {# ---- boolean (single checkbox) -------------------------------- #}
     {% elif w.kind == "boolean" %}
-        {# Phase 7 — Wagtail SwitchInput parity. `variant="switch"`
+        {# Phase 7 — SwitchInput. `variant="switch"`
            flips the checkbox to an iOS-style toggle while keeping
            the same wire shape (checkbox `on` / absent). #}
         <div class="rcms-checkbox-field{% if w.variant == "switch" %} checkbox-field--switch{% endif %}">
@@ -265,15 +265,15 @@
         </div>
 
     {% elif w.kind == "pagechooser" or w.kind == "snippetchooser" or w.kind == "documentchooser" %}
-        {# Wagtail-parity chooser widgets. Hidden input carries the
+        {# Chooser widgets. Hidden input carries the
            target row's id as a string (or comma-separated ids in
            multi mode); visible button opens the shared modal dialog
            (cms-ux.js wires it via the `data-chooser-kind`
            attribute). Snippet chooser can narrow to one type via
            `w.custom_name`. Multi-pick mode opts in via
            `w.variant = "multi"` (renders checkbox-per-row + a
-           "Pick selected" button — Wagtail's MultipleChooserPanel
-           equivalent). #}
+           "Pick selected" button — a multiple-chooser
+           panel). #}
         {% set chooser_kind = w.kind | replace(from="chooser", to="") %}
         {% set_global chooser_icon = "article" %}
         {% if chooser_kind == "snippet" %}{% set_global chooser_icon = "library_books" %}{% endif %}

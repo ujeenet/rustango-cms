@@ -1,4 +1,4 @@
-//! Clearing a page's references before the page row is deleted (#848).
+//! Clearing a page's references before the page row is deleted.
 //!
 //! Every table that points at `cms_page` (revisions, tags, categories,
 //! logs, workflow state, host page-type extension tables…) declares a

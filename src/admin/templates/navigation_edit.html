@@ -6,7 +6,7 @@
     <button type="button" class="rcms-btn rcms-btn-small" id="menu-builder-save" data-menu-id="{{ menu_id }}">
         <span class="material-symbols-rounded sm">save</span> {{ "Save menu" | translate(locale=LANG) }}
     </button>
-    {# #257 — wagtailmenus parity Option B: rebuild the menu from
+    {# #257 — auto-populate (Option B): rebuild the menu from
        every published page with `show_in_menus = true`. Drops the
        current items first (the form confirm message makes that
        clear) — useful for cold-start on a freshly-created menu, or

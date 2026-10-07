@@ -1,13 +1,13 @@
-//! Multi-step approval workflows (#73, Wagtail parity A1).
+//! Multi-step approval workflows.
 //!
 //! Editors compose a `Workflow` from ordered `WorkflowTask`s. When
 //! they submit a page for review, a `WorkflowState` row tracks
 //! "where in the workflow this page is right now," and a `TaskState`
 //! row records the verdict on each step.
 //!
-//! PR 1 of 3 lands the data model + admin CRUD only. PR 2 wires up
-//! the page-editor UI (Submit / Approve / Reject buttons) and PR 3
-//! adds notifications + reapproval-on-edit.
+//! This module holds the data model + admin CRUD; the page-editor UI
+//! (Submit / Approve / Reject buttons), notifications and
+//! reapproval-on-edit build on it.
 //!
 //! ## Shape
 //!
@@ -19,7 +19,7 @@
 //!             └─< TaskState (one per step decision)
 //! ```
 //!
-//! ## States (Wagtail parity)
+//! ## States
 //!
 //! `WorkflowState.status` is one of: `in_progress`, `approved`,
 //! `needs_changes`, `cancelled`. `TaskState.status` is one of:
@@ -136,9 +136,7 @@ pub struct Workflow {
 
     /// When true, a content edit on a page in the Approved state of
     /// this workflow restarts the workflow from the first task.
-    /// Wagtail's `WAGTAIL_WORKFLOW_REQUIRE_REAPPROVAL_ON_EDIT`
-    /// equivalent — per-workflow rather than global. Honoured by
-    /// PR 3.
+    /// Configured per workflow rather than globally.
     pub require_reapproval_on_edit: bool,
 
     #[rustango(auto_now_add)]
@@ -188,7 +186,7 @@ pub struct WorkflowTask {
     /// share `workflow_id` and order by this column.
     pub sort_order: i32,
 
-    /// Task-kind discriminator (#191). Maps to one of the registered
+    /// Task-kind discriminator. Maps to one of the registered
     /// [`crate::task_kind::TaskKind`] implementations:
     ///   * `"group_approval"` — default; a role member must click
     ///     approve / reject via the existing UI.
@@ -526,7 +524,7 @@ pub async fn submit_for_review(
     Ok(state)
 }
 
-/// Helper for #191: when the current task's kind reports
+/// Auto-approve helper: when the current task's kind reports
 /// `AutoApprove`, mark it approved and advance to the next task,
 /// repeating until we hit a `WaitForHuman` or the workflow
 /// finishes. Called from [`submit_for_review`] after the first
@@ -647,15 +645,15 @@ pub enum ApproveOutcome {
     Advanced { next_task_id: i64 },
     Finished,
     /// There is no step to decide, so nothing changed: another request
-    /// decided it first (a double-click, or two reviewers at once, #707),
+    /// decided it first (a double-click, or two reviewers at once),
     /// or the current task is no longer in the workflow — finished, or
-    /// removed — which a fallback position would have restarted (#770).
+    /// removed — which a fallback position would have restarted.
     AlreadyDecided,
 }
 
 /// Decide the in-progress `TaskState` for `task_id` — one conditional
 /// UPDATE, so of two concurrent decisions exactly one flips the row.
-/// Returns whether this call was the one (#707).
+/// Returns whether this call was the one.
 async fn claim_task(
     pool: &rustango::sql::Pool,
     state_id: i64,
@@ -778,7 +776,7 @@ pub async fn approve_current(
 /// the `WorkflowState` to NeedsChanges. The submitter can edit and
 /// re-submit; the workflow restarts from the first task on next
 /// submit. Returns `false`, changing nothing, when the step was already
-/// decided (#707).
+/// decided.
 ///
 /// # Errors
 /// Driver / query failures.

@@ -124,7 +124,7 @@ pub enum EncodeFormat {
     Jpeg,
     Png,
     Webp,
-    /// AVIF (#398). Encoding requires the `avif` crate feature; without
+    /// AVIF. Encoding requires the `avif` crate feature; without
     /// it, `encode` returns a clear error. Parsing + the URL spec always
     /// recognize `format-avif`.
     Avif,
@@ -420,7 +420,7 @@ pub fn encode(
         flatten_onto_background(image, r, g, b)
     } else if matches!(format, EncodeFormat::Jpeg) && image.color().has_alpha() {
         // No explicit bgcolor but JPEG demands opaque — flatten on
-        // white by default. Matches Wagtail's behavior.
+        // white by default.
         flatten_onto_background(image, 255, 255, 255)
     } else {
         image.clone()
@@ -457,7 +457,7 @@ pub fn encode(
             // ravif/rav1e encoder). AVIF supports alpha, so no flatten.
             #[cfg(feature = "avif")]
             {
-                // Quality 1..=100; default 61 (Wagtail 7.3's AVIF default).
+                // Quality 1..=100; default 61.
                 // Speed 1..=10 (higher = faster/larger); 4 balances both.
                 let quality = encoding.quality.unwrap_or(61);
                 let mut cur = std::io::Cursor::new(&mut out);
@@ -492,7 +492,7 @@ fn flatten_onto_background(src: &image::DynamicImage, r: u8, g: u8, b: u8) -> im
 
 // ---------- Hard crop (#24) ----------
 
-/// [`crop_image`] on the blocking pool (#694): a full decode + encode
+/// [`crop_image`] on the blocking pool: a full decode + encode
 /// is hundreds of milliseconds of CPU for a large photo, and inline it
 /// parked a Tokio worker for all of it.
 ///
@@ -510,7 +510,7 @@ pub async fn crop_image_off_runtime(
     .map_err(|e| format!("crop worker failed: {e}"))?
 }
 
-/// [`strip_exif_if_image`] on the blocking pool (#694). Returns the bytes
+/// [`strip_exif_if_image`] on the blocking pool. Returns the bytes
 /// to store — the re-encoded ones when EXIF was stripped, else the input —
 /// and the decoded dimensions.
 pub async fn strip_exif_off_runtime(bytes: Vec<u8>, mime: String) -> (Vec<u8>, Option<(u32, u32)>) {
@@ -584,7 +584,7 @@ pub fn crop_image(
     Ok((out, out_mime))
 }
 
-/// Re-encode an image's bytes to strip EXIF metadata (#184). Returns
+/// Re-encode an image's bytes to strip EXIF metadata. Returns
 /// `(Some(stripped_bytes), Some((width, height)))` on success; for
 /// non-image MIMEs or SVGs returns `(None, None)`; for decode errors
 /// returns `(None, None)` so the caller can keep the original bytes.
@@ -710,7 +710,7 @@ impl FilterOp {
     }
 
     /// Multiply every pixel dimension by `factor` — the rendition for a
-    /// `factor`× pixel-density (retina) variant (#427). Dimensions
+    /// `factor`× pixel-density (retina) variant. Dimensions
     /// saturate at the 8192 cap the parser enforces.
     fn scaled(self, factor: u32) -> Self {
         let cap = |n: u32| n.saturating_mul(factor).min(8192);
@@ -767,9 +767,9 @@ fn parse_filters_arg(
 }
 
 /// Build a concrete rendition URL for `spec` — parsed + canonicalized,
-/// signed when signed URLs are enabled (#425). Returns `None` for an
+/// signed when signed URLs are enabled. Returns `None` for an
 /// invalid spec. `content_hash` is the optional `v=` cache-buster.
-/// Used by the JSON API (#431) to emit ready-to-use rendition URLs
+/// Used by the JSON API to emit ready-to-use rendition URLs
 /// (clients can't sign a `{filter_spec}` template themselves).
 #[must_use]
 pub fn rendition_url_for(media_id: i64, spec: &str, content_hash: Option<&str>) -> Option<String> {
@@ -778,7 +778,7 @@ pub fn rendition_url_for(media_id: i64, spec: &str, content_hash: Option<&str>) 
 }
 
 /// Build the rendition URL `/__media__/<spec>/<id>[?v=…][&s=…]` —
-/// signs it when signed URLs are enabled (#425).
+/// signs it when signed URLs are enabled.
 fn rendition_url(media_id: i64, canonical_spec: &str, v: Option<&str>) -> String {
     let base = match v {
         Some(v) if !v.is_empty() => format!(
@@ -795,7 +795,7 @@ fn rendition_url(media_id: i64, canonical_spec: &str, v: Option<&str>) -> String
 /// Process-wide signing key for rendition URLs. `None` = signing off.
 static SIGNING_KEY: std::sync::OnceLock<Option<Vec<u8>>> = std::sync::OnceLock::new();
 
-/// Enable **signed rendition URLs** (#425). Once a key is set, every
+/// Enable **signed rendition URLs**. Once a key is set, every
 /// `rcms_image_url` / `rcms_image_srcset` / `rcms_picture` URL carries
 /// an HMAC `s=` over `(canonical_spec, media_id)`, and the rendition
 /// route ([`crate::rendition_route`]) rejects requests whose signature
@@ -812,7 +812,7 @@ static SIGNING_KEY: std::sync::OnceLock<Option<Vec<u8>>> = std::sync::OnceLock::
 ///
 /// The first read fixes the key, so a call after it — or a second call
 /// with another key — cannot take effect; it is logged as an error rather
-/// than dropped (#697), since it can leave rendition signing off.
+/// than dropped, since it can leave rendition signing off.
 pub fn set_signing_key(key: impl Into<Vec<u8>>) {
     let key = key.into();
     if let Err(rejected) = SIGNING_KEY.set(Some(key)) {
@@ -890,7 +890,7 @@ fn build_srcset(media_id: i64, specs: &[FilterPipeline], v: Option<&str>) -> Str
         .join(", ")
 }
 
-/// `srcset` with pixel-density (`Nx`) descriptors (#427 retina/DPI): the
+/// `srcset` with pixel-density (`Nx`) descriptors (retina/DPI): the
 /// `base` spec rendered at each density — its dimensions multiplied by
 /// the density — e.g. `width-400` → `"…/width-400/42 1x, …/width-800/42 2x"`.
 /// Densities are de-duplicated + sorted ascending; non-positive dropped.
@@ -1008,7 +1008,7 @@ impl tera::Function for RcmsImageSrcsetFn {
 
 /// `rcms_image_srcset_dpi(media_id, filter="width-400", [densities=[1,2]],
 /// [v])` → a pixel-density `srcset` (`Nx` descriptors) of one base spec
-/// at each density (#427). `is_safe` — CMS-controlled URLs.
+/// at each density. `is_safe` — CMS-controlled URLs.
 struct RcmsImageSrcsetDpiFn;
 impl tera::Function for RcmsImageSrcsetDpiFn {
     fn call(
@@ -1082,7 +1082,7 @@ impl tera::Function for RcmsPictureFn {
 mod tests {
     use super::*;
 
-    /// #694 — a large decode + re-encode must not freeze the runtime.
+    /// A large decode + re-encode must not freeze the runtime.
     #[rustango::__private_runtime::tokio::test(flavor = "current_thread")]
     async fn image_work_runs_off_the_runtime() {
         use rustango::__private_runtime::tokio;

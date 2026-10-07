@@ -40,7 +40,7 @@
     }
 
     // Walk one `[data-stream-list]` (immediate children only) and
-    // produce `[{type, id, value}, …]` matching the Wagtail wire shape.
+    // produce `[{type, id, value}, …]` matching the stored wire shape.
     function serializeList(listEl) {
         const out = [];
         const blocks = listEl.querySelectorAll(":scope > [data-stream-block]");
@@ -248,7 +248,7 @@
             const nested = clone.querySelectorAll("[data-stream-block]");
             for (const b of nested) b.dataset.id = uuid();
             clone.dataset.id = uuid();
-            // Insert immediately after the source block (Wagtail-like).
+            // Insert immediately after the source block.
             block.parentNode.insertBefore(clone, block.nextSibling);
             // #294 — the clone carries a dead snapshot of the source's
             // RichText editor DOM; reset it + build a fresh editor

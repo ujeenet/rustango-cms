@@ -26,7 +26,7 @@
 //!
 //! ## Wire-up
 //!
-//! The CMS public [`router`](crate::router) mounts `GET /robots.txt`
+//! The CMS public [`router`](crate::router()) mounts `GET /robots.txt`
 //! automatically, exactly as it does the sitemap. No registration needed.
 
 use axum::http::{header, HeaderMap, StatusCode};

@@ -13,7 +13,7 @@ use crate::block::BlockFieldMeta;
 use crate::widget::WidgetKind;
 use crate::{register_block, Block, BlockField};
 
-/// `heading` — Wagtail's `CharBlock` + level choice. Two fields:
+/// `heading` — a heading with a level choice. Two fields:
 /// `text` (the heading body) and `level` (`2`..`4`, defaulting to
 /// H2). Template emits `<h{level}>{text}</h{level}>`.
 #[derive(Default)]
@@ -46,7 +46,7 @@ impl Block for HeadingBlock {
     }
 }
 
-/// `paragraph` — Wagtail's `RichTextBlock`. One markdown field
+/// `paragraph` — One markdown field
 /// rendered through the rcms safe-markdown pipeline on the public
 /// side.
 #[derive(Default)]
@@ -75,7 +75,7 @@ impl Block for ParagraphBlock {
     }
 }
 
-/// `image` — Wagtail's `ImageChooserBlock`. Picks a `cms_media` row
+/// `image` — Picks a `cms_media` row
 /// + optional alt text + optional caption. Template emits a `<figure>`
 /// with the image URL resolved server-side.
 #[derive(Default)]
@@ -124,7 +124,7 @@ impl Block for ImageBlock {
     }
 }
 
-/// `quote` — Wagtail's `BlockQuoteBlock`. Textarea body + optional
+/// `quote` — Textarea body + optional
 /// attribution.
 #[derive(Default)]
 pub struct QuoteBlock;
@@ -172,9 +172,9 @@ impl Block for QuoteBlock {
     }
 }
 
-/// `embed` — Wagtail's `EmbedBlock`. A single URL; the public
+/// `embed` — A single URL; the public
 /// template renders a responsive embed. [`Self::extra_context`] runs
-/// the URL through [`crate::embed::resolve`] (#402) so a YouTube
+/// the URL through [`crate::embed::resolve`] so a YouTube
 /// *watch* or Vimeo *page* URL becomes the provider's embeddable
 /// `src` with the right aspect ratio; unrecognised URLs link out
 /// rather than iframing an arbitrary site.
@@ -237,7 +237,7 @@ impl Block for EmbedBlock {
 ///
 /// The url and embed inputs only validate in the browser, so a
 /// `javascript:` (or `vbscript:` / `data:`) value reaches the rendered
-/// `href` otherwise (#724). Relative targets and the http(s), mailto and
+/// `href` otherwise. Relative targets and the http(s), mailto and
 /// tel schemes pass. The scheme is read the way a browser reads it, with
 /// tabs, newlines and other control characters removed, so `java\tscript:`
 /// is caught too.
@@ -286,7 +286,7 @@ const CODE_LANGUAGES: &[(&str, &str)] = &[
     ("yaml", "YAML"),
 ];
 
-/// `code` — a fenced code block with a language hint (#403). Renders
+/// `code` — a fenced code block with a language hint. Renders
 /// the standard `<pre><code class="language-…">` markup that client
 /// highlighters (Prism / highlight.js / Shiki) pick up automatically.
 /// The body is HTML-escaped by Tera, so it displays verbatim and can't
@@ -320,7 +320,7 @@ impl Block for CodeBlock {
     }
 }
 
-/// `text` — Wagtail's `TextBlock`. Multi-line plain text rendered
+/// `text` — Multi-line plain text rendered
 /// inside `<p>` with newlines preserved.
 #[derive(Default)]
 pub struct TextBlock;
@@ -348,7 +348,7 @@ impl Block for TextBlock {
     }
 }
 
-/// `boolean` — Wagtail's `BoolBlock`. Single checkbox; the template
+/// `boolean` — Single checkbox; the template
 /// renders nothing by default (host overrides decide what "true"
 /// means in context — show a banner, flip a class, …).
 #[derive(Default)]
@@ -377,7 +377,7 @@ impl Block for BooleanBlock {
     }
 }
 
-/// `date` — Wagtail's `DateBlock`. ISO-8601 date string (`YYYY-MM-DD`).
+/// `date` — ISO-8601 date string (`YYYY-MM-DD`).
 #[derive(Default)]
 pub struct DateBlock;
 
@@ -404,7 +404,7 @@ impl Block for DateBlock {
     }
 }
 
-/// `datetime` — Wagtail's `DateTimeBlock`. ISO-8601 datetime string.
+/// `datetime` — ISO-8601 datetime string.
 #[derive(Default)]
 pub struct DateTimeBlock;
 
@@ -431,7 +431,7 @@ impl Block for DateTimeBlock {
     }
 }
 
-/// `email` — Wagtail's `EmailBlock`. Browser-validates the shape via
+/// `email` — Browser-validates the shape via
 /// `<input type="email">`; the template renders a `mailto:` link.
 #[derive(Default)]
 pub struct EmailBlock;
@@ -470,7 +470,7 @@ impl Block for EmailBlock {
     }
 }
 
-/// `url` — Wagtail's `URLBlock`. Browser-validates via
+/// `url` — Browser-validates via
 /// `<input type="url">`; the template renders an anchor.
 #[derive(Default)]
 pub struct UrlBlock;
@@ -520,7 +520,7 @@ impl Block for UrlBlock {
     }
 }
 
-/// `integer` — Wagtail's `IntegerBlock`. Numeric input; the template
+/// `integer` — Numeric input; the template
 /// renders the value as-is. Editors needing a unit / formatting
 /// override the template.
 #[derive(Default)]
@@ -549,7 +549,7 @@ impl Block for IntegerBlock {
     }
 }
 
-/// `choice` — Wagtail's `ChoiceBlock`. Editor picks one entry from a
+/// `choice` — Editor picks one entry from a
 /// host-supplied list of `(value, label)` pairs. Hosts override
 /// [`Block::fields`] by subclassing to set their own option list
 /// (the registered default lands as an empty select — actionable
@@ -588,7 +588,7 @@ impl Block for ChoiceBlock {
     }
 }
 
-/// `table` — Wagtail's `TableBlock`. Editor enters TSV (one row per
+/// `table` — Editor enters TSV (one row per
 /// line, tab-separated cells); the public template renders a
 /// `<table>` with the first row as `<thead>`. Cells preserve as
 /// plain text. Pasting straight from a spreadsheet works because
@@ -638,7 +638,7 @@ impl Block for TableBlock {
     }
 }
 
-/// `float` — Wagtail's `FloatBlock`. Free-form floating-point input.
+/// `float` — Free-form floating-point input.
 /// Distinct from `IntegerBlock` (which uses `WidgetKind::Number` with
 /// `step="1"`) — this one accepts decimals.
 #[derive(Default)]
@@ -667,7 +667,7 @@ impl Block for FloatBlock {
     }
 }
 
-/// `time` — Wagtail's `TimeBlock`. ISO `HH:MM[:SS]` string.
+/// `time` — ISO `HH:MM[:SS]` string.
 #[derive(Default)]
 pub struct TimeBlock;
 
@@ -694,7 +694,7 @@ impl Block for TimeBlock {
     }
 }
 
-/// `multiple_choice` — Wagtail's `MultipleChoiceBlock`. Distinct from
+/// `multiple_choice` — Distinct from
 /// `ChoiceBlock` (single-pick `<select>`) — this one renders stacked
 /// checkboxes and stores a JSON-array string. Hosts register a
 /// subclassed variant with their own option list (default ships with
@@ -746,7 +746,7 @@ impl Block for MultipleChoiceBlock {
     }
 }
 
-/// `static` — Wagtail's `StaticBlock`. Marker block with no fields;
+/// `static` — Marker block with no fields;
 /// the public template emits whatever static HTML the host wants
 /// (divider, call-out, branded heading rule). Inserting one in a
 /// StreamField is the editor's signal "render the host's static
@@ -770,7 +770,7 @@ impl Block for StaticBlock {
     }
 }
 
-/// `raw_html` — Wagtail's `RawHTMLBlock`. Editor types HTML; the
+/// `raw_html` — Editor types HTML; the
 /// public template sanitises through the same ammonia pipeline as
 /// the Markdown widget (`crate::markdown::render`'s post-pass) so
 /// `<script>` / `<iframe>` / `on*` handlers are stripped.
@@ -826,7 +826,7 @@ impl Block for RawHtmlBlock {
     }
 }
 
-/// `page_chooser` — Wagtail's `PageChooserBlock`. Picks a single
+/// `page_chooser` — Picks a single
 /// `cms_page` row via the modal `PageChooser` widget; stores the page
 /// id as a stringified integer.
 ///
@@ -873,7 +873,7 @@ impl Block for PageChooserBlock {
     }
 }
 
-/// `snippet_chooser` — Wagtail's `SnippetChooserBlock`. Picks a
+/// `snippet_chooser` — Picks a
 /// `cms_snippet` row via the modal `SnippetChooser` widget. The
 /// stored value is the snippet id as a stringified integer.
 ///
@@ -911,7 +911,7 @@ impl Block for SnippetChooserBlock {
     }
 }
 
-/// `document_chooser` — Wagtail's `DocumentChooserBlock`. Picks a
+/// `document_chooser` — Picks a
 /// non-image `cms_media` row (e.g. PDF, archive) via the modal
 /// `DocumentChooser` widget. Stored value is the media id as a
 /// stringified integer.
@@ -1028,7 +1028,7 @@ impl Block for TypedTableRowBlock {
     }
 }
 
-/// `typed_table` — Wagtail's `TypedTableBlock`. Schema-driven typed
+/// `typed_table` — Schema-driven typed
 /// grid where each row's cells are individually-typed widgets (unlike
 /// `TableBlock` which is TSV-only).
 ///
@@ -1086,11 +1086,11 @@ impl Block for TypedTableBlock {
     }
 }
 
-/// `rich_text` — Wagtail's `RichTextBlock`. Editor surface for
+/// `rich_text` — Editor surface for
 /// hosts wiring a WYSIWYG (EasyMDE / TipTap / Draftail) via the
 /// `WidgetKind::RichText` widget's `data-widget-mode="richtext"`
 /// hook. Without a host enhancer the textarea ships with the
-/// existing #205 markdown toolbar — same editor as ParagraphBlock
+/// existing markdown toolbar — same editor as ParagraphBlock
 /// but stores HTML directly.
 ///
 /// Distinct from:
@@ -1151,7 +1151,7 @@ impl Block for RichTextBlock {
     }
 }
 
-/// `decimal` — Wagtail's `DecimalBlock`. Like FloatBlock but the
+/// `decimal` — Like FloatBlock but the
 /// default ships with a stable `step="any"` hint via the Float
 /// widget. Hosts that need bounded precision pass a custom
 /// `BlockFieldMeta` via the `with_meta` setter (chained at
@@ -1190,7 +1190,7 @@ impl Block for DecimalBlock {
     }
 }
 
-/// `regex` — Wagtail's `RegexBlock`. Text input with a pattern
+/// `regex` — Text input with a pattern
 /// validator. The default ships pattern-less (accepts anything);
 /// hosts subclass + override `fields()` to attach a regex via
 /// `BlockFieldMeta::default().pattern("^[A-Z]+$")`. The browser
@@ -1285,7 +1285,7 @@ mod raw_html_tests {
     use super::RawHtmlBlock;
     use crate::block::{Block, BlockRenderCtx};
 
-    /// The raw HTML block is on by default for every editor (#724), so its
+    /// The raw HTML block is on by default for every editor, so its
     /// render is what keeps an editor's markup from running script on the
     /// site: anything executable must be gone before the `| safe` template.
     #[test]

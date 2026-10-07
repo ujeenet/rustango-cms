@@ -1,4 +1,4 @@
-//! `Navigation` — tenant-managed named menus with nested items (#22).
+//! `Navigation` — tenant-managed named menus with nested items.
 //!
 //! Two tables:
 //! - `cms_menu` — one row per editor-curated menu (`main_nav`,
@@ -581,7 +581,7 @@ pub fn order_deepest_first(items: Vec<MenuItem>) -> Vec<MenuItem> {
 }
 
 /// Rewrite the page links in a resolved menu tree to a hostname-mapped
-/// site's public paths (#640). External URLs are left alone.
+/// site's public paths. External URLs are left alone.
 pub fn rebase_page_urls(items: &mut [ResolvedMenuItem], site_prefix: &str) {
     for item in items {
         if item.is_page {
@@ -923,7 +923,7 @@ mod menu_fn_tests {
         tera.render("t.html", &tera::Context::new())
     }
 
-    /// #639 — `menu(slug=…)` reads the menus the render installed.
+    /// `menu(slug=…)` reads the menus the render installed.
     #[test]
     fn menu_returns_the_installed_menu_or_null() {
         let item = ResolvedMenuItem {
@@ -957,7 +957,7 @@ mod menu_fn_tests {
         CURRENT_MENUS.with(|c| assert!(c.borrow().is_none()));
     }
 
-    /// #640 — page links move to the site's public path; external ones stay.
+    /// Page links move to the site's public path; external ones stay.
     #[test]
     fn rebase_rewrites_page_links_at_every_depth() {
         let item = |label: &str, url: &str, is_page: bool, children| ResolvedMenuItem {

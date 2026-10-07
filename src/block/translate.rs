@@ -1,6 +1,6 @@
 //! Recursive per-leaf translation walker for StreamField content.
 //!
-//! Wagtail-style StreamField bodies are `[{type, id, value}]` arrays
+//! StreamField bodies are `[{type, id, value}]` arrays
 //! where `value` is a field-name dict (or a bare scalar for a
 //! single-field block). Blocks can nest other streams (`Stream` /
 //! `Repeat` fields), to any depth. This module walks that tree two ways,
@@ -66,8 +66,8 @@ pub fn collect_translatable_leaves(
     collect_translatable_leaves_with(stream_field_name, canonical_stream, None)
 }
 
-/// [`collect_translatable_leaves`] with a page-builder dyn-block overlay
-/// (#567): UI-defined group/repeater/component blocks resolve through
+/// [`collect_translatable_leaves`] with a page-builder dyn-block overlay:
+/// UI-defined group/repeater/component blocks resolve through
 /// `dyn_set` before the inventory registry, so their text leaves are
 /// enumerated exactly like code-registered blocks.
 #[must_use]
@@ -159,7 +159,7 @@ pub fn apply_translatable_overrides(
 }
 
 /// [`apply_translatable_overrides`] with a page-builder dyn-block overlay
-/// (#567) so UI-defined blocks localize like code-registered ones.
+/// so UI-defined blocks localize like code-registered ones.
 #[must_use]
 pub fn apply_translatable_overrides_with(
     stream_field_name: &str,

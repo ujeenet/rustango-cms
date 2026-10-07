@@ -1,20 +1,20 @@
-//! Targeted page-cache invalidation hook (#78).
+//! Targeted page-cache invalidation hook.
 //!
-//! The public router (see [`crate::router`]) layers
+//! The public router (see [`crate::router()`]) layers
 //! [`rustango::cache_page::CachePageLayer`] in front of CMS page
 //! responses; that layer is TTL-based and emits the response under
 //! a key derived from `(method, path, host, vary-on)`. After an
 //! admin save the public response is stale until the TTL elapses.
 //!
 //! This module defines a [`PageCacheInvalidator`] trait that the
-//! host app can register on [`crate::admin::AdminState`]. When
+//! host app can register on the admin state (`crate::admin::AdminState`). When
 //! present, every admin handler that mutates a page URL fires the
 //! invalidator on the affected URLs. Hosts that don't register one
 //! keep the old TTL-only behavior — the trait is purely opt-in.
 //!
 //! Two built-in invalidators ship:
 //!
-//! - [`BoxedCacheInvalidator`] — calls [`rustango::cache::BoxedCache::delete`]
+//! - [`BoxedCacheInvalidator`] — calls [`Cache::delete`](rustango::cache::Cache::delete)
 //!   on the same key shape `CachePageLayer` writes. Use when the
 //!   admin handler holds an `Arc<BoxedCache>` to the same cache the
 //!   public layer is using.
@@ -68,7 +68,7 @@ pub trait PageCacheInvalidator: Send + Sync + 'static {
         self.invalidate_url(tenant_slug, url_path).await;
     }
 
-    /// Drop the cache entries for many page URLs at once (#428). The
+    /// Drop the cache entries for many page URLs at once. The
     /// default loops over [`Self::invalidate_url`] — preserving the
     /// per-URL behavior — but backends with a bulk-purge API
     /// (Cloudflare `files`, Azure CDN `contentPaths`) should override
@@ -83,7 +83,7 @@ pub trait PageCacheInvalidator: Send + Sync + 'static {
 }
 
 /// Supplies the OAuth2 bearer token for the cloud-CDN backends that
-/// authenticate against a Google / Azure management API (#428).
+/// authenticate against a Google / Azure management API.
 ///
 /// Both APIs take a short-lived (~1h) access token. Production
 /// deployments should implement this against their environment's
@@ -132,16 +132,16 @@ pub fn noop() -> Arc<dyn PageCacheInvalidator> {
 }
 
 /// Register an after-commit purge of `url_paths` for the enclosing
-/// [`rustango::sql::atomic`] block (#317). The purge fires **only if
+/// [`rustango::sql::atomic`] block. The purge fires **only if
 /// the transaction commits** — on rollback the queued callback is
 /// dropped and nothing is evicted, so a failed save can never knock a
 /// still-valid entry out of the public cache.
 ///
 /// `on_commit` callbacks are synchronous; the (async) purge is
-/// therefore driven on a detached [`tokio::spawn`] task, so the admin
+/// therefore driven on a detached `tokio::spawn` task, so the admin
 /// response isn't blocked on the purge round-trips.
 ///
-/// #432 — inside that task the purge goes through
+/// Inside that task the purge goes through
 /// [`crate::task_queue::purge_urls`]: when a background queue is
 /// configured it dispatches a **retriable** `CachePurgeJob`; otherwise
 /// it purges **inline** in list order (the original behavior).
@@ -168,7 +168,7 @@ pub fn invalidate_urls_on_commit(
 
 /// Built-in invalidator that drops keys directly from a
 /// [`BoxedCache`]. Use when the host wires the same cache instance
-/// into both [`CachePageLayer`] and the admin state. The key shape
+/// into both [`CachePageLayer`](rustango::cache_page::CachePageLayer) and the admin state. The key shape
 /// mirrors what [`rustango::cache_page`] writes.
 pub struct BoxedCacheInvalidator {
     cache: BoxedCache,

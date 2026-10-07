@@ -773,5 +773,5 @@ and falls back to the tenant default for an unknown or inactive code. `meta.loca
 echoes what was actually used, so a client can tell whether its code was honoured.
 
 The one exception is **`?locale=` on the flat `GET /api/v2/pages/` list**,
-which is an older *row filter* over the deprecated `locale_variant_of` column
-(#275) and has entirely different semantics. It is not the same parameter.
+which is an older *row filter* over the deprecated `locale_variant_of` column,
+and it has entirely different semantics. It is not the same parameter.

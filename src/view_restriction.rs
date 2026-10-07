@@ -1,17 +1,17 @@
 //! `PageViewRestriction` — gate published pages behind a password,
-//! a login requirement, or a group membership check (#76).
+//! a login requirement, or a group membership check.
 //!
 //! Restrictions inherit down the subtree: a restriction on `/members`
 //! covers every descendant unless a descendant declares its own
 //! restriction. The public renderer walks the ancestor chain at
 //! request time and applies the *nearest* restriction it finds.
 //!
-//! Four kinds (Wagtail parity + #members):
+//! Four kinds (including #members):
 //!   * `password` — anonymous visitor sees a prompt form, enters
 //!     the password, gets a signed cookie that skips the prompt on
 //!     subsequent visits.
 //!   * `login`    — anonymous visitor redirected to
-//!     /members/login?next=<url>. Any authenticated member/admin passes.
+//!     `/members/login?next=<url>`. Any authenticated member/admin passes.
 //!   * `groups`   — logged-in visitor must be a member of at least
 //!     one of the named roles (raw `role_id` match). Anonymous →
 //!     /members/login; logged-in but not in any allowed group → 403.
@@ -299,7 +299,7 @@ pub async fn effective_or_type_for_page(
 /// Resolve the page-type handler's declared restriction, if any.
 ///
 /// A lookup failure is an error, not "unrestricted": the caller denies
-/// on error (#757), where a silent `None` used to serve the page.
+/// on error, where a silent `None` used to serve the page.
 async fn type_restriction_for_page(
     pool: &rustango::sql::Pool,
     page: &crate::page::Page,
@@ -620,7 +620,7 @@ impl AccessContext {
     }
 }
 
-/// Narrow a page query to what an anonymous visitor may see (#644).
+/// Narrow a page query to what an anonymous visitor may see.
 ///
 /// For crawler-facing listings (feed, sitemap), which are cached and read
 /// without a session. The filter is in SQL so paging and counts stay
@@ -711,7 +711,7 @@ impl AccessContext {
 /// nothing is gated or the viewer is a superuser.
 ///
 /// When the restrictions can't be read the context hides every page from
-/// everyone but superusers (#757): a menu or search result must not list
+/// everyone but superusers: a menu or search result must not list
 /// a gated page's title and URL because the lookup failed.
 pub async fn access_context(
     pool: &rustango::sql::Pool,
@@ -804,7 +804,7 @@ fn deny_restriction(page_id: i64) -> PageViewRestriction {
 }
 
 /// [`effective_restrictions_for`] when the restrictions can't be read:
-/// every page counts as restricted (#757).
+/// every page counts as restricted.
 fn deny_every_page(
     pages: &[(i64, String)],
     e: &rustango::sql::ExecError,

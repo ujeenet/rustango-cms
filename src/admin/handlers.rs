@@ -44,7 +44,7 @@ fn messages_secret() -> &'static [u8] {
     })
 }
 
-/// #294 — sanitize WYSIWYG (RichText-widget) HTML server-side before it
+/// Sanitize WYSIWYG (RichText-widget) HTML server-side before it
 /// reaches a page-type handler's `save_extension`. The TipTap editor
 /// produces constrained HTML, but a bypassed client could POST anything,
 /// so we ammonia-clean every RichText-kind field value (looked up by the
@@ -163,7 +163,7 @@ fn redirect_named_with_message(
 }
 
 /// Like [`redirect_named_with_message`] but the message is a **parameterized**
-/// translation key (#528): the English source — with `{name}` placeholders — is
+/// translation key: the English source — with `{name}` placeholders — is
 /// the catalog key, localized + interpolated for the request locale before
 /// staging. Use instead of `&format!(…)` so the flash localizes. The framework
 /// substitutes placeholders into the source-string fallback too, so English
@@ -187,7 +187,7 @@ fn redirect_named_with_message_args(
     ))
 }
 
-/// Count-aware (#528/#1102) cousin of [`redirect_named_with_message_args`]:
+/// Count-aware cousin of [`redirect_named_with_message_args`]:
 /// `key` is a plural source key, the form is chosen for `n` in the request
 /// locale (CLDR rules) and `args` interpolated. Pass the count as an arg too
 /// (e.g. `("count", &n.to_string())`) so the chosen form's `{count}` fills in.
@@ -211,7 +211,7 @@ fn redirect_named_with_message_plural(
     ))
 }
 
-/// Plural (#528/#1102) cousin of [`redirect_named_with_params_and_message`] —
+/// Plural cousin of [`redirect_named_with_params_and_message`] —
 /// for routes with path params AND a count-aware message.
 fn redirect_named_with_params_and_message_plural(
     name: &'static str,
@@ -238,11 +238,11 @@ fn redirect_named_with_params_and_message_plural(
     ))
 }
 
-/// #259 / #285 — friendly 401 response for handlers that bail when
+/// Friendly 401 response for handlers that bail when
 /// `SessionUser` resolves to `None`. Two content-types based on
 /// `Accept`:
 ///
-/// - **`application/json`** (#285) — JSON `{ error: "session_expired",
+/// - **`application/json`** — JSON `{ error: "session_expired",
 ///   message, login_url }`. XHR / fetch clients (notably the bulk
 ///   media uploader) used to inline-dump the HTML page into a toast,
 ///   which read as garbage. JSON lets the client render a clean
@@ -250,7 +250,7 @@ fn redirect_named_with_params_and_message_plural(
 /// - **Anything else** — the HTML explainer page below, useful for
 ///   `<form>` POSTs that hit Submit after the cookie went stale.
 ///
-/// The middleware-level `with_login_required` layer (#258) already
+/// The middleware-level `with_login_required` layer already
 /// 302s anonymous GETs to /login. A POST hitting this guard means
 /// the cookie was DECODED as anonymous (expired / wrong tenant /
 /// stale), so a hard 401 with an explanation lands better than a
@@ -391,7 +391,7 @@ pub(crate) fn redirect_named_with_params_and_message(
     ))
 }
 
-/// Parameterized-key (#528) cousin of [`redirect_named_with_params_and_message`]
+/// Parameterized-key cousin of [`redirect_named_with_params_and_message`]
 /// for routes that take path params AND a localized message with `{name}`
 /// interpolation.
 pub(crate) fn redirect_named_with_params_and_message_args(
@@ -418,8 +418,8 @@ pub(crate) fn redirect_named_with_params_and_message_args(
     ))
 }
 
-/// #318 — resolve the post-save redirect from the three-action save
-/// footer (Django/Wagtail's `ModelForm` `_save` / `_continue` /
+/// Resolve the post-save redirect from the three-action save
+/// footer (`_save` / `_continue` /
 /// `_addanother`). Shared by `page_new_submit` and `page_edit_submit`
 /// so both honour the same button the editor pressed:
 ///
@@ -485,9 +485,8 @@ pub(crate) fn user_email(u: &rustango::tenancy::auth::User) -> String {
 
 /// Add the chrome variables every section template reads from
 /// `_base.html`: which sidebar tab is active, the brand-display
-/// name, the current tenant slug, and — when a [`SessionUser`] is
-/// in scope — the sidebar gating set (#33) + per-user timezone
-/// (#13).
+/// name, the current tenant slug, and — when a [`SessionUser`](rustango::extractors::SessionUser) is
+/// in scope — the sidebar gating set + per-user timezone.
 ///
 /// Pass `session_user.as_ref()` from the handler signature; pass
 /// `None` for anon flows (login / password-reset). When `None`,
@@ -517,7 +516,7 @@ pub async fn add_chrome(
     add_branding_urls(ctx, tenant).await;
 }
 
-/// #199 — inject the per-tenant admin logo + favicon URLs from the `branding`
+/// Inject the per-tenant admin logo + favicon URLs from the `branding`
 /// site setting into a template context. Missing/empty rows leave the ctx slots
 /// unset, so templates fall back to the brand-name text + default icon. Shared
 /// by the authenticated chrome ([`add_chrome`]) and the pre-auth login /
@@ -651,7 +650,7 @@ fn add_chrome_sync(ctx: &mut Context, tenant: &Tenant, active_tab: &str) {
         })
         .collect();
     ctx.insert("plugin_admin_menu_items", &plugin_menu_items);
-    // #127 — help-menu entries (Wagtail parity C7). Rendered in a
+    // #127 — help-menu entries. Rendered in a
     // dedicated "Help" sidebar section above Plugins.
     let help_menu_items: Vec<serde_json::Value> = crate::hooks::help_menu_items()
         .into_iter()
@@ -665,8 +664,7 @@ fn add_chrome_sync(ctx: &mut Context, tenant: &Tenant, active_tab: &str) {
         })
         .collect();
     ctx.insert("help_menu_items", &help_menu_items);
-    // #422 — plugin-injected global admin CSS / JS (Wagtail
-    // insert_global_admin_css/js). `_base.html` emits each blob inside
+    // #422 — plugin-injected global admin CSS / JS. `_base.html` emits each blob inside
     // a <style> / <script> tag.
     ctx.insert("admin_css_blobs", &crate::hooks::admin_css());
     ctx.insert("admin_js_blobs", &crate::hooks::admin_js());
@@ -685,11 +683,11 @@ fn add_chrome_sync(ctx: &mut Context, tenant: &Tenant, active_tab: &str) {
 /// Per-request chrome extension for authenticated requests. Fills in
 /// the bits `add_chrome` can't compute without a user in scope:
 ///
-/// - `user_timezone` from `User.data.timezone` (#13 V2). Empty when
+/// - `user_timezone` from `User.data.timezone`. Empty when
 ///   unset so the no-flash JS falls back to the browser TZ.
 /// - `allowed_resources`: the union of role codenames the user
-///   inherits, used to gate sidebar items + admin-side CRUD chips
-///   (#33). Superusers skip the gating set entirely (the sidebar
+///   inherits, used to gate sidebar items + admin-side CRUD chips.
+///   Superusers skip the gating set entirely (the sidebar
 ///   template checks `user_is_superuser` first).
 /// - `user_is_superuser`: short-circuit flag exposed to templates so
 ///   they don't iterate the codename set when access is unconditional.
@@ -759,7 +757,7 @@ pub(crate) async fn add_user_chrome(
 
 /// GET /cms-admin/media/collections — manage every collection in the
 /// tenant. Tree view with depth-indented names, per-row rename /
-/// delete + a "new" form per parent (#5 V2).
+/// delete + a "new" form per parent.
 pub async fn collections_list(
     State(state): State<super::AdminState>,
     tenant: Tenant,
@@ -1317,7 +1315,7 @@ pub async fn category_edit_form(
 }
 
 /// POST /cms-admin/taxonomies/{slug}/categories/{id}/translate?locale=<code>
-/// — save a category's per-locale name (#862). An empty box deletes the
+/// — save a category's per-locale name. An empty box deletes the
 /// row, so the original shows again.
 pub async fn category_translate_submit(
     State(_state): State<super::AdminState>,
@@ -1598,7 +1596,7 @@ pub async fn page_type_build_form(
 }
 
 /// GET /cms-admin/page-types/{id}/translate?locale=<code> — the labels of
-/// the type's choice options in another language (#863), side by side
+/// the type's choice options in another language, side by side
 /// with the originals like every other translation screen.
 pub async fn page_type_translate_form(
     State(state): State<super::AdminState>,
@@ -1801,7 +1799,7 @@ pub async fn page_type_publish_submit(
 }
 
 /// Persist a page's page-builder body values from a posted form, when
-/// its page type has a published schema (#564). Additive to any code
+/// its page type has a published schema. Additive to any code
 /// handler's `save_extension` — runs regardless of whether a handler
 /// exists.
 ///
@@ -1826,7 +1824,7 @@ pub(crate) async fn save_page_builder_values(
 }
 
 /// GET-side: build the editor HTML + rules island + upgrade flag for a
-/// page whose type has a published schema (#564). Returns `None` when
+/// page whose type has a published schema. Returns `None` when
 /// the type has no published schema.
 async fn page_builder_editor_ctx(
     tenant: &Tenant,
@@ -2210,7 +2208,7 @@ pub async fn component_delete(
     )
 }
 
-// ---- #566 UI-created page types (Strapi-style) --------------------------
+// ---- #566 UI-created page types -----------------------------------------
 
 /// GET /cms-admin/page-types/new — the create-a-type form.
 pub async fn page_type_new_form(
@@ -2230,8 +2228,8 @@ pub async fn page_type_new_form(
     render_with_csrf(&state, &headers, "rcms_admin/page_type_form.html", &mut ctx)
 }
 
-/// The active workflows, by name, for the page-type form's Workflow field
-/// (#843). A failed lookup leaves only "publish directly".
+/// The active workflows, by name, for the page-type form's Workflow field.
+/// A failed lookup leaves only "publish directly".
 async fn insert_workflow_choices(ctx: &mut Context, pool: &rustango::sql::Pool) {
     let names: Vec<String> = crate::workflow::Workflow::objects()
         .where_(crate::workflow::Workflow::active.eq(true))
@@ -2270,7 +2268,7 @@ async fn ui_page_type(
         .filter(|t| crate::page_type::find_handler(&t.type_name).is_none()))
 }
 
-/// GET /cms-admin/page-types/{id}/edit — an admin-made type's settings (#843).
+/// GET /cms-admin/page-types/{id}/edit — an admin-made type's settings.
 pub async fn page_type_edit_form(
     State(state): State<super::AdminState>,
     tenant: Tenant,
@@ -2497,7 +2495,7 @@ fn translation_canonical_html(widget_tag: &str, canonical: &str) -> String {
     }
 }
 
-/// Translation-surface groups for a page's builder body (#567): the
+/// Translation-surface groups for a page's builder body: the
 /// canonical text leaves (fixed fields, group members, zone stream
 /// blocks) grouped like the StreamField leaf rows, each prefilled with
 /// its existing per-locale override. Returns `[]` when the type has no
@@ -2615,7 +2613,7 @@ pub async fn media_bulk_move_collection(
 }
 
 /// GET /cms-admin/media/collections/{id}/permissions — per-collection
-/// permission editor (#19). Same role × action grid shape as the
+/// permission editor. Same role × action grid shape as the
 /// page permissions tab, just retargeted at `cms_collection_permission`.
 pub async fn collection_permissions_form(
     State(state): State<super::AdminState>,
@@ -2751,7 +2749,7 @@ pub struct CollectionPrivacyForm {
 
 /// POST /cms-admin/media/collections/{id}/privacy — upsert the view
 /// restriction for a collection. `kind=none` deletes the row.
-/// Mirrors the page-privacy submit handler (#76) exactly.
+/// Mirrors the page-privacy submit handler exactly.
 pub async fn collection_privacy_submit(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
@@ -3000,7 +2998,7 @@ pub async fn page_permissions_submit(
 
 /// Resolve every [`TabSpec`](crate::page_type::TabSpec) variant
 /// into the flat shape page_form.html iterates: `{name, label, icon,
-/// badge, html}` (#20). Failures on `Template` / `Widgets` rendering
+/// badge, html}`. Failures on `Template` / `Widgets` rendering
 /// fall back to an inline error banner instead of crashing the page
 /// editor — the author sees the Tera message + can fix the template.
 fn render_extra_tabs(
@@ -3047,7 +3045,7 @@ fn render_extra_tabs(
                         })
                 }
                 TabBody::Group { heading, help, layout, widgets } => {
-                    // Wagtail-parity MultiFieldPanel / FieldRowPanel.
+                    // Field group panel (column or row layout).
                     // Wrap the same _widget_group output in a
                     // <fieldset> with a heading + (optional) help
                     // paragraph + layout class.
@@ -3104,7 +3102,7 @@ fn render_extra_tabs(
         .collect()
 }
 
-/// GET /cms-admin/x/{slug} — dispatcher for #23. Looks up the
+/// GET /cms-admin/x/{slug} — custom admin page dispatcher. Looks up the
 /// registered [`AdminPageHandler`](super::admin_page::AdminPageHandler)
 /// matching `slug` and forwards to its `render`. Unknown slugs map
 /// to 404.
@@ -3191,7 +3189,7 @@ pub struct ListQuery {
     /// Ignored when `q` is set — search always spans the full tree.
     #[serde(default)]
     pub parent: Option<i64>,
-    /// Full-tree search query (#3). Case-insensitive substring match
+    /// Full-tree search query. Case-insensitive substring match
     /// across title, slug, and url_path. Empty string skips the
     /// search path and shows the current parent's children.
     #[serde(default)]
@@ -3209,9 +3207,9 @@ pub struct ListQuery {
 /// current parent (root by default). Editors drill into a subtree
 /// via the per-row "View children" action; the breadcrumb trail
 /// at the top lets them navigate back up. Replaces the previous
-/// indented full-tree view (#2).
+/// indented full-tree view.
 ///
-/// Per-page permissions (#18 phase 3): when the request carries a
+/// Per-page permissions: when the request carries a
 /// session cookie, the resolver filters out rows the user can't
 /// `view`. Superusers + anonymous / no-session contexts (sqlite
 /// dev) see every row.
@@ -3593,7 +3591,7 @@ pub async fn page_list(
 /// Walks the list once in tree order (the list is already sorted by
 /// `path` + `sort_order`), so each parent's URL is computed before
 /// its children. Root pages with empty slug map to `/`.
-/// Reassemble inline-panel rows from the posted form map (#117).
+/// Reassemble inline-panel rows from the posted form map.
 ///
 /// Form keys are shaped `inline__<panel>__<row_idx>__<field>`. The
 /// extractor iterates the spec's fields (so unknown / extraneous
@@ -3806,7 +3804,7 @@ pub async fn page_new_form(
     let review_required = !session_user.as_ref().is_some_and(|u| u.is_superuser)
         && crate::workflow::review_workflow_for_type(tenant.pool(), type_id).await?.is_some();
     ctx.insert("review_required", &review_required);
-    // Custom tabs (Wagtail-style) — only the existing-page editor
+    // Custom tabs — only the existing-page editor
     // calls the handler for them. New-page mode shows the built-in
     // tabs only.
     ctx.insert("extra_tabs", &Vec::<crate::page_type::TabSpec>::new());
@@ -3910,7 +3908,7 @@ async fn front_page_taken(pool: &rustango::sql::Pool) -> Result<bool, AdminError
     Ok(n > 0)
 }
 
-/// The page editor's Categories field (#842). A failed lookup leaves the
+/// The page editor's Categories field. A failed lookup leaves the
 /// field out rather than failing the form.
 async fn insert_category_choices(ctx: &mut tera::Context, pool: &rustango::sql::Pool, page_id: Option<i64>) {
     let (groups, checked) = match crate::category::assign::editor_groups(pool, page_id).await {
@@ -4275,8 +4273,7 @@ pub async fn page_edit_form(
             .last()
             .map(|a| serde_json::json!({ "id": a.id.get().copied(), "title": a.title })),
     );
-    // #107 — plugin-contributed kebab entries (Wagtail's
-    // `register_page_action_menu_item`). Server-side substitutes the
+    // #107 — plugin-contributed kebab entries. Server-side substitutes the
     // page id into each entry's `href_template`.
     ctx.insert(
         "plugin_page_action_menu_items",
@@ -5089,8 +5086,8 @@ pub async fn page_edit_form(
 }
 
 /// POST /cms-admin/pages/{id}/edit — apply edits.
-/// POST /cms-admin/pages/{id}/autosave — silent revision capture
-/// for #147 (Wagtail parity D5). Takes the same form payload as
+/// POST /cms-admin/pages/{id}/autosave — silent revision capture.
+/// Takes the same form payload as
 /// `page_edit_submit` but:
 ///   - Skips status-promotion logic (draft → published doesn't fire).
 ///   - Captures a revision row tagged `autosave: true` so the
@@ -5289,10 +5286,10 @@ pub(crate) enum PageEditRefusal {
     WorkflowReview { task_name: String },
     /// Another editor holds the edit lock.
     LockedBy { holder: String },
-    /// Archived pages can't be unpublished in place (#556).
+    /// Archived pages can't be unpublished in place.
     ArchivedUnpublish,
     /// The save would put the page live and the actor lacks the publish
-    /// right (#761).
+    /// right.
     PublishDenied,
     /// The save would put the page live, but pages of its type go live
     /// through the named review workflow.
@@ -6436,11 +6433,11 @@ pub async fn page_move_submit(
 }
 
 /// POST /cms-admin/pages/{id}/clone — duplicate the source page as a
-/// draft sibling (#29). The copy carries everything the page stores —
+/// draft sibling. The copy carries everything the page stores —
 /// core fields (SEO, OG/Twitter, theme, template override), tags, the
 /// extension row, inline panels and the page-builder body — because it
 /// is saved through the same pipeline as an edit, from the source's
-/// [`crate::page_form::prefill`] (#742). The new row:
+/// [`crate::page_form::prefill`]. The new row:
 ///
 /// - Lives under the same parent as the source.
 /// - Title gets a " (copy)" suffix.
@@ -6451,7 +6448,7 @@ pub async fn page_move_submit(
 /// - Locale-variant pointer cleared (variants stay independent of
 ///   any single source).
 ///
-/// Subtree clone (source + all descendants) is a V2 follow-up.
+/// Subtree clone (source + all descendants) is not supported yet.
 pub async fn page_clone_submit(
     State(state): State<super::AdminState>,
     tenant: Tenant,
@@ -6559,7 +6556,7 @@ pub async fn page_clone_submit(
     )
 }
 
-/// Form payload for `POST /cms-admin/pages/{id}/privacy` (#76).
+/// Form payload for `POST /cms-admin/pages/{id}/privacy`.
 /// `kind` is one of `"none"`, `"login"`, `"groups"`, `"password"`.
 /// `password` is the cleartext entered when `kind=password` (hashed
 /// + discarded server-side). `group_ids` is the comma-separated list
@@ -6854,7 +6851,7 @@ pub async fn comment_reopen_submit(
 }
 
 /// POST /cms-admin/pages/{id}/alias — create a live alias of this
-/// page as a sibling (#75). The alias is a real tree row at a
+/// page as a sibling. The alias is a real tree row at a
 /// distinct URL but its content fields proxy to the source. Edits
 /// to the source propagate instantly; edits to the alias redirect
 /// the editor to the source.
@@ -6865,7 +6862,7 @@ pub async fn comment_reopen_submit(
 ///
 /// Localization uses the `cms_translation` per-field override table
 /// (see [`crate::translation`]); the legacy structural-variant flow
-/// was removed in #275.
+/// was removed.
 pub async fn page_alias_submit(
     State(state): State<super::AdminState>,
     tenant: Tenant,
@@ -6975,7 +6972,7 @@ pub async fn page_alias_submit(
     )
 }
 
-/// #438 — canonical fields seeded into `cms_translation` by the
+/// Canonical fields seeded into `cms_translation` by the
 /// copy-to-locale bulk action: the page's `title`, `seo_title`, and
 /// `seo_description`, skipping empties. The source text gives
 /// translators a starting point.
@@ -7003,7 +7000,7 @@ fn copy_translatable_fields(
 }
 
 /// POST /cms-admin/pages/bulk — multi-select dispatcher for the
-/// page list (#65). Body shape (urlencoded):
+/// page list. Body shape (urlencoded):
 /// `action=<verb>&ids=<id>&ids=<id>[&new_parent=<id>]`.
 ///
 /// Verbs:
@@ -7585,8 +7582,8 @@ pub async fn page_bulk_submit(
     }
 }
 
-/// POST /cms-admin/pages/{id}/unlock — force-release the editor lock
-/// (#72). Anyone with Edit permission on this page can call it. The
+/// POST /cms-admin/pages/{id}/unlock — force-release the editor lock.
+/// Anyone with Edit permission on this page can call it. The
 /// row is deleted and an audit-log entry is written so the action is
 /// reversible to inspect.
 /// POST /cms-admin/pages/{id}/lock-release — the editor was left: give
@@ -7646,7 +7643,7 @@ pub async fn page_unlock_submit(
 }
 
 /// POST /cms-admin/pages/{id}/subscribe — opt the current user in
-/// to publish notifications for this page (#115, Wagtail parity B3).
+/// to publish notifications for this page.
 /// Idempotent — re-subscribing returns success without inserting a
 /// duplicate row.
 pub async fn page_subscribe_submit(
@@ -7723,7 +7720,7 @@ async fn read_only_under_review(
 }
 
 /// POST /cms-admin/pages/{id}/lock-heartbeat — refresh the TTL on
-/// the caller's lock (#72). Called every
+/// the caller's lock. Called every
 /// `lock::HEARTBEAT_INTERVAL_SECS` from the page-editor JS while the
 /// tab stays open. Returns:
 ///   * 204 — heartbeat accepted (lock refreshed, or first claim).
@@ -7786,7 +7783,7 @@ pub async fn page_lock_heartbeat(
 }
 
 /// GET /cms-admin/pages/{id}/sessions — JSON list of OTHER active
-/// editors / viewers on this page (#106). Returns
+/// editors / viewers on this page. Returns
 /// `[{user_id, username, last_seen_at, is_editing}, ...]`.
 pub async fn page_sessions_json(
     State(_state): State<super::AdminState>,
@@ -7971,10 +7968,10 @@ fn stamp_no_cache(mut response: Response) -> Response {
     response
 }
 
-/// #208 — inject the axe-core preview-glue script into the
+/// Inject the axe-core preview-glue script into the
 /// rendered preview HTML so the editor can surface client-side
-/// accessibility findings alongside the server-side heuristics
-/// (#116). Reads the response body, locates the closing `</body>`
+/// accessibility findings alongside the server-side heuristics.
+/// Reads the response body, locates the closing `</body>`
 /// tag (case-insensitive), and splices two `<script src="…">`
 /// tags before it: axe-core itself, then the small glue script
 /// that calls `axe.run()` + `postMessage`s the results back to
@@ -8200,7 +8197,7 @@ pub async fn page_preview(
     Ok(stamp_no_cache(inject_axe_into_preview(response).await))
 }
 
-/// GET /cms-admin/pages/{id}/preview-token — #430. Mint a short-lived
+/// GET /cms-admin/pages/{id}/preview-token — mint a short-lived
 /// signed preview token so a decoupled / headless frontend can fetch
 /// this page's DRAFT via `/api/v2/pages/{id}/?preview_token=…`. Returns
 /// JSON `{token, expires_at, api_path}`. Auth is enforced by the admin
@@ -8236,8 +8233,7 @@ pub async fn page_preview_token(
 
 /// POST /cms-admin/pages/{id}/preview — same as the GET variant, but
 /// renders a *virtual* page assembled from the posted form values so
-/// the editor can preview unsaved changes (Wagtail's
-/// "virtual page data" pattern). Nothing is persisted. Anti-cache
+/// the editor can preview unsaved changes. Nothing is persisted. Anti-cache
 /// headers + same-origin frame policy mirror the GET handler.
 pub async fn page_preview_draft(
     State(state): State<super::AdminState>,
@@ -8994,7 +8990,7 @@ pub async fn snippet_edit_form(
     render_with_csrf(&state, &headers, template_path, &mut ctx)
 }
 
-/// POST `/cms-admin/library/{id}/translate?locale=<code>` (#409) —
+/// POST `/cms-admin/library/{id}/translate?locale=<code>` —
 /// upsert per-field snippet translations for a non-default locale.
 /// Mirrors [`page_translate_submit`]: `tr__<field>` keys edit existing
 /// fields, `new_field_path` + `new_field_value` adds one; an empty
@@ -9416,7 +9412,7 @@ fn parse_date_ceil(raw: Option<&str>) -> Option<chrono::DateTime<chrono::Utc>> {
 
 /// Query string for the media + documents list views. All filters
 /// optional; URL state persists so editors can bookmark filtered
-/// views (#7).
+/// views.
 #[derive(Debug, Deserialize)]
 pub struct MediaListQuery {
     /// 1-based page number. Out-of-range values clamp to the last page.
@@ -9788,7 +9784,7 @@ pub async fn media_replace_submit(
 
 /// GET /cms-admin/media/{id}/edit — image detail page with the
 /// focal-point picker. Image-only; other kinds return 404.
-/// Locate every page that references `media_id` (#100). Returns
+/// Locate every page that references `media_id`. Returns
 /// `(page_id, page_title, url_path, status)` rows. Scan reuses the
 /// `harvest_media_ids` helper that powers `media_unused_report`,
 /// inverted so we collect per-page hits instead of building a
@@ -9895,7 +9891,7 @@ pub async fn media_edit_form(
     render_with_csrf(&state, &headers, "rcms_admin/media_edit.html", &mut ctx)
 }
 
-/// Form payload for the focal-point editor (#4). All four fields
+/// Form payload for the focal-point editor. All four fields
 /// arrive as strings from the HTML form; we parse + validate
 /// server-side. A submission with empty x/y clears the focal point.
 #[derive(Debug, Deserialize)]
@@ -9981,7 +9977,7 @@ pub async fn media_edit_submit(
 }
 
 /// Recursively scan a JSON value for any string that contains
-/// `needle` (already lowercased). Used by #204 admin search to
+/// `needle` (already lowercased). Used by admin search to
 /// broaden recall into page-type extension fields without listing
 /// every key on the handler trait.
 fn json_contains_needle(value: &serde_json::Value, needle: &str) -> bool {
@@ -10065,7 +10061,7 @@ fn harvest_media_ids(value: &serde_json::Value, out: &mut std::collections::BTre
 }
 
 /// GET /cms-admin/media/unused — list `cms_media` rows that no page
-/// references (#8). Builds a reverse index by walking every page's
+/// references. Builds a reverse index by walking every page's
 /// extension JSON for `media_id` keys, then diffs against the full
 /// media table. Used by editors to garbage-collect stale uploads.
 pub async fn media_unused_report(
@@ -10456,8 +10452,8 @@ pub struct UploadFormQuery {
 /// the bytes, drop them through the tenant `Storage` backend, and
 /// stamp a `cms_media` row.
 /// POST /cms-admin/media/upload-staged — write bytes to scratch
-/// storage + return JSON `{id, filename, mime, size}` (#142, Wagtail
-/// parity D9). Returned `id` is the [`crate::uploaded_file::UploadedFile`]
+/// storage + return JSON `{id, filename, mime, size}`.
+/// Returned `id` is the [`crate::uploaded_file::UploadedFile`]
 /// row to commit / cancel later.
 ///
 /// Coexists with the existing single-step `media_upload_submit` — that
@@ -10595,7 +10591,7 @@ pub struct StagedCommitItem {
     pub collection_id: Option<i64>,
 }
 
-/// Body of `POST /cms-admin/media/upload-staged/commit` (#188). The
+/// Body of `POST /cms-admin/media/upload-staged/commit`. The
 /// editor uploaded N files into scratch storage; now this payload
 /// names each scratch row + its editorial metadata in one
 /// transaction-equivalent call.
@@ -10605,7 +10601,7 @@ pub struct StagedCommitPayload {
 }
 
 /// POST /cms-admin/media/upload-staged/commit — promote staged rows
-/// to `cms_media` with per-file metadata (#188). Each item:
+/// to `cms_media` with per-file metadata. Each item:
 ///
 /// 1. Loads the scratch row.
 /// 2. Re-reads bytes from the scratch path; EXIF-strips images.
@@ -10776,7 +10772,7 @@ pub async fn media_upload_staged_cancel(
     Ok((axum::http::StatusCode::NO_CONTENT, "").into_response())
 }
 
-/// Refuse a file a browser would run as a page (#724): HTML, XHTML,
+/// Refuse a file a browser would run as a page: HTML, XHTML,
 /// JavaScript and XML (which can carry script through XSLT or an XHTML
 /// namespace). Serving neutralises every type already; this keeps such
 /// files out of the library in the first place. SVG stays allowed — it is
@@ -11075,7 +11071,7 @@ fn sanitize_filename(raw: &str) -> String {
 // =====================================================================
 
 /// GET /cms-admin/locales — list every locale.
-/// GET /cms-admin/model/{slug} — #420. Generic read-only index for a
+/// GET /cms-admin/model/{slug} — generic read-only index for a
 /// model registered via `register_model_admin!`: columns come from the
 /// model's `admin(list_display = …)`, rows from its type-erased
 /// list-rows thunk, all inside the CMS admin chrome. 404s an unknown
@@ -11118,13 +11114,13 @@ pub async fn model_admin_list(
     )
 }
 
-/// #439 — `?format=csv` selector for [`report_view`].
+/// `?format=csv` selector for [`report_view`].
 #[derive(serde::Deserialize, Default)]
 pub struct ReportQuery {
     pub format: Option<String>,
 }
 
-/// #439 — render any registered report through the shared chrome'd
+/// Render any registered report through the shared chrome'd
 /// table, or export it as CSV with `?format=csv`. `active_tab` is
 /// `report:<slug>` so `_base.html` highlights the matching sidebar link.
 pub async fn report_view(
@@ -11281,8 +11277,8 @@ pub(crate) async fn forms_list_rows(
     Ok(rows)
 }
 
-/// GET `/cms-admin/forms/{id}/build` — the visual form builder editor
-/// (FB-04 / #537). Loads the form snippet's schema JSON into the page; the
+/// GET `/cms-admin/forms/{id}/build` — the visual form builder editor.
+/// Loads the form snippet's schema JSON into the page; the
 /// `form_builder.js` engine renders the editor from it.
 pub async fn form_build_form(
     State(state): State<super::AdminState>,
@@ -11394,7 +11390,7 @@ pub struct FormBuildSubmit {
     pub schema: String,
 }
 
-/// Create-a-page-type submit (#566). `type_name` is slugified server-side.
+/// Create-a-page-type submit. `type_name` is slugified server-side.
 #[derive(Debug, Deserialize)]
 pub struct FormPageTypeCreate {
     #[serde(default)]
@@ -11410,12 +11406,12 @@ pub struct FormPageTypeCreate {
     /// its handler on every boot, so an admin edit would silently revert.
     #[serde(default)]
     pub view_mode: String,
-    /// Workflow name, or empty to publish directly (#843).
+    /// Workflow name, or empty to publish directly.
     #[serde(default)]
     pub workflow: String,
 }
 
-/// Component builder submit (#563): builder `schema` (a `{nodes:[…]}` blob)
+/// Component builder submit: builder `schema` (a `{nodes:[…]}` blob)
 /// plus the component metadata fields.
 #[derive(Debug, Deserialize)]
 pub struct FormComponentSubmit {
@@ -11511,7 +11507,7 @@ fn render_form_preview(id: i64, form: &crate::forms::schema::Form) -> Response {
     )
 }
 
-/// the snippet's `data` column + capture a revision (FB-04 / #537).
+/// the snippet's `data` column + capture a revision.
 pub async fn form_build_submit(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
@@ -11571,8 +11567,7 @@ pub async fn form_build_submit(
 }
 
 /// POST `/cms-admin/forms/{id}/publish` — publish the submitted schema: it
-/// becomes the live (public) form + the draft, and a revision is captured
-/// (FB-15).
+/// becomes the live (public) form + the draft, and a revision is captured.
 pub async fn form_publish_submit(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
@@ -11611,7 +11606,7 @@ pub async fn form_publish_submit(
     )
 }
 
-/// Shared loader for the submissions views (#545 / FB-12): the form
+/// Shared loader for the submissions views: the form
 /// snippet, its parsed schema's value-columns, the entries, and a
 /// source-page-id → url_path map for provenance links.
 async fn load_form_submissions(
@@ -11688,7 +11683,7 @@ fn submission_cell(data: &serde_json::Value, key: &str) -> String {
 }
 
 /// GET `/cms-admin/forms/{id}/submissions` — the per-form submission
-/// history with a Source-page column (#545 / FB-12).
+/// history with a Source-page column.
 pub async fn form_submissions_list(
     State(state): State<super::AdminState>,
     tenant: Tenant,
@@ -11773,7 +11768,7 @@ pub async fn form_submissions_list(
     )
 }
 
-/// GET `/cms-admin/forms/{id}/submissions/export.csv` (#545 / FB-12).
+/// GET `/cms-admin/forms/{id}/submissions/export.csv`.
 pub async fn form_submissions_csv(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
@@ -11857,9 +11852,9 @@ pub struct SetLangQuery {
 
 /// POST `/cms-admin/set-language` (`lang=<code>`) — persist the sticky
 /// admin-UI language cookie and the user's durable preference, then
-/// redirect back to the Referer (#525). POST so a cross-site link can't
+/// redirect back to the Referer. POST so a cross-site link can't
 /// rewrite a signed-in user's preference: it goes through the CSRF check
-/// like every other admin write (#738).
+/// like every other admin write.
 pub async fn admin_set_language(
     tenant: Tenant,
     headers: HeaderMap,
@@ -12861,7 +12856,7 @@ pub async fn workflow_delete_submit(
 pub struct WorkflowTaskForm {
     pub name: String,
     pub role_id: i64,
-    /// #191 — task kind discriminator. Defaults to `group_approval`
+    /// Task kind discriminator. Defaults to `group_approval`
     /// when the form input is missing or empty so the existing
     /// human-approval flow stays the default behavior.
     #[serde(default)]
@@ -12968,14 +12963,14 @@ pub async fn workflow_task_delete(
 pub struct WorkflowDecisionForm {
     #[serde(default)]
     pub comment: String,
-    /// The step the reviewer was looking at (#707). A decision posted
+    /// The step the reviewer was looking at. A decision posted
     /// for a step that is no longer current is refused, not applied to
     /// whichever step is current now.
     #[serde(default)]
     pub task_id: Option<i64>,
 }
 
-/// #707 — the decision the reviewer posted is for a step that is no
+/// The decision the reviewer posted is for a step that is no
 /// longer the current one, or another request decided it first.
 fn step_already_decided(page_id: i64, headers: &HeaderMap) -> Result<Response, AdminError> {
     redirect_named_with_params_and_message(
@@ -13135,7 +13130,7 @@ pub async fn page_workflow_submit(
 
 /// Recipient selector for [`notify_workflow`].
 enum WorkflowRecipients {
-    /// Members of a single role (Wagtail reviewers on the active task).
+    /// Members of a single role (reviewers on the active task).
     Role(i64),
     /// A single user — used to notify the original submitter on
     /// approve-finish / reject / cancel.
@@ -13907,8 +13902,8 @@ pub struct HistoryDiffQuery {
     pub all: Option<String>,
 }
 
-/// GET /cms-admin/pages/{id}/history/diff?a=<rev_id>&b=<rev_id>
-/// (#74). Side-by-side comparison of two revisions on the same
+/// GET /cms-admin/pages/{id}/history/diff?a=<rev_id>&b=<rev_id>.
+/// Side-by-side comparison of two revisions on the same
 /// page. v1 surfaces a flat field-level diff; rich-text +
 /// StreamField-aware diff is a follow-up.
 pub async fn history_diff(
@@ -14283,7 +14278,7 @@ pub async fn site_settings_list(
     let by_scope: std::collections::HashMap<&str, &crate::site_setting::SiteSetting> =
         rows.iter().map(|r| (r.scope.as_str(), r)).collect();
     // #406 — registered typed schemas come first and are always listed
-    // (configured or not, Wagtail "settings menu" parity); then any
+    // (configured or not); then any
     // ad-hoc free-form JSON scopes that aren't backed by a schema.
     let mut view: Vec<serde_json::Value> = Vec::new();
     for schema in crate::site_setting::registered_schemas() {
@@ -14506,7 +14501,7 @@ pub async fn site_setting_delete_submit(
 // Locked-pages report (#109)
 // =====================================================================
 
-// ----- #143 — search promotions report (Wagtail parity D6) ---------
+// ----- #143 — search promotions report ---------
 
 /// GET /cms-admin/reports/search — top queries by hit count with
 /// counts of pinned promotions per query.
@@ -14654,10 +14649,10 @@ pub async fn search_promotion_edit_submit(
     )
 }
 
-// ----- #141 — scheduled-publish report (Wagtail parity D7) ---------
+// ----- #141 — scheduled-publish report ---------
 
-/// #264 — derive the effective lifecycle state from `go_live_at`.
-/// Mirrors Wagtail's `_compute_state()`: any row carrying a future
+/// Derive the effective lifecycle state from `go_live_at`.
+/// Any row carrying a future
 /// `go_live_at` is treated as `scheduled` regardless of the editor's
 /// literal status pick (draft / published) so the sweep job +
 /// scheduled-report query pick it up. Clearing `go_live_at` on a
@@ -14701,8 +14696,8 @@ mod scheduled_status_tests {
 
     #[test]
     fn future_go_live_also_promotes_published() {
-        // Editor picked "published" + a future go-live. Per Wagtail
-        // parity the row defers to the sweep — surface as scheduled.
+        // Editor picked "published" + a future go-live. The row
+        // defers to the sweep — surface as scheduled.
         let go = Utc::now() + Duration::hours(2);
         assert_eq!(derive_scheduled_status("published", Some(go)), "scheduled");
     }
@@ -15298,14 +15293,14 @@ pub struct PageChooserQuery {
     pub q: Option<String>,
 }
 
-/// Query string for the generic `GET /cms-admin/__chooser/{slug}` (#421).
+/// Query string for the generic `GET /cms-admin/__chooser/{slug}`.
 #[derive(Debug, Default, Deserialize)]
 pub struct ChooserSearchQuery {
     #[serde(default)]
     pub q: Option<String>,
 }
 
-/// GET `/cms-admin/__chooser/{slug}?q=<needle>` (#421) — JSON endpoint
+/// GET `/cms-admin/__chooser/{slug}?q=<needle>` — JSON endpoint
 /// backing any `register_chooser!`ed model, generalising the three
 /// bespoke choosers. Returns `{ "items": [ { id, title, sub, … } ] }`,
 /// the shape the shared overlay (`cms-ux.js`) renders. Unknown slug → 404.
@@ -15355,7 +15350,7 @@ pub struct MediaPickerQuery {
 /// Richer than the generic `/cms-admin/__chooser/media` (which stays for
 /// back-compat): collection + kind filters, offset pagination, and
 /// server-computed `thumb_url`/`preview_url` rendition URLs. The URLs are
-/// built here (not in JS) because renditions can be signature-gated (#425)
+/// built here (not in JS) because renditions can be signature-gated
 /// and only the server can sign a spec.
 ///
 /// Filtering is in-Rust over a full fetch — the crate's tri-dialect
@@ -15537,7 +15532,7 @@ pub(crate) async fn media_picker_payload(
 }
 
 /// GET /cms-admin/__page-chooser?q=<needle> — JSON endpoint backing
-/// the Wagtail-parity PageChooser widget. Returns the top-N matching
+/// the PageChooser widget. Returns the top-N matching
 /// pages by title / slug / url_path (LIKE, lowercased), bounded at 50.
 /// Empty `q` returns the most recently updated pages so the chooser
 /// has something useful to show on first open.
@@ -15607,7 +15602,7 @@ pub struct SnippetChooserQuery {
 }
 
 /// GET /cms-admin/__snippet-chooser?q=…&type_name=… — JSON endpoint
-/// backing the Wagtail-parity SnippetChooser widget. Returns the
+/// backing the SnippetChooser widget. Returns the
 /// top-50 matching snippets by title / slug; optionally filtered
 /// to a single `type_name`.
 pub async fn snippet_chooser_json(
@@ -15677,7 +15672,7 @@ pub struct DocumentChooserQuery {
 }
 
 /// GET /cms-admin/__document-chooser?q=… — JSON endpoint backing
-/// the Wagtail-parity DocumentChooser widget. Returns top-50 media
+/// the DocumentChooser widget. Returns top-50 media
 /// rows where `kind = "document"` (i.e. non-images), filtered by
 /// title / filename.
 pub async fn document_chooser_json(
@@ -16071,7 +16066,7 @@ pub async fn navigation_delete_submit(
 }
 
 /// POST /cms-admin/navigation/{id}/clone — duplicate a menu + all
-/// its items (#30 V1). The new menu inherits the same item tree
+/// its items. The new menu inherits the same item tree
 /// (parent_id pointers remapped to the new MenuItem ids); page links
 /// stay pointed at the same pages (no page duplication). Slug gets a
 /// "-copy" suffix, then "-copy-2" / "-copy-3" / … to dodge the
@@ -16184,8 +16179,8 @@ pub async fn navigation_clone_submit(
     )
 }
 
-/// POST /cms-admin/navigation/{id}/seed-from-pages — wagtailmenus
-/// parity Option B (#257). Replaces this menu's items with a tree
+/// POST /cms-admin/navigation/{id}/seed-from-pages — Option B.
+/// Replaces this menu's items with a tree
 /// seeded from every published page that has `show_in_menus = true`.
 /// The page tree's structure is preserved: a child MenuItem points
 /// at its parent MenuItem when both pages are in the menu set; if a
@@ -16332,7 +16327,7 @@ async fn delete_menu_items_tx(
 }
 
 /// POST /cms-admin/navigation/{id}/save-tree — WP-style menu builder
-/// save (#44). Accepts a JSON array of items in display order; each
+/// save. Accepts a JSON array of items in display order; each
 /// entry's `local_id` is its position in the array (0-indexed) and
 /// `parent_local_id` references the array index of the parent (null
 /// for top-level). The handler:
@@ -17151,7 +17146,7 @@ pub async fn page_types_dashboard(
 // `Redirect::to("/admin/rustango_users")` stub.
 // =====================================================================
 
-/// #642 — user management is a **superuser-only** operation.
+/// User management is a **superuser-only** operation.
 ///
 /// The create/edit handlers set `is_superuser`, `active`, and role
 /// memberships straight from the submitted form, and the handlers
@@ -17164,7 +17159,7 @@ pub async fn page_types_dashboard(
 /// scoped user management that forbids privilege escalation can be added
 /// later as a deliberate feature.)
 ///
-/// #672 — the same gate covers roles and SSO providers, which decide who
+/// The same gate covers roles and SSO providers, which decide who
 /// a user *is* as much as the user rows do: a role editor could grant its
 /// own role every codename, and an SSO-provider editor could point an
 /// issuer at an IdP it controls and sign in as any user by email.
@@ -17314,7 +17309,7 @@ pub async fn roles_list(
     render_with_csrf(&state, &headers, "rcms_admin/roles_list.html", &mut ctx)
 }
 
-/// GET `/cms-admin/permissions` (#436) — tenant-wide permission
+/// GET `/cms-admin/permissions` — tenant-wide permission
 /// overview matrix. The role editor matrix shows one role at a time;
 /// this is the read-only birds-eye: every resource (grouped by section)
 /// × every role, each cell listing the granted actions. Answers "who
@@ -17463,7 +17458,7 @@ pub async fn roles_edit_form(
     render_with_csrf(&state, &headers, "rcms_admin/role_form.html", &mut ctx)
 }
 
-/// Build the matrix structure consumed by `role_form.html` (#33).
+/// Build the matrix structure consumed by `role_form.html`.
 /// Returns one JSON object per [`super::resources::ResourceSection`]
 /// with its rows pre-populated against the granted codename set so
 /// the template can render checkboxes pre-checked.
@@ -17647,7 +17642,7 @@ async fn sync_role_codenames(
 }
 
 /// POST /cms-admin/roles/new — create a role + sync its codenames.
-/// Body shape (matrix #33): `name=`, `description=`, plus one
+/// Body shape (matrix): `name=`, `description=`, plus one
 /// `perm[<resource>][<action>]=1` per granted cell.
 pub async fn roles_create_submit(
     State(_state): State<super::AdminState>,
@@ -18190,7 +18185,7 @@ pub struct UserForm {
     pub active: Option<String>,
 }
 
-/// #435 — light email validation (presence of a single `@` with text
+/// Light email validation (presence of a single `@` with text
 /// on both sides). Empty is allowed (email is optional). Returns the
 /// trimmed value to store, or an error message.
 fn validate_optional_email(raw: Option<&str>) -> Result<String, String> {
@@ -18454,7 +18449,7 @@ pub async fn users_deactivate_submit(
 }
 
 /// POST /cms-admin/users/bulk — enable or disable the selected users
-/// (#435 bulk actions). `user_id` repeats once per checked row;
+/// (bulk actions). `user_id` repeats once per checked row;
 /// `action` is the clicked button (`enable` | `disable`). Disabling
 /// your own account is skipped so an admin can't lock themselves out.
 pub async fn users_bulk_submit(
@@ -18605,7 +18600,7 @@ pub async fn settings_page(
 /// POST /cms-admin/__richtext-preview — sanitize a richtext-widget's
 /// textarea source through the same `ammonia` allow-list the public
 /// render uses, return the cleaned HTML body so the editor's
-/// preview swap matches what visitors will see (#263).
+/// preview swap matches what visitors will see.
 ///
 /// Accepts the source under a `body` form field. Other field names
 /// fall through to the empty string. Output is `text/html` so the
@@ -18635,7 +18630,7 @@ pub async fn richtext_preview(
 }
 
 /// POST /cms-admin/settings/branding — multipart upload of logo
-/// and/or favicon (#199). Files land in
+/// and/or favicon. Files land in
 /// storage key `<tenant>/branding/<name>` and the storage keys are
 /// recorded in `cms_site_setting` under scope `branding`.
 pub async fn settings_branding_submit(
@@ -18821,7 +18816,7 @@ fn revalidated_asset(headers: &HeaderMap, mime: String, bytes: Vec<u8>) -> Respo
 }
 
 /// POST /cms-admin/settings/theme — flip either `is_admin_default`
-/// or `is_default` to a new theme (#58). Form fields:
+/// or `is_default` to a new theme. Form fields:
 ///
 /// - `surface`: either `admin` or `public` — picks which flag to toggle.
 /// - `theme_id`: the row to set the flag on.
@@ -18925,7 +18920,7 @@ pub async fn settings_theme_switch(
 /// True when the request prefers a JSON response — either set
 /// `Accept: application/json` (modern fetch with `Accept` header) or
 /// the legacy `X-Requested-With: XMLHttpRequest` marker. Used by the
-/// theme picker (#274) so it can opt into a live-swap JSON payload
+/// theme picker so it can opt into a live-swap JSON payload
 /// without losing the no-JS redirect fallback.
 fn wants_json_response(headers: &HeaderMap) -> bool {
     let accept = headers
@@ -18957,11 +18952,11 @@ pub struct RedirectForm {
     pub is_permanent: Option<String>,
     #[serde(default)]
     pub note: Option<String>,
-    /// #553 — checkbox: serve even when a published page exists at
+    /// Checkbox: serve even when a published page exists at
     /// `from_path`.
     #[serde(default)]
     pub overrides_live: Option<String>,
-    /// #553 — chooser hidden inputs; empty string when cleared.
+    /// Chooser hidden inputs; empty string when cleared.
     #[serde(default)]
     pub from_page_id: Option<String>,
     #[serde(default)]
@@ -18988,7 +18983,7 @@ impl RedirectForm {
     }
 }
 
-/// #553 — resolve the effective from/to paths for a redirect form:
+/// Resolve the effective from/to paths for a redirect form:
 /// a picked source page snapshots its CURRENT `url_path` into
 /// `from_path`; a picked destination page snapshots into `to_path`
 /// (display/fallback — the serve path re-resolves it live). Returns
@@ -19013,7 +19008,7 @@ async fn redirect_form_paths(
     Ok((from, to))
 }
 
-/// #553 — save-time shadow check: a non-override rule whose
+/// Save-time shadow check: a non-override rule whose
 /// `from_path` matches a PUBLISHED page will never serve (live pages
 /// win). Returns `true` when shadowed so the submit handlers can
 /// flash a warning instead of a plain success.
@@ -19029,8 +19024,8 @@ async fn redirect_is_shadowed(tenant: &Tenant, from_path: &str, overrides_live: 
     )
 }
 
-/// #554 — reject a `from_path` with more than one `*`; a single glob
-/// (typically `path/*` or `*/path`) is the supported shape. #708 — and a
+/// Reject a `from_path` with more than one `*`; a single glob
+/// (typically `path/*` or `*/path`) is the supported shape. Also reject a
 /// rule whose destination matches its own from-path.
 fn redirect_pattern_error(from_path: &str, to_path: &str) -> Option<&'static str> {
     if from_path.matches('*').count() > 1 {
@@ -19043,7 +19038,7 @@ fn redirect_pattern_error(from_path: &str, to_path: &str) -> Option<&'static str
 }
 
 /// Query for the redirect list: free-text search, status filter chip,
-/// sortable column + direction, and page number (#555).
+/// sortable column + direction, and page number.
 #[derive(Debug, Deserialize, Default)]
 pub struct RedirectListQuery {
     #[serde(default)]
@@ -19291,7 +19286,7 @@ async fn redirect_save_response(
     )
 }
 
-// ----- #186 — snippet CSV import (Wagtail-parity bulk migration) ---
+// ----- #186 — snippet CSV import (bulk migration) ---
 
 /// One row from the snippet CSV / TSV. Mirrors the cms_snippet shape:
 /// required slug + title, optional body_markdown + folder_path + a
@@ -19482,8 +19477,7 @@ pub async fn snippet_import_submit(
     )
 }
 
-/// GET /cms-admin/redirects/import — show the upload form (#145,
-/// Wagtail parity D2).
+/// GET /cms-admin/redirects/import — show the upload form.
 pub async fn redirect_import_form(
     State(state): State<super::AdminState>,
     tenant: Tenant,
@@ -19558,7 +19552,7 @@ fn parse_redirect_csv(text: &str) -> Vec<RedirectImportRow> {
 
 /// Serialize redirects to CSV: a header row + `from_path,to_path,
 /// is_permanent`, with `is_permanent` rendered as `301`/`302` so the
-/// importer ([`parse_redirect_csv`]) round-trips an export. #400
+/// importer ([`parse_redirect_csv`]) round-trips an export.
 fn redirects_csv(items: &[crate::redirect::Redirect]) -> String {
     let mut out = String::from("from_path,to_path,is_permanent\n");
     for r in items {
@@ -19573,7 +19567,7 @@ fn redirects_csv(items: &[crate::redirect::Redirect]) -> String {
 }
 
 /// GET /cms-admin/redirects/export.csv — download all redirects as a
-/// CSV the importer can round-trip. #400
+/// CSV the importer can round-trip.
 pub async fn redirect_export_csv(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
@@ -19877,7 +19871,7 @@ pub async fn redirect_edit_submit(
 }
 
 /// POST /cms-admin/redirects/{id}/enable — re-enable a rule that was
-/// auto-disabled when a linked page was deleted/unpublished (#553).
+/// auto-disabled when a linked page was deleted/unpublished.
 pub async fn redirect_enable_submit(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
@@ -19954,7 +19948,7 @@ pub(crate) fn creatable_types(all: &[PageType]) -> Vec<PageType> {
 /// under those parents, so it cannot be a root. Without this the root picker
 /// offered every creatable type and the save path accepted it, letting you
 /// create e.g. an `ArticlePage` (parent-restricted to `HomePage`) at the root
-/// — a tree the type rules forbid (#614). The child case has always been
+/// — a tree the type rules forbid. The child case has always been
 /// gated by [`allowed_children_for`]; this is the missing mirror.
 pub(crate) fn allowed_root_types(all: &[PageType]) -> Vec<PageType> {
     creatable_types(all)
@@ -20064,7 +20058,7 @@ pub async fn cms_logout_submit() -> Response {
 /// `username`+`password` against `rustango_users` and sets the
 /// tenant session cookie.
 /// GET `/cms-admin/no-access` — destination for the `cms_admin.access`
-/// gate (#35). Reachable while signed in; doesn't require any
+/// gate. Reachable while signed in; doesn't require any
 /// permission. The middleware adds an exception for this path so
 /// the redirect doesn't loop.
 pub async fn no_access_page(
@@ -20078,14 +20072,13 @@ pub async fn no_access_page(
 }
 
 /// GET `/cms-admin/me` — per-user appearance / text-size / accessibility
-/// preferences (#27). Replaces the sidebar-footer toggles. The
+/// preferences. Replaces the sidebar-footer toggles. The
 /// preferences themselves persist in `localStorage` via the existing
 /// no-flash boot script + the toggle JS in `_base.html`; this view
 /// is purely the surface that hosts the same toggle widgets in a
 /// dedicated page.
 /// POST /cms-admin/dismissibles/{key} — record dismissal of the
-/// banner identified by `key` for the current user (#139, Wagtail
-/// parity D8). Returns 204 No Content on success.
+/// banner identified by `key` for the current user. Returns 204 No Content on success.
 pub async fn dismissible_submit(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
@@ -20100,8 +20093,8 @@ pub async fn dismissible_submit(
     Ok((axum::http::StatusCode::NO_CONTENT, "").into_response())
 }
 
-/// GET /cms-admin/dashboard — editor home / at-a-glance screen
-/// (#144, Wagtail parity D1). Surfaces count widgets, recent edits,
+/// GET /cms-admin/dashboard — editor home / at-a-glance screen.
+/// Surfaces count widgets, recent edits,
 /// items locked by the current user, and pages scheduled to publish
 /// next.
 pub async fn dashboard(
@@ -20295,8 +20288,7 @@ pub async fn dashboard(
     render_with_csrf(&state, &headers, "rcms_admin/dashboard.html", &mut ctx)
 }
 
-/// GET /cms-admin/styleguide — component gallery (#129, Wagtail
-/// parity C8). Lists every registered block + every widget kind so
+/// GET /cms-admin/styleguide — component gallery. Lists every registered block + every widget kind so
 /// editors + reviewers can see the available palette at a glance.
 pub async fn styleguide(
     State(state): State<super::AdminState>,
@@ -20361,7 +20353,7 @@ pub async fn account_preferences(
 }
 
 /// Serialize a user's MCP keys (+ per-key skill scope) and the tenant's
-/// skill catalog for the key-management cards (#587).
+/// skill catalog for the key-management cards.
 async fn mcp_keys_ctx(
     pool: &rustango::sql::Pool,
     owner_id: i64,
@@ -20463,8 +20455,7 @@ async fn render_account_page(
         })
         .collect();
     ctx.insert("themes", &theme_rows);
-    // #128 — plugin-contributed Account settings panels (Wagtail
-    // parity C6). Each panel is a pre-rendered HTML fragment hosts
+    // #128 — plugin-contributed Account settings panels. Each panel is a pre-rendered HTML fragment hosts
     // contribute via `register_account_settings_panel!`.
     let account_panels: Vec<serde_json::Value> = crate::hooks::account_settings_panels()
         .into_iter()
@@ -20530,7 +20521,7 @@ async fn render_account_page(
 }
 
 /// POST /cms-admin/me/notifications — save the on/off toggles for
-/// every notification kind (#197). The form posts a checkbox per kind;
+/// every notification kind. The form posts a checkbox per kind;
 /// absent inputs mean "off". Iterates every known kind so the user
 /// can disable categories from a single submit.
 pub async fn account_notifications_submit(
@@ -20563,7 +20554,7 @@ pub async fn account_notifications_submit(
     )
 }
 
-/// POST /cms-admin/me/profile — display name + avatar upload (#201).
+/// POST /cms-admin/me/profile — display name + avatar upload.
 /// Multipart submit; absence of either field leaves the existing
 /// value untouched. Avatar bytes land at
 /// `./var/avatars/<tenant-slug>/<user_id>.<ext>` (slug-namespaced so
@@ -20672,7 +20663,7 @@ pub async fn account_profile_submit(
 }
 
 /// Persist an editor's preferred admin UI locale to
-/// `rustango_users.data.admin_lang` (#526). Shared by the account-prefs form and
+/// `rustango_users.data.admin_lang`. Shared by the account-prefs form and
 /// the sidebar switcher so both keep the durable pref in sync with the cookie.
 async fn persist_user_admin_lang(
     pool: &rustango::sql::Pool,
@@ -20692,14 +20683,14 @@ async fn persist_user_admin_lang(
     Ok(())
 }
 
-/// Form body for `POST /cms-admin/me/language` (#526).
+/// Form body for `POST /cms-admin/me/language`.
 #[derive(Debug, Deserialize)]
 pub struct AccountLanguageForm {
     pub lang: String,
 }
 
-/// POST /cms-admin/me/language — set the editor's preferred admin UI locale
-/// (#526). Persists to `rustango_users.data.admin_lang` (durable + cross-device,
+/// POST /cms-admin/me/language — set the editor's preferred admin UI locale.
+/// Persists to `rustango_users.data.admin_lang` (durable + cross-device,
 /// folded into negotiation by `add_user_chrome` → `render_with_csrf`) AND sets
 /// the sticky `rcms_admin_lang` cookie so the change applies on the next render.
 /// An unshipped code resets to English.
@@ -20739,13 +20730,13 @@ pub async fn account_language_submit(
     Ok(resp)
 }
 
-/// Form body for `POST /cms-admin/me/email` (#202).
+/// Form body for `POST /cms-admin/me/email`.
 #[derive(Debug, Deserialize)]
 pub struct AccountEmailForm {
     pub new_email: String,
 }
 
-/// POST /cms-admin/me/email — request an email change (#202).
+/// POST /cms-admin/me/email — request an email change.
 ///
 /// When a mailer is wired, the change goes through a confirmation
 /// flow: a random 32-hex token is stashed on `user.data.pending_email_*`
@@ -20955,7 +20946,7 @@ pub struct AccountPasswordForm {
 }
 
 /// POST /cms-admin/me/password — verify current password, hash + write
-/// the new one (#202).
+/// the new one.
 pub async fn account_password_submit(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
@@ -21142,7 +21133,7 @@ pub async fn password_reset_request_form(
 /// POST `/cms-admin/password-reset` — issue a token, email the link,
 /// render the "check your email" page either way (so the form never
 /// confirms or denies account existence).
-/// The key a password-reset link is signed with (#673): the process secret
+/// The key a password-reset link is signed with: the process secret
 /// narrowed to one tenant and one password.
 ///
 /// Tenants number their users from 1, so a link signed with the process
@@ -21396,7 +21387,7 @@ pub async fn password_reset_confirm_submit(
 /// The `rustango_users` table doesn't carry an email column, so the
 /// "to" address is synthesized from the username for now. Replace
 /// with `user.email` once the host extends the user model.
-/// #435 — deliver the reset link to the user's real address through
+/// Deliver the reset link to the user's real address through
 /// the host-configured mailer (`router_with_mailer`), falling back to
 /// the console mailer in dev setups with no mailer wired.
 async fn send_reset_email(
@@ -21438,7 +21429,7 @@ async fn send_reset_email(
 
 #[cfg(test)]
 mod tests {
-    //! Role-permission matrix translation tests (#33). Exercise the
+    //! Role-permission matrix translation tests. Exercise the
     //! pure helpers — no DB, no Tera.
     use super::*;
 
@@ -21617,9 +21608,9 @@ mod tests {
         assert!(rows.is_empty());
     }
 
-    /// #268 — the page-edit submit handler funnels the raw posted
+    /// The page-edit submit handler funnels the raw posted
     /// form through an allow-list before re-deserializing as
-    /// `PageForm`. The bug behind #268 was that schedule fields
+    /// `PageForm`. The bug guarded here was that schedule fields
     /// (`go_live_at`, `expire_at`) and `show_in_menus` were missing
     /// from that allow-list, so any datetime the editor set on the
     /// Promote tab was silently dropped on save — and never made it
@@ -22134,7 +22125,7 @@ mod password_reset_key_tests {
 
 #[cfg(all(test, feature = "sqlite"))]
 mod publish_gate_tests {
-    //! #761 — a save that puts a page live takes the publish right,
+    //! A save that puts a page live takes the publish right,
     //! judged on the status it lands on after go-live derivation.
     use super::{apply_page_edit, PageEditActor, PageEditRefusal};
     use crate::page::{Page, PageStatus};

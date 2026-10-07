@@ -417,8 +417,8 @@ fn page_form_is_inline_style_free() {
     );
 }
 
-/// #318 — the page editor's save footer offers the three-action set
-/// (Django/Wagtail `ModelForm` parity): plain Save, Save-and-continue,
+/// #318 — the page editor's save footer offers the three-action set:
+/// plain Save, Save-and-continue,
 /// and Save-and-add-another. Each is a submit button carrying a distinct
 /// `_action` value that `redirect_after_page_save` routes on (list /
 /// keep editing / new sibling). Lock all three in so a header refactor

@@ -29,7 +29,7 @@ use crate::media::Media;
 use crate::rendition::{apply, MediaRendition};
 
 /// Lightweight `(org, pool)` pair for the rendition routes. The
-/// framework's [`Tenant`] extractor EAGERLY acquires a pool
+/// framework's [`Tenant`](rustango::extractors::Tenant) extractor EAGERLY acquires a pool
 /// connection at extractor time and holds it for the entire
 /// handler lifetime (`extractors/tenant.rs:236–240` — the
 /// `database_acquire(&org)` call). With `max_connections = 4` on
@@ -103,7 +103,7 @@ impl TenantLite {
 ///   **rendition** (resize / crop / re-encode). Image-only; rejects
 ///   non-image media kinds with 400.
 ///
-/// Both routes honour collection-level view restrictions (#195).
+/// Both routes honour collection-level view restrictions.
 pub fn router() -> Router {
     Router::new()
         .route("/__media__/raw/{media_id}", get(serve_raw))
@@ -201,7 +201,7 @@ fn media_display(mime: &str) -> MediaDisplay {
 
 /// Media is served from the tenant host that also serves `/cms-admin`, so
 /// an uploaded HTML or SVG file opened from its URL would run with the
-/// viewer's admin session (#724). Pin the type, forbid sniffing, sandbox
+/// viewer's admin session. Pin the type, forbid sniffing, sandbox
 /// anything that isn't a raster image, and make active types download.
 fn harden_media_headers(headers: &mut axum::http::HeaderMap, mime: &str, filename: &str) {
     let display = media_display(mime);
@@ -253,7 +253,7 @@ fn harden_media_headers(headers: &mut axum::http::HeaderMap, mime: &str, filenam
 /// that response (401 / 403).
 /// Whether a media file may be served to `viewer`, and if so whether it
 /// sits behind a view restriction: `Ok(true)` means the viewer passed a
-/// restriction, so the response must not reach a shared cache (#650).
+/// restriction, so the response must not reach a shared cache.
 async fn check_collection_restriction(
     tenant: &TenantLite,
     media: &Media,
@@ -327,7 +327,7 @@ async fn check_collection_restriction(
     }
 }
 
-/// Rendition request query: the optional `s=` HMAC signature (#425)
+/// Rendition request query: the optional `s=` HMAC signature
 /// and the `v=` cache-buster (ignored here — it only varies the URL).
 #[derive(serde::Deserialize, Default)]
 struct RenditionQuery {
@@ -446,7 +446,7 @@ async fn serve(
     // #195 — collection view restriction, shared with the raw and SVG
     // paths. Direct-image-URL fetches can't run an interactive password
     // prompt, so password-protected collections behave like
-    // login-required here — Wagtail-compatible.
+    // login-required here.
     let restricted = match check_collection_restriction(&tenant, &media, viewer).await {
         Ok(r) => r,
         Err(resp) => return resp,
@@ -524,7 +524,7 @@ async fn serve(
 /// Cache policy for served media. A file behind a view restriction was
 /// just authorized by the viewer's cookie, which a shared cache or CDN
 /// does not key on — a `public` response would be replayed to anyone who
-/// asks for the URL next (#650). So restricted media is `private,
+/// asks for the URL next. So restricted media is `private,
 /// no-store` and varies on the cookie; everything else keeps `public`.
 fn set_media_cache(headers: &mut axum::http::HeaderMap, restricted: bool, public: &'static str) {
     if restricted {
@@ -537,7 +537,7 @@ fn set_media_cache(headers: &mut axum::http::HeaderMap, restricted: bool, public
 
 /// Renditions being generated, keyed by tenant, content hash and spec, so
 /// concurrent misses for one rendition wait for the first instead of each
-/// decoding the original (#725).
+/// decoding the original.
 static GENERATING: std::sync::Mutex<
     Option<std::collections::HashMap<String, std::sync::Weak<rustango::__private_runtime::tokio::sync::Mutex<()>>>>,
 > = std::sync::Mutex::new(None);
@@ -558,7 +558,7 @@ fn generation_lock(key: String) -> Arc<rustango::__private_runtime::tokio::sync:
 
 /// How many renditions may be decoded at once, process-wide. Each decode
 /// holds the source file and a full bitmap — tens of MB for a large photo
-/// — so an unbounded burst of cold thumbnails could exhaust memory (#725).
+/// — so an unbounded burst of cold thumbnails could exhaust memory.
 fn decode_permits() -> &'static rustango::__private_runtime::tokio::sync::Semaphore {
     static PERMITS: std::sync::OnceLock<rustango::__private_runtime::tokio::sync::Semaphore> =
         std::sync::OnceLock::new();
@@ -743,7 +743,7 @@ pub async fn gc_older_than(
 }
 
 /// Whether `user` is a member of any of the role ids in
-/// `allowed`. Used by the collection view-restriction guard (#195).
+/// `allowed`. Used by the collection view-restriction guard.
 async fn user_in_any_role(
     pool: &rustango::sql::Pool,
     user: &rustango::tenancy::auth::User,
@@ -783,7 +783,7 @@ mod tests {
         h.get(name).and_then(|v| v.to_str().ok()).unwrap_or("")
     }
 
-    /// #724 — nothing a user uploads runs as a page on the admin origin.
+    /// Nothing a user uploads runs as a page on the admin origin.
     #[test]
     fn active_uploads_download_sandboxed_and_unsniffed() {
         for mime in ["text/html", "application/xhtml+xml", "text/xml", "application/javascript", "TEXT/HTML; charset=utf-8"] {

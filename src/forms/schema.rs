@@ -1,4 +1,4 @@
-//! Form Builder schema (#535 / FB-02).
+//! Form Builder schema.
 //!
 //! The visual builder stores a whole form as one JSON document in the
 //! backing snippet's `data` column (`type_name = "form"`). This module is
@@ -33,7 +33,7 @@ pub struct Form {
     pub pages: Vec<Page>,
 }
 
-/// Form-level defaults (FB-16). An embed block (FB-09) may override the
+/// Form-level defaults. An embed block may override the
 /// success redirect / message per placement.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FormSettings {
@@ -208,10 +208,10 @@ pub struct Field {
     /// Choices for select / radio / checkboxes / multiselect.
     #[serde(default)]
     pub options: Vec<Choice>,
-    /// Validation rules (FB-13).
+    /// Validation rules.
     #[serde(default)]
     pub validation: Vec<ValidationRule>,
-    /// Conditional show/hide/require rules (FB-14).
+    /// Conditional show/hide/require rules.
     #[serde(default)]
     pub rules: Vec<ConditionalRule>,
     // ---- per-type config (omitted from JSON when unset) ----
@@ -241,8 +241,8 @@ pub struct Field {
     pub pattern: String,
 }
 
-/// Server-side validation of one submitted value against a field's rules
-/// (FB-13). Returns an error message, or `None` when valid. Empty values
+/// Server-side validation of one submitted value against a field's rules.
+/// Returns an error message, or `None` when valid. Empty values
 /// pass here — "required" is enforced separately by the submit handler.
 #[must_use]
 pub fn validate_value(field: &Field, value: &str) -> Option<String> {
@@ -337,7 +337,7 @@ pub struct TransLeaf {
 /// then page labels / section titles / field label+help+placeholder /
 /// choice option labels / presentational content. Keys are id-based so they
 /// survive reorder. A single-page form's page label is left out: it is
-/// never shown. (FB-17)
+/// never shown.
 #[must_use]
 pub fn translatable_leaves(form: &Form) -> Vec<TransLeaf> {
     let mut out = Vec::new();
@@ -395,7 +395,7 @@ pub fn translatable_leaves(form: &Form) -> Vec<TransLeaf> {
 
 /// Apply per-locale `overrides` (field_path → text) to a form's text leaves,
 /// in place. Missing/empty overrides leave the canonical text. Mirror of the
-/// keys produced by [`translatable_leaves`]. (FB-17)
+/// keys produced by [`translatable_leaves`].
 pub fn apply_translations(form: &mut Form, overrides: &std::collections::HashMap<String, String>) {
     if overrides.is_empty() {
         return;
@@ -460,7 +460,7 @@ pub fn apply_translations(form: &mut Form, overrides: &std::collections::HashMap
 /// Rules apply in order: a `show` rule makes visibility equal to its match;
 /// a `hide` rule hides when matched. No rules → always visible. The runtime
 /// (`form_runtime`) mirrors this logic in JS; the server uses it so hidden
-/// fields are excused from "required". (FB-14)
+/// fields are excused from "required".
 #[must_use]
 pub fn is_visible(field: &Field, answers: &std::collections::HashMap<String, Vec<String>>) -> bool {
     let mut visible = true;
@@ -519,7 +519,7 @@ pub struct Choice {
     #[serde(default)]
     pub label: String,
     /// The label in other languages, by locale code (`{"fr": "Bleu lune"}`).
-    /// Page-type select options use it (#863); forms translate through
+    /// Page-type select options use it; forms translate through
     /// `cms_snippet_translation` instead. Empty → the `label` everywhere.
     #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub labels: std::collections::BTreeMap<String, String>,
@@ -539,7 +539,7 @@ impl Choice {
     }
 }
 
-/// A validation rule (semantics enforced in FB-13; this is the storage shape).
+/// A validation rule (this is the storage shape).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ValidationRule {
     /// e.g. `min_length`, `max_length`, `pattern`, `email`, `min`, `max`.
@@ -550,7 +550,7 @@ pub struct ValidationRule {
     pub message: String,
 }
 
-/// A conditional rule (evaluated in FB-14; this is the storage shape).
+/// A conditional rule (this is the storage shape).
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ConditionalRule {
     /// `all` (default) or `any` — how to combine `conditions`.
@@ -741,7 +741,7 @@ impl Form {
     /// Sanitize the HTML of every rich-text field in place, with the same
     /// policy Markdown and rich-text blocks use. Applied to what is stored
     /// and to what the builder is handed, so no admin surface receives raw
-    /// author HTML (#756); the public render sanitizes again on its own.
+    /// author HTML; the public render sanitizes again on its own.
     pub fn sanitize_rich_text(&mut self) {
         for page in &mut self.pages {
             for section in &mut page.sections {
@@ -771,7 +771,7 @@ impl Form {
     }
 
     /// Ordered list of submission keys for value-collecting fields —
-    /// the column order for the submissions table / CSV (FB-12).
+    /// the column order for the submissions table / CSV.
     #[must_use]
     pub fn value_keys(&self) -> Vec<String> {
         self.fields()

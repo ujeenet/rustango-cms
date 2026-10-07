@@ -60,8 +60,7 @@ pub fn default_render<B: Block + ?Sized>(
         Value::Null => Value::Object(serde_json::Map::new()),
         // Single-field blocks may stash a bare scalar at `value`;
         // canonicalize to the {field_name: scalar} shape by looking
-        // up the first field. Wagtail accepts both on its lax input
-        // path (stream_block.py:235-287).
+        // up the first field. Both shapes are accepted on input.
         scalar => {
             let mut map = serde_json::Map::new();
             if let Some(first) = block.fields().into_iter().next() {
@@ -112,7 +111,7 @@ pub fn default_render<B: Block + ?Sized>(
 ///
 /// A block that fails to render — a template error, a bad value — leaves a
 /// hidden `rcms-stream-error` marker naming its type and is logged; the rest
-/// of the stream still renders (#638). It used to fail the whole stream, and
+/// of the stream still renders. It used to fail the whole stream, and
 /// the page then rendered with its body missing.
 ///
 /// # Errors

@@ -1,5 +1,4 @@
-//! Editor-managed 301/302 redirects — Wagtail "Redirects" / Django
-//! `contrib.redirects` shape.
+//! Editor-managed 301/302 redirects.
 //!
 //! One row per redirect: `from_path` (the URL visitors hit) → `to_path`
 //! (the canonical destination). `is_permanent = true` emits `301 Moved
@@ -9,8 +8,8 @@
 //! their case.
 //!
 //! The public router consults the table whenever a slug lookup fails
-//! ([`crate::resolver::resolve_path`] returns `None`), mirroring
-//! Django's "redirects framework hooks into the 404 handler" design.
+//! ([`crate::resolver::resolve_path`] returns `None`) — redirects hook
+//! into the 404 path.
 //! Live page URLs take precedence — a redirect from `/about` is
 //! ignored if a published page at `/about` exists.
 //!
@@ -83,38 +82,38 @@ pub struct Redirect {
     #[rustango(default = "0")]
     pub hit_count: i64,
 
-    /// #553 — serve this rule even when a published page exists at
+    /// Serve this rule even when a published page exists at
     /// `from_path`. Default `false`: redirects normally fill in for
-    /// retired URLs only (live pages win, Django/Wagtail parity).
+    /// retired URLs only (live pages win).
     #[rustango(default = "false")]
     pub overrides_live: bool,
 
-    /// #553 — source page whose `url_path` was snapshotted into
+    /// Source page whose `url_path` was snapshotted into
     /// `from_path` at save time. Soft reference (no FK constraint —
     /// the column is seed-added via [`ensure_columns`]); used to
     /// auto-disable the rule when the page is deleted/unpublished.
     pub from_page_id: Option<i64>,
 
-    /// #553 — destination page. When set, the serve path resolves the
-    /// page's **current** `url_path` (follows moves/renames — Wagtail
-    /// `redirect_page` parity); `to_path` holds the save-time snapshot
+    /// Destination page. When set, the serve path resolves the
+    /// page's **current** `url_path` (follows moves/renames);
+    /// `to_path` holds the save-time snapshot
     /// as display/fallback.
     pub to_page_id: Option<i64>,
 
-    /// #553 — disabled rules never serve. Flipped off automatically
+    /// Disabled rules never serve. Flipped off automatically
     /// (with [`Self::disabled_reason`]) when a linked page is deleted
     /// or unpublished; re-enabled from the admin list.
     #[rustango(default = "true")]
     pub is_active: bool,
 
-    /// #553 — why `is_active` was switched off ("Linked page … was
+    /// Why `is_active` was switched off ("Linked page … was
     /// deleted"). Empty while active.
     #[rustango(max_length = 255, default = "''")]
     pub disabled_reason: String,
 
-    /// #555 — the most recent time this rule served a redirect. `None`
+    /// The most recent time this rule served a redirect. `None`
     /// until the first hit flush. Drives the stale-redirect metric.
-    /// Written by the throttled hit-flush ([`flush_tenant`]) — never on
+    /// Written by the throttled hit-flush (`flush_tenant`) — never on
     /// the request path.
     pub last_hit_at: Option<DateTime<Utc>>,
 
@@ -124,7 +123,7 @@ pub struct Redirect {
     pub updated_at: Auto<DateTime<Utc>>,
 }
 
-/// Add the #553 columns to a pre-existing `cms_redirect` table.
+/// Add the page-link columns to a pre-existing `cms_redirect` table.
 /// Idempotent (duplicate-column errors are swallowed); called per
 /// tenant at boot from [`crate::seed::ensure_seeded`] — the same
 /// mechanism the seed-ensured tables use, since repo-wide
@@ -171,7 +170,7 @@ pub async fn ensure_columns(pool: &rustango::sql::Pool) -> Result<(), rustango::
     repair_pg_last_hit_at(pool).await
 }
 
-/// Databases upgraded by a build before #745 got `last_hit_at` as
+/// Databases upgraded by an older build got `last_hit_at` as
 /// `timestamp without time zone` on Postgres. Convert it in place (the
 /// values were written as UTC). A no-op once converted, and elsewhere.
 async fn repair_pg_last_hit_at(pool: &rustango::sql::Pool) -> Result<(), rustango::sql::ExecError> {
@@ -205,7 +204,7 @@ async fn repair_pg_last_hit_at(pool: &rustango::sql::Pool) -> Result<(), rustang
 ///
 /// `path` should be the request URI's path component (no query
 /// string, no host). The lookup is exact-match — trailing-slash
-/// variance is intentional, mirroring Django's `contrib.redirects`.
+/// variance is intentional.
 pub async fn find_for_path(
     pool: &rustango::sql::Pool,
     path: &str,
@@ -241,7 +240,7 @@ pub async fn override_rules(
 
 /// The cache key for one tenant's redirect rule set. Tenants on one host
 /// share the cache, so a fixed key served one tenant's rules — including
-/// override rules that hijack live pages — on every other host (#681).
+/// override rules that hijack live pages — on every other host.
 fn rules_key(tenant_slug: &str, kind: &str) -> String {
     format!("cms:redirect:{tenant_slug}:{kind}")
 }
@@ -274,7 +273,7 @@ pub async fn override_rules_cached(
 /// (the page's **current** `url_path`, so the rule follows moves and
 /// renames) with `to_path` as the fallback when the page is missing
 /// or not served — the resolver's rule, so an archived target is still
-/// followed (#763).
+/// followed.
 pub async fn resolve_destination(pool: &rustango::sql::Pool, r: &Redirect) -> String {
     use rustango::core::Column as _;
     if let Some(pid) = r.to_page_id {
@@ -342,7 +341,7 @@ pub fn apply_capture(to_path: &str, capture: &str) -> String {
     }
 }
 
-/// Would a rule `from → to` send a visitor back into itself (#708)?
+/// Would a rule `from → to` send a visitor back into itself?
 ///
 /// An exact rule loops when it targets its own path; a wildcard rule
 /// loops when its destination for a sample capture matches the pattern
@@ -623,7 +622,7 @@ pub async fn disable_for_page(
     Ok(disabled)
 }
 
-/// Convert a [`Redirect`] row into the framework's [`RedirectRule`]
+/// Convert a [`Redirect`] row into the framework's [`RedirectRule`](rustango::redirects::RedirectRule)
 /// shape so [`rustango::redirects::build_redirect_response`] can
 /// produce the 301/302.
 #[must_use]
@@ -638,7 +637,7 @@ pub fn to_rule(r: &Redirect) -> rustango::redirects::RedirectRule {
 /// logged + swallowed — analytics counters shouldn't break the
 /// user-facing redirect.
 ///
-/// Superseded on the request path by [`record_hit`] (#555) — kept for
+/// Superseded on the request path by `record_hit` — kept for
 /// the public re-export and ad-hoc use.
 pub async fn bump_hit_count(pool: &rustango::sql::Pool, mut row: Redirect) {
     row.hit_count = row.hit_count.saturating_add(1);
@@ -809,7 +808,7 @@ pub(crate) fn staleness(r: &Redirect, now: DateTime<Utc>) -> &'static str {
     }
 }
 
-/// Registry report (#439 framework) surfacing which redirects are worth
+/// Registry report surfacing which redirects are worth
 /// retiring: never-used, long-unused, or auto-disabled. Appears in the
 /// Reports nav automatically via [`crate::register_report!`].
 #[derive(Default)]
@@ -1025,7 +1024,7 @@ mod tests {
     }
 
     /// `ensure_columns` must no-op on a table that already has the
-    /// #553 columns (fresh SCHEMA) — the duplicate-column error paths
+    /// page-link columns (fresh SCHEMA) — the duplicate-column error paths
     /// are swallowed on every dialect message shape.
     #[test]
     fn rebase_path_swaps_the_moved_base() {
@@ -1074,7 +1073,7 @@ mod tests {
         ensure_columns(&pool).await.expect("second ensure");
     }
 
-    /// `ensure_columns` upgrades a pre-#553 table shape in place.
+    /// `ensure_columns` upgrades an older table shape in place.
     #[tokio::test]
     async fn ensure_columns_upgrades_old_table() {
         let pool = Pool::connect("sqlite::memory:").await.expect("pool");
@@ -1158,7 +1157,7 @@ mod tests {
         assert_eq!(resolve_destination(&pool, &rule).await, "/moved/target");
     }
 
-    /// #763 — an archived page is still served, so a rule targeting it
+    /// An archived page is still served, so a rule targeting it
     /// keeps following it instead of falling back to a stale path.
     #[tokio::test]
     async fn resolve_destination_follows_an_archived_page() {
@@ -1348,7 +1347,7 @@ mod tests {
 mod pg_tests {
     use rustango::sql::sqlx;
 
-    /// #745 — an upgraded Postgres table gets `last_hit_at` as a type the
+    /// An upgraded Postgres table gets `last_hit_at` as a type the
     /// model decodes, and one added as plain `TIMESTAMP` by an older
     /// build is converted. Runs with `--ignored` against
     /// `RCMS_TEST_PG_URL`, in a schema of its own.

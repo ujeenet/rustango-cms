@@ -1,16 +1,15 @@
 //! Third-party custom widget registry.
 //!
 //! Out-of-tree crates ship new widget types via
-//! [`register_widget!`]. Each registration carries the wire-format
+//! [`register_widget!`](crate::register_widget!). Each registration carries the wire-format
 //! `name` (used by [`crate::widget::WidgetKind::Custom`] and looked
 //! up at render time) and the **Tera template path** the bundled
 //! `_widget.html` macro should include for that name.
 //!
 //! ## Why no JS class
 //!
-//! Wagtail audit pain #1: their `Adapter` system requires both a
-//! Python side AND a JS class with a string-keyed constructor name
-//! that fails at runtime if mismatched. The corresponding plumbing
+//! A widget needs no client-side class keyed by a string name that
+//! could fail at runtime if mismatched. The plumbing
 //! here is *just* a Tera template — the same one the server uses to
 //! render the widget. Native HTML5 inputs cover most needs
 //! (`<input type="color">`, `<input type="date">`, `<input
@@ -38,7 +37,7 @@
 //! ```
 
 /// One registered custom widget — wire-format `name` paired with the
-/// Tera template that renders it. Submitted via [`register_widget!`]
+/// Tera template that renders it. Submitted via [`register_widget!`](crate::register_widget!)
 /// and collected at startup by the [`inventory`] crate.
 pub struct CustomWidgetRegistration {
     /// Wire-format name. Matched against

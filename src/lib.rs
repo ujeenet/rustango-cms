@@ -1,4 +1,4 @@
-//! rustango-cms — a Wagtail-style, multi-tenant CMS built on
+//! rustango-cms — a multi-tenant, page-tree CMS built on
 //! [rustango](https://docs.rs/rustango).
 //!
 //! Pages live in one tenant-scoped `cms_page` tree (materialized path,
@@ -225,9 +225,9 @@ pub use rustango_cms_macros::PageType;
 /// `#[derive(Block)]` — declarative block definition. Walks
 /// `#[block(...)]` + `#[field(widget = …)]` attrs to emit the `Block`
 /// trait impl + `register_block!` inventory submission in one go.
-/// Coexists with the [`Block`](crate::block::Block) trait through
+/// Coexists with the [`Block`] trait through
 /// Rust's separate macro / type namespaces (same pattern as
-/// `#[derive(PageType)]` alongside [`PageType`](crate::page_type_model::PageType)).
+/// `#[derive(PageType)]` alongside [`PageType`](struct@PageType)).
 pub use rustango_cms_macros::Block;
 
 /// Re-exports for the `#[derive(PageType)]` macro's generated code.

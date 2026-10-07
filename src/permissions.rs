@@ -1,4 +1,4 @@
-//! Per-page permission engine (#18).
+//! Per-page permission engine.
 //!
 //! Three pieces:
 //!
@@ -13,7 +13,7 @@
 //!    can interoperate via codenames if/when we expose them.
 //!
 //! Permissions **inherit** down the tree: a grant on a page applies
-//! to every descendant unless overridden by a closer grant. V1 has
+//! to every descendant unless overridden by a closer grant. There are
 //! no explicit denies — any matching grant in the chain returns
 //! `true`.
 
@@ -33,13 +33,13 @@ pub enum Action {
     Delete,
     /// Top-level "may use this admin surface at all" verb — used by
     /// the `cms_admin.access` codename + `with_cms_admin_access`
-    /// middleware (#35) to gate the protected router. Unlike the CRUD
+    /// middleware to gate the protected router. Unlike the CRUD
     /// verbs it doesn't pair with a resource model; it pairs with a
     /// router surface.
     Access,
     /// Framework-admin variant of [`Action::Access`]. Maps to the
     /// `auth.access_admin` codename the framework's
-    /// `permission_required` middleware (rustango#311) enforces on
+    /// `permission_required` middleware enforces on
     /// `/__admin/` + `/admin/`. Surfaced as a separate variant so the
     /// matrix can present "framework admin access" as a one-cell row
     /// without inventing a new codename layout.
@@ -60,7 +60,7 @@ impl Action {
         }
     }
 
-    /// The canonical V1 set; iteration order is also the order the
+    /// The canonical set; iteration order is also the order the
     /// admin permission editor renders columns in. `Access` is
     /// deliberately omitted — its column lives in a separate Access
     /// section row, not the CRUD grid.
@@ -112,8 +112,8 @@ pub struct PagePermission {
 /// materialized prefix and collects matching grants in one query.
 ///
 /// Short-circuits to `true` for tenant superusers. Returns `false`
-/// when the user has no roles assigned (V1 — no per-user override
-/// table yet).
+/// when the user has no roles assigned (there is no per-user override
+/// table).
 ///
 /// # Errors
 /// Propagates driver / query failures from the four underlying
@@ -192,7 +192,7 @@ pub async fn user_can(
 }
 
 /// One `(collection_id, role_id, permission)` grant — the media
-/// collection analogue of [`PagePermission`] (#19). Same UNIQUE
+/// collection analogue of [`PagePermission`]. Same UNIQUE
 /// shape and same inheritance semantics (parent collection grants
 /// flow to children).
 #[derive(Model, Debug, Clone, Serialize, Deserialize)]
@@ -222,7 +222,7 @@ pub struct CollectionPermission {
 }
 
 /// Resolve `(user_id, collection_id, action) → bool` against the
-/// per-collection permission table (#19). Walks the collection's
+/// per-collection permission table. Walks the collection's
 /// ancestor chain (via `parent_id`) and short-circuits to `true`
 /// for superusers.
 ///
@@ -410,7 +410,7 @@ pub async fn user_can_matrix(
 /// Resolve the full set of role codenames a user inherits via their
 /// `UserRole` memberships. Used by the admin chrome to gate sidebar
 /// items + by handlers to enforce CRUD access against the
-/// permissions matrix (#33).
+/// permissions matrix.
 ///
 /// Superusers and inactive users are caller's concern — this helper
 /// just returns the codename union for whatever role memberships

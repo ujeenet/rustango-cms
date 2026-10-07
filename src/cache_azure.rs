@@ -1,5 +1,5 @@
 //! Azure CDN purge backend for
-//! [`crate::cache_invalidate::PageCacheInvalidator`] (#428).
+//! [`crate::cache_invalidate::PageCacheInvalidator`].
 //!
 //! Wires the per-page cache-invalidation hook to the Azure CDN
 //! [endpoints purge] management API. After a CMS save the public URL
@@ -10,7 +10,7 @@
 //!
 //! Behind the `cache_azure` feature. The Azure Resource Manager API
 //! authenticates with a short-lived Azure AD bearer token, so the
-//! invalidator takes an [`AccessTokenSource`] (use [`StaticToken`]
+//! invalidator takes an [`AccessTokenSource`] (use [`StaticToken`](crate::cache_invalidate::StaticToken)
 //! for scripts/tests; implement the trait against your managed-identity
 //! / `az account get-access-token` endpoint for a long-running server):
 //!

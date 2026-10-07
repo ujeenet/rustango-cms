@@ -405,7 +405,7 @@
         // resolve titles in one batched request so labels read as names.
         hydrateMediaChooserLabels();
 
-        // Wagtail TitleFieldPanel parity. Any
+        // Auto-slug from the title. Any
         //   `<input data-slug-source="#id_title">` auto-fills from
         //   slugified source-field text until the editor manually
         //   edits the slug field (then sync stops for the session).
@@ -1326,7 +1326,7 @@
         return "";
     }
 
-    // Wagtail TitleFieldPanel auto-slug.
+    // Auto-slug from the title.
     function wireSlugSync() {
         document.querySelectorAll("[data-slug-source]").forEach((slugInput) => {
             const sourceSel = slugInput.getAttribute("data-slug-source");

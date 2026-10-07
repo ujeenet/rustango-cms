@@ -1,16 +1,16 @@
 //! Content metrics — word count, estimated reading time, and a
-//! readability score (#416).
+//! readability score.
 //!
 //! Computed server-side at editor-open from the **content-bearing
 //! extension widget values** (the markdown / text fields the author is
 //! editing), so the editor shows metrics without opening the preview
-//! (Wagtail 7.2). Pure functions — [`analyze`] takes a string and
+//! Pure functions — [`analyze`] takes a string and
 //! [`collect_widget_text`] gathers the text to feed it.
 
 use crate::widget::{Widget, WidgetKind};
 
 /// Average adult reading speed (words per minute) for the reading-time
-/// estimate. Wagtail / Medium use ~200–265; 200 is the conservative
+/// estimate. Common estimates use ~200–265; 200 is the conservative
 /// end so the estimate doesn't undersell length.
 const WORDS_PER_MINUTE: usize = 200;
 

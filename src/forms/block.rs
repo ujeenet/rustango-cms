@@ -1,4 +1,4 @@
-//! The `form` StreamField block (#542 / FB-09).
+//! The `form` StreamField block.
 //!
 //! A dedicated block editors drop into any page StreamField — including
 //! nested streams, since it's a registered block listed in `allowed` sets.

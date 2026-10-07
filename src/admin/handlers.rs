@@ -21127,6 +21127,49 @@ fn password_reset_key(secret: &[u8], tenant_slug: &str, password_hash: &str) -> 
     crate::signing::hmac_sha256_hex(secret, msg.as_bytes()).into_bytes()
 }
 
+/// The relative reset link (`/cms-admin/password-reset/confirm?…`) for
+/// `user`, valid for an hour. Signed with a key bound to the tenant and
+/// the user's current password hash, so it stops working once used.
+fn password_reset_url(
+    secret: &[u8],
+    tenant_slug: &str,
+    user: &rustango::tenancy::auth::User,
+) -> String {
+    let key = password_reset_key(secret, tenant_slug, &user.password_hash);
+    rustango::auth_flows::PasswordReset::issue(
+        "/cms-admin/password-reset/confirm",
+        user.id.get().copied().unwrap_or(0),
+        &key,
+        std::time::Duration::from_secs(3600),
+    )
+}
+
+/// A one-hour password-reset link for the active user `username` in the
+/// tenant `pool` belongs to, or `None` when there is no such user.
+///
+/// For operators: it works for an account with no email on file, which
+/// the reset form cannot reach. The link is relative — prefix the site's
+/// origin. It is valid on any admin router of this process, which signs
+/// with the same [`crate::signing::secret`].
+///
+/// # Errors
+/// Database errors from the user lookup.
+pub async fn issue_password_reset_link(
+    pool: &rustango::sql::Pool,
+    tenant_slug: &str,
+    username: &str,
+) -> Result<Option<String>, rustango::sql::ExecError> {
+    let user: Option<rustango::tenancy::auth::User> = rustango::tenancy::auth::User::objects()
+        .where_(rustango::tenancy::auth::User::username.eq(username.to_owned()))
+        .where_(rustango::tenancy::auth::User::active.eq(true))
+        .fetch(pool)
+        .await?
+        .into_iter()
+        .next();
+    let secret = crate::signing::derived_key(super::PASSWORD_RESET_KEY_PURPOSE);
+    Ok(user.map(|u| password_reset_url(&secret, tenant_slug, &u)))
+}
+
 /// The active user a reset link was issued for, in this request's tenant.
 ///
 /// The `user_id` in the link is read before it is trusted only to find
@@ -21178,27 +21221,14 @@ pub async fn password_reset_request_submit(
             .into_iter()
             .next();
         if let Some(u) = user {
-            let user_id = u.id.get().copied().unwrap_or(0);
-            // #435 — the reset link goes to the user's real address.
-            // No email on file → nothing to send; the response below
-            // still renders "sent" so the form never confirms or
-            // denies account existence.
+            // The link goes to the user's real address. The response below
+            // renders "sent" either way, so the form never confirms or
+            // denies that an account exists.
+            let token_url =
+                password_reset_url(state.signing_secret.as_slice(), &tenant.org.slug, &u);
             let to_email = Some(user_email(&u)).filter(|e| !e.is_empty());
-            match to_email {
-                Some(to) => {
-                    // Sign a relative URL — the verify-side recomputes
-                    // against the request path+query (no host involved).
-                    let key = password_reset_key(
-                        state.signing_secret.as_slice(),
-                        &tenant.org.slug,
-                        &u.password_hash,
-                    );
-                    let token_url = rustango::auth_flows::PasswordReset::issue(
-                        "/cms-admin/password-reset/confirm",
-                        user_id,
-                        &key,
-                        std::time::Duration::from_secs(3600),
-                    );
+            match (to_email, state.mailer.is_some()) {
+                (Some(to), _) => {
                     send_reset_email(
                         state.mailer.as_deref(),
                         &state.mailer_from,
@@ -21208,16 +21238,36 @@ pub async fn password_reset_request_submit(
                     )
                     .await;
                 }
-                None => {
-                    tracing::info!(
+                // No mailer: emails already go to stdout, which the page
+                // tells the reader to check — so print the link there for
+                // the operator too, rather than nothing at all.
+                (None, false) => {
+                    println!(
+                        "============= password reset =============\n\
+                         {} has no email on file. Reset link, valid for an hour \
+                         (prefix the site's address):\n{token_url}\n\
+                         ==========================================",
+                        u.username
+                    );
+                    tracing::warn!(
                         username = %u.username,
-                        "password reset requested but the account has no email on file; nothing sent"
+                        "password reset for an account with no email: link printed to stdout"
+                    );
+                }
+                (None, true) => {
+                    tracing::warn!(
+                        username = %u.username,
+                        "password reset requested but the account has no email on file; nothing \
+                         sent. Add an email to the account, or issue a link with \
+                         rustango_cms::admin::issue_password_reset_link"
                     );
                 }
             }
         }
     }
     let mut ctx = Context::new();
+    // The stdout hint is only true when no mailer is wired.
+    ctx.insert("console_mail", &state.mailer.is_none());
     render_with_csrf(
         &state,
         &headers,
@@ -21413,6 +21463,37 @@ mod tests {
     //! Role-permission matrix translation tests. Exercise the
     //! pure helpers — no DB, no Tera.
     use super::*;
+
+    fn reset_user(password_hash: &str) -> rustango::tenancy::auth::User {
+        rustango::tenancy::auth::User {
+            id: rustango::sql::Auto::Set(7),
+            username: "admin".to_owned(),
+            password_hash: password_hash.to_owned(),
+            email: None,
+            is_superuser: true,
+            active: true,
+            created_at: chrono::Utc::now(),
+            data: serde_json::json!({}),
+            password_changed_at: None,
+            sessions_revoked_at: None,
+        }
+    }
+
+    /// The link an operator gets (or the console prints for an account
+    /// with no email) is the one the confirm page accepts — and it dies
+    /// once the password changes.
+    #[test]
+    fn a_reset_link_verifies_until_the_password_changes() {
+        let secret = b"test-secret";
+        let url = password_reset_url(secret, "blog", &reset_user("hash-1"));
+        assert!(url.starts_with("/cms-admin/password-reset/confirm?user_id=7&"), "{url}");
+        let key = password_reset_key(secret, "blog", "hash-1");
+        assert_eq!(rustango::auth_flows::PasswordReset::verify(&url, &key).ok(), Some(7));
+        let after_change = password_reset_key(secret, "blog", "hash-2");
+        assert!(rustango::auth_flows::PasswordReset::verify(&url, &after_change).is_err());
+        let other_tenant = password_reset_key(secret, "shop", "hash-1");
+        assert!(rustango::auth_flows::PasswordReset::verify(&url, &other_tenant).is_err());
+    }
 
     #[test]
     fn parse_matrix_form_translates_brackets_to_codenames() {

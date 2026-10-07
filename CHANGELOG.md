@@ -26,6 +26,13 @@ repository.
 
 ### Fixed
 
+- A password reset for an account with no email on file did nothing,
+  while the page said to look for the link on stdout. With no mailer
+  wired, the link is now printed to stdout for the operator; with a
+  mailer, a warning says why nothing was sent. The stdout hint shows
+  only when there is no mailer. New: `admin::issue_password_reset_link`
+  gives an operator a link for any active user.
+
 - Publishing purged nothing from the page cache: the invalidator built
   cache keys without the tenant the framework's `CachePageLayer` now adds,
   so edited pages stayed stale until the TTL ran out.

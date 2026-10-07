@@ -53,6 +53,7 @@ pub mod admin_page;
 /// by hand means roughly two dozen variables that drift silently on the
 /// next release.
 pub use handlers::add_chrome;
+pub use handlers::issue_password_reset_link;
 
 pub mod chooser;
 mod handlers;

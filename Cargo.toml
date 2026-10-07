@@ -14,7 +14,7 @@ rust-version.workspace = true
 # The crate ships its source, templates, static assets and migrations;
 # the docs screenshots, example photos and test suites stay in the repo
 # (crates.io refuses packages over 10 MB).
-exclude = ["docs/img", "examples/*/photos", "e2e", ".github", ".claude", ".cargo"]
+exclude = ["docs/img", "examples/*/photos", "e2e", ".github", ".cargo"]
 
 # Workspace root + main package. The proc-macro derive lives in a
 # sibling crate at crates/rustango-cms-macros/ so a downstream user

@@ -15,13 +15,6 @@ prefs-*.png
 # (rustango_users / roles / audit log). Generated, not source.
 /system/
 
-# Local docs-prep drafts (cookbook outline and chapter notes) — working notes, not source.
-/.claude/docs-inventory/
-
 # Local cargo overrides (e.g. the [patch] onto a sibling rustango checkout —
 # see .cargo/config.toml.example).
 /.cargo/config.toml
-
-# Per-user AI-assistant permissions. Pre-approving commands is a personal
-# choice, not something a clone should inherit.
-/.claude/settings.json

@@ -122,7 +122,7 @@
 {% endif %}
 
 {# #587 — MCP keys managed for this user (an admin can register a
-   dedicated agent user — e.g. "claude" — and mint its keys here). #}
+   dedicated agent user — e.g. "assistant" — and mint its keys here). #}
 {% if mode == "edit" %}
     {% set mcp_create_url = url(name='rcms-admin:users:mcp-key-create', id=user.id) %}
     {% set mcp_revoke_base = "/cms-admin/users/" ~ user.id ~ "/mcp-keys" %}

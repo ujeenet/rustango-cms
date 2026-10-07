@@ -17916,7 +17916,7 @@ async fn render_user_edit_page(
     );
     ctx.insert("role_choices", &role_choices);
     // #587 — the target user's MCP keys, for admin-managed minting
-    // (the "register a claude user, give it a key" flow).
+    // (the "register an agent user, give it a key" flow).
     let (keys, skills) = mcp_keys_ctx(tenant.pool(), id).await;
     ctx.insert("mcp_keys", &keys);
     ctx.insert("mcp_skills", &skills);
@@ -18075,7 +18075,7 @@ pub async fn account_mcp_key_revoke(
 }
 
 /// POST /cms-admin/users/{id}/mcp-keys — an admin mints a key for another
-/// user (the "register a claude user, give it a key" flow). Safe by
+/// user (the "register an agent user, give it a key" flow). Safe by
 /// construction: the key's capabilities are bounded by the TARGET user's
 /// entitlement at every token resolution, so this can't escalate beyond
 /// what that user could already do.

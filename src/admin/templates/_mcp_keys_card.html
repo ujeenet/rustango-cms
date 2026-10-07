@@ -8,7 +8,7 @@
 <div class="rcms-card {{ mcp_card_class | default(value='rcms-maxw-720') }} rcms-mt-4 rcms-mb-4">
     <h2 class="rcms-m-0 rcms-mb-1 rcms-text-lg">{{ "MCP keys" | translate(locale=LANG) }}</h2>
     <p class="rcms-hint rcms-m-0 rcms-mb-3 rcms-text-2xs">
-        {{ "Let an AI agent (Claude, an IDE assistant) operate the CMS as this user. Paste a key into any MCP client as the Authorization bearer; its capabilities follow this user's roles and update live. Revoking takes effect immediately." | translate(locale=LANG) }}
+        {{ "Let an AI agent (for example an IDE assistant) operate the CMS as this user. Paste a key into any MCP client as the Authorization bearer; its capabilities follow this user's roles and update live. Revoking takes effect immediately." | translate(locale=LANG) }}
     </p>
 
     {% if mcp_keys and mcp_keys | length > 0 %}
@@ -56,7 +56,7 @@
         {{ csrf_token | csrf_input | safe }}
         <div class="rcms-field rcms-mb-2">
             <label>{{ "Key label" | translate(locale=LANG) }}</label>
-            <input type="text" name="label" maxlength="100" placeholder="{{ "e.g. Claude Code on my laptop" | translate(locale=LANG) }}">
+            <input type="text" name="label" maxlength="100" placeholder="{{ "e.g. coding assistant on my laptop" | translate(locale=LANG) }}">
         </div>
         {% if mcp_skills and mcp_skills | length > 0 %}
         <div class="rcms-field rcms-m-0">

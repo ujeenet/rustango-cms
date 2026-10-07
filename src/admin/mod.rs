@@ -1389,8 +1389,8 @@ fn router_with_state(state: AdminState) -> Router {
             "/cms-admin/me/mcp-keys/{id}/revoke",
             post(handlers::account_mcp_key_revoke),
         )
-        // #587 — admin-managed MCP keys for another user (the "register a
-        // claude user, give it a key" flow); capabilities stay bounded by
+        // #587 — admin-managed MCP keys for another user (the "register an
+        // agent user, give it a key" flow); capabilities stay bounded by
         // the TARGET user's entitlement.
         .route(
             "/cms-admin/users/{id}/mcp-keys",

@@ -13,26 +13,22 @@
 //! [`crate::signing::secret`]. The expiry is signed, so it can't be
 //! extended by tampering. The tenant is signed but not carried: every
 //! tenant numbers its pages from 1, so a token must verify only on the
-//! tenant that minted it. The feature is **off** until a
-//! secret is configured (`RCMS_SECRET_KEY` or
-//! [`crate::signing::set_secret`]).
+//! tenant that minted it.
 
 /// Mint a preview token for `page_id` that expires at `expires_unix`
-/// (UNIX seconds). Returns `None` when no signing secret is configured.
+/// (UNIX seconds).
 #[must_use]
-pub fn mint(tenant_slug: &str, page_id: i64, expires_unix: i64) -> Option<String> {
-    let key = crate::signing::secret()?;
-    Some(mint_with_key(key, tenant_slug, page_id, expires_unix))
+pub fn mint(tenant_slug: &str, page_id: i64, expires_unix: i64) -> String {
+    mint_with_key(crate::signing::secret(), tenant_slug, page_id, expires_unix)
 }
 
 /// Verify `token` for `tenant_slug` at `now_unix`; returns the page id
 /// when the signature is valid for this tenant AND the token hasn't
-/// expired. `None` when the secret is unset, the token is
-/// malformed/forged, was minted for another tenant, or has expired.
+/// expired. `None` when the token is malformed/forged, was minted for
+/// another tenant, or has expired.
 #[must_use]
 pub fn verify(tenant_slug: &str, token: &str, now_unix: i64) -> Option<i64> {
-    let key = crate::signing::secret()?;
-    verify_with_key(key, tenant_slug, token, now_unix)
+    verify_with_key(crate::signing::secret(), tenant_slug, token, now_unix)
 }
 
 fn mint_with_key(key: &[u8], tenant_slug: &str, page_id: i64, expires_unix: i64) -> String {

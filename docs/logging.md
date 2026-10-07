@@ -124,7 +124,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Set `RUSTANGO_LOG_FORMAT=json` in your prod env and the
+Set `RUSTANGO_LOG_FORMAT=json` (a variable this `main` reads — the framework itself does not) in your prod env and the
 `tracing_subscriber::fmt::layer().json()` formatter takes over —
 each record becomes a single JSON object suitable for ingestion.
 

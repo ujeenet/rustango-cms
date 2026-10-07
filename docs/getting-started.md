@@ -304,4 +304,4 @@ Everything an editor sees is generated from those three. You didn't write a form
 
 - Change `templates/_site.css.html` — it's plain CSS inlined into both page templates, with nothing else depending on it.
 - Add a third page type: copy the `HomePage` block in `src/models.rs`, add a force-link line in `src/main.rs`, and run `makemigrations` if it has typed fields.
-- Switch to PostgreSQL when you're ready to deploy. The generated `README.md` has the same sequence without the SQLite-specific flags.
+- Switch to PostgreSQL when you're ready to deploy. The generated `README.md` has the same sequence without the SQLite-specific flags, and [Run Rustango-CMS in production](production.md) covers secrets, migrations, the reverse proxy, media and caching.

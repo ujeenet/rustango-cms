@@ -333,11 +333,8 @@ async fn list_inner(
     let mut fts_ordered = false;
     if let Some(needle) = search_needle {
         crate::search_promotion::log_public_query(pool, needle, offset);
-        let ranked = if let Some(b) = crate::search::backend() {
-            Some(b.search(&tenant.org.slug, needle, 1000).await)
-        } else {
-            crate::search::search_page_ids(pool, needle, 1000).await
-        };
+        let ranked =
+            crate::search::ranked_public_page_ids(pool, &tenant.org.slug, needle, 1000).await;
         // A ranked hit OR a substring match (#702): the ranked backend finds
         // stemmed words but not a partial word, slug fragment or URL path,
         // so it adds to the substring match every backend runs rather than
@@ -882,14 +879,17 @@ pub async fn detail_object_with_type(
                 .collect();
             obj.insert("routes".to_owned(), serde_json::Value::Array(arr));
         }
+        let streams = stream_field_names(h.as_ref(), pool, content_id).await;
         match extension_override {
-            Some(ext) => {
+            Some(mut ext) => {
                 if !ext.is_null() {
+                    decode_stream_fields(&mut ext, &streams);
                     obj.insert("extension".to_owned(), ext);
                 }
             }
             None => match h.load_extension(pool, content_id).await {
-                Ok(ext) if !ext.is_null() => {
+                Ok(mut ext) if !ext.is_null() => {
+                    decode_stream_fields(&mut ext, &streams);
                     obj.insert("extension".to_owned(), ext);
                 }
                 Ok(_) => {}
@@ -1098,6 +1098,48 @@ async fn child_summaries(
         .collect()
 }
 
+/// The extension fields this page type declares as StreamFields. Taken from
+/// the handler's widgets rather than by sniffing whether a string parses as
+/// a JSON array — that heuristic corrupts a prose field whose text happens
+/// to look like "[1,2]".
+async fn stream_field_names(
+    h: &dyn PageTypeHandler,
+    pool: &rustango::sql::Pool,
+    page_id: i64,
+) -> Vec<String> {
+    h.widgets(pool, page_id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|w| w.kind == crate::widget::WidgetKind::Stream)
+        .map(|w| w.name)
+        .collect()
+}
+
+/// StreamField columns are stored as JSON text. Hand them to API clients as
+/// the block array itself — the same shape `builder` zones already use — so
+/// a client never has to parse a string inside the JSON. An empty column is
+/// an empty stream; text that is not a JSON array is left as it is.
+fn decode_stream_fields(ext: &mut serde_json::Value, names: &[String]) {
+    let Some(map) = ext.as_object_mut() else {
+        return;
+    };
+    for name in names {
+        let Some(serde_json::Value::String(raw)) = map.get(name) else {
+            continue;
+        };
+        let decoded = if raw.trim().is_empty() {
+            serde_json::Value::Array(Vec::new())
+        } else {
+            match serde_json::from_str::<serde_json::Value>(raw) {
+                Ok(v @ serde_json::Value::Array(_)) => v,
+                _ => continue,
+            }
+        };
+        map.insert(name.clone(), decoded);
+    }
+}
+
 /// Overlay one locale's `cms_translation` rows onto a built detail object.
 ///
 /// Three storage shapes, three mechanisms — a single flat overlay cannot
@@ -1139,15 +1181,11 @@ async fn localize_detail_object(
     // string happens to parse as a JSON array — that heuristic corrupts a
     // prose field whose text is something like "[1,2]".
     if let Some(h) = find_handler(type_name) {
-        let stream_fields: Vec<String> = h
-            .widgets(pool, page_id)
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|w| w.kind == crate::widget::WidgetKind::Stream)
-            .map(|w| w.name)
-            .collect();
+        let stream_fields = stream_field_names(h.as_ref(), pool, page_id).await;
         if let Some(ext) = value.get_mut("extension") {
+            // A whole-body translation row puts the stream back as a JSON
+            // string; decode it so the per-leaf overrides below can apply.
+            decode_stream_fields(ext, &stream_fields);
             for name in stream_fields {
                 if let Some(raw) = ext.get(&name).cloned() {
                     let localized =

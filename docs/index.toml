@@ -45,9 +45,17 @@ pages = [
     "shop-members-area.md",
     "shop-team.md",
     "shop-sale.md",
+    "shop-ai-agent.md",
     "shop-dev-templates.md",
     "shop-dev-helper-traits.md",
+    "shop-dev-headless.md",
+    "shop-dev-headless-preview.md",
 ]
+
+[[section]]
+title = "Run it in production"
+slug = "production"
+pages = ["production.md"]
 
 [[section]]
 title = "Headless API"

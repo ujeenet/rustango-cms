@@ -61,6 +61,21 @@ Click **Save** at the top of the screen. You go back to the list of pages, and a
 
 > **Tip:** click **Save & keep editing** if you want to stay in the editor.
 
+## When your site has its own frontend
+
+Some sites are not drawn by the CMS but by a separate website or app that reads the content from the CMS (a "headless" site). If your developer set this up, you see two more things in the editor:
+
+- **Your frontend** — above the preview, next to the screen buttons, there is a **globe** button. Click it, and the preview shows your page in the real site, even when the page is still a **Draft**.
+- **Preview on site** — click the **⋮** button at the top right, then **Preview on site**. The real site opens in a new tab with your page. Only people with this link can see the draft, and the link stops working after one hour.
+
+![The editor with the globe button selected: the real site shows the draft under a yellow "Preview of a draft" bar](img/shop/headless-preview-04.png)
+
+> **Important:** this preview cannot change while you type. Click **Save & keep editing**, then the round arrow button above the preview.
+
+Does the real site use a different address for a page? Your developer may ask you to fill in **Frontend route** on the **Promote** tab. Leave it empty if nobody asked.
+
+How a developer sets this up: [Preview drafts on your own frontend](shop-dev-headless-preview.md).
+
 ## Check it worked
 
 - When you type in the form, the preview changes after a second.
@@ -70,6 +85,7 @@ Click **Save** at the top of the screen. You go back to the list of pages, and a
 ## If something goes wrong
 
 - **The preview does not change.** Click the round arrow button at the top right to load it again.
+- **The globe preview shows the old version.** Save first, then click the round arrow.
 - **Visitors cannot see your changes.** You did not save, or the page is a **Draft**. Click **Save**, and check that the status is **Published**.
 
 ## Next

@@ -255,19 +255,27 @@ pub fn router_with(cors: &Cors) -> Router {
         .layer(axum::middleware::from_fn(error::method_not_allowed_json))
         .layer(axum::middleware::from_fn(http_cache::layer));
 
+    // `POST` is for the member login (`auth::LOGIN_PATH`) and
+    // `authorization` for the bearer token it returns — the way a SPA on
+    // another origin reads gated content, since the session cookie is
+    // `SameSite=Lax` and never rides a cross-site fetch. Without them the
+    // browser's preflight refuses both before the request is sent.
+    const ALLOWED_METHODS: [&str; 4] = ["GET", "HEAD", "OPTIONS", "POST"];
+    const ALLOWED_HEADERS: [&str; 3] = ["content-type", "if-none-match", "authorization"];
+
     match cors {
         Cors::Disabled => r,
         Cors::Any => r.cors(
             rustango::cors::CorsLayer::new()
-                .allow_methods(vec!["GET", "HEAD", "OPTIONS"])
-                .allow_headers(vec!["content-type", "if-none-match"])
+                .allow_methods(ALLOWED_METHODS.to_vec())
+                .allow_headers(ALLOWED_HEADERS.to_vec())
                 .expose_headers(EXPOSED_HEADERS),
         ),
         Cors::Origins(origins) => r.cors(
             rustango::cors::CorsLayer::new()
                 .allow_origins(origins.clone())
-                .allow_methods(vec!["GET", "HEAD", "OPTIONS"])
-                .allow_headers(vec!["content-type", "if-none-match"])
+                .allow_methods(ALLOWED_METHODS.to_vec())
+                .allow_headers(ALLOWED_HEADERS.to_vec())
                 .expose_headers(EXPOSED_HEADERS)
                 // The member session is a cookie, so a cross-origin SPA
                 // needs credentials to fetch gated content at all.

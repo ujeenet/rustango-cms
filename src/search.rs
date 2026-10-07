@@ -94,6 +94,21 @@ pub async fn search_page_ids(
     fts_page_ids(pool, query, limit, true).await
 }
 
+/// Ranked page ids for a public search: the installed external backend
+/// ([`set_backend`]) when there is one, else [`search_page_ids`]. `None`
+/// means "no ranking here" and the caller keeps its substring match.
+pub async fn ranked_public_page_ids(
+    pool: &rustango::sql::Pool,
+    tenant_slug: &str,
+    query: &str,
+    limit: i64,
+) -> Option<Vec<i64>> {
+    match backend() {
+        Some(b) => Some(b.search(tenant_slug, query, limit).await),
+        None => search_page_ids(pool, query, limit).await,
+    }
+}
+
 /// Like [`search_page_ids`] but spans **every status** (drafts /
 /// scheduled / expired too) — for the admin explorer's search, which
 /// must surface unpublished pages. Postgres-only (the public index is

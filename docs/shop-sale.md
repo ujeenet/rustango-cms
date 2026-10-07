@@ -114,4 +114,4 @@ At 18:00 on 8 December the page disappears from the site again: its address says
 
 ## Next
 
-This is the last chapter of the ceramics shop. See [the list of chapters](shop-overview.md) for everything you built.
+Next chapter: [Let an AI agent help](shop-ai-agent.md) — an AI assistant writes new product pages as drafts, and you publish them.

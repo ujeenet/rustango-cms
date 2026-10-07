@@ -1,6 +1,6 @@
 {% extends "rcms_admin/_base.html" %}
 {% import "rcms_admin/_widget.html" as widget %}
-{% block title %}{% if is_new %}{{ "New site setting" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} {{ scope }}{% endif %} — CMS Admin{% endblock %}
+{% block title %}{% if typed %}{{ schema_label }}{% elif is_new %}{{ "New site setting" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} {{ scope }}{% endif %} — CMS Admin{% endblock %}
 {% block heading %}{% if typed %}{{ schema_label }}{% elif is_new %}{{ "New site setting" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} “{{ scope }}”{% endif %}{% endblock %}
 
 {% block topbar_actions %}

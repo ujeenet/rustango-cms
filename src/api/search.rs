@@ -108,7 +108,7 @@ pub async fn search_inner(
 
     let mut hits: Vec<serde_json::Value> = Vec::new();
     if wanted.contains(&"page") {
-        hits.extend(page_hits(pool, viewer, needle).await?);
+        hits.extend(page_hits(pool, &tenant.org.slug, viewer, needle).await?);
     }
     if wanted.contains(&"image") || wanted.contains(&"document") {
         hits.extend(media_hits(pool, viewer, needle, &wanted).await?);
@@ -211,6 +211,7 @@ fn hit(
 
 async fn page_hits(
     pool: &rustango::sql::Pool,
+    tenant_slug: &str,
     viewer: Option<&rustango::tenancy::auth::User>,
     needle: &str,
 ) -> Result<Vec<serde_json::Value>, rustango::sql::ExecError> {
@@ -238,9 +239,9 @@ async fn page_hits(
         .collect();
     let denied = crate::view_restriction::denied_page_ids(pool, viewer, &triples).await;
 
-    // Prefer the configured backend (PG FTS / Elasticsearch) when it has
-    // an opinion, so a tenant's real search config applies here too.
-    let ranked = crate::search::search_page_ids(pool, needle, 1000).await;
+    // The installed backend (Elasticsearch) when there is one, else
+    // Postgres full-text — the same ranking the pages list uses.
+    let ranked = crate::search::ranked_public_page_ids(pool, tenant_slug, needle, 1000).await;
     let rank_of: std::collections::HashMap<i64, usize> = ranked
         .as_ref()
         .map(|ids| ids.iter().enumerate().map(|(i, id)| (*id, i)).collect())

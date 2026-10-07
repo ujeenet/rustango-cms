@@ -47,6 +47,17 @@ cargo run -- runserver
 - Sign in: <http://demo.localtest.me:8080/login>
 - Admin: <http://demo.localtest.me:8080/cms-admin/pages>
 __TEMPLATE_NOTE__
+## Deploy
+
+Build once with `cargo build --release` (add `--no-default-features --features sqlite` for SQLite), then on the server:
+
+1. Copy the binary, `templates/` and `migrations/` to one folder, and set `RCMS_SITE_DIR` to it.
+2. Set the production variables from `.env.example`: `RUSTANGO_ENV=prod`, `RUSTANGO_SESSION_SECRET`, `RUSTANGO_SECRET_KEY`, `RCMS_SECRET_KEY`, `RUSTANGO_APEX_DOMAIN`, `DATABASE_URL`.
+3. On every deploy run `./__NAME__ migrate` before `./__NAME__ runserver`.
+4. Put a reverse proxy with HTTPS in front, and back up the database and `./var/` (uploaded media, generated keys).
+
+The full guide: <https://cms.rustango.com/production>.
+
 ## Layout
 
 - `src/main.rs` — wires the admin + public router into the manage runner and seeds page types.

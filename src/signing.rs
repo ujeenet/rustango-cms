@@ -8,21 +8,27 @@
 
 use sha2::{Digest, Sha256};
 
-/// Process-wide CMS secret used to sign short-lived tokens (preview
-/// tokens, and any future signed CMS artifact). `None` = unset →
-/// the dependent feature stays off.
-static SECRET: std::sync::OnceLock<Option<Vec<u8>>> = std::sync::OnceLock::new();
+/// Process-wide CMS secret used to sign short-lived tokens: preview
+/// tokens, view-restriction grants, password-reset links and the admin's
+/// flash cookie (the last two through [`derived_key`]).
+static SECRET: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
+
+/// Where the CMS keeps the key it generates when `RCMS_SECRET_KEY` is not
+/// set, relative to the working directory. Several replicas need either
+/// the env var or this file on shared storage, so they sign alike.
+pub const GENERATED_KEY_PATH: &str = "./var/.rustango_cms_signing.key";
 
 /// Set the CMS signing secret. Call once at startup, before anything is
 /// served; the key must be stable across restarts. Sourced from the
-/// `RCMS_SECRET_KEY` env var when this isn't called.
+/// `RCMS_SECRET_KEY` env var, then [`GENERATED_KEY_PATH`], when this
+/// isn't called.
 ///
 /// The first read fixes the secret for the life of the process, so a call
 /// after it — or a second call with another key — cannot take effect, and
 /// is logged as an error rather than dropped.
 pub fn set_secret(key: impl Into<Vec<u8>>) {
     let key = key.into();
-    if let Err(rejected) = SECRET.set(Some(key)) {
+    if let Err(rejected) = SECRET.set(key) {
         if SECRET.get() != Some(&rejected) {
             tracing::error!(
                 target: "rustango_cms::signing",
@@ -33,15 +39,56 @@ pub fn set_secret(key: impl Into<Vec<u8>>) {
     }
 }
 
-/// The CMS signing secret, or `None` when unset (feature off). Falls
-/// back to the `RCMS_SECRET_KEY` env var on first read.
+/// The CMS signing secret: [`set_secret`]'s key, else `RCMS_SECRET_KEY`,
+/// else a 32-byte key generated once and kept at [`GENERATED_KEY_PATH`],
+/// so every signed feature works without configuration.
 #[must_use]
-pub fn secret() -> Option<&'static [u8]> {
-    SECRET
-        .get_or_init(|| {
-            crate::config::var("SECRET_KEY").map(String::into_bytes)
-        })
-        .as_deref()
+pub fn secret() -> &'static [u8] {
+    SECRET.get_or_init(|| {
+        crate::config::var("SECRET_KEY")
+            .map(String::into_bytes)
+            .unwrap_or_else(|| load_or_generate(std::path::Path::new(GENERATED_KEY_PATH)))
+    })
+}
+
+/// A key for one purpose, derived from [`secret`], so a value signed for
+/// one feature never verifies in another.
+#[must_use]
+pub fn derived_key(purpose: &str) -> Vec<u8> {
+    hmac_sha256(secret(), purpose.as_bytes()).to_vec()
+}
+
+/// Read the key at `path`, or generate 32 bytes from the OS CSPRNG and
+/// persist them atomically, so signatures survive restarts. If the file
+/// can't be written the key lives for this process only.
+fn load_or_generate(path: &std::path::Path) -> Vec<u8> {
+    if let Ok(bytes) = std::fs::read(path) {
+        if bytes.len() >= 32 {
+            return bytes;
+        }
+    }
+    let mut buf = [0u8; 32];
+    getrandom::fill(&mut buf).expect("OS CSPRNG unavailable");
+    let buf = buf.to_vec();
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let tmp = path.with_extension("tmp");
+    if std::fs::write(&tmp, &buf).is_ok() && std::fs::rename(&tmp, path).is_ok() {
+        tracing::info!(
+            target: "rustango_cms::signing",
+            path = %path.display(),
+            "generated the CMS signing key (set RCMS_SECRET_KEY to choose your own)"
+        );
+    } else {
+        tracing::warn!(
+            target: "rustango_cms::signing",
+            path = %path.display(),
+            "could not persist the generated CMS signing key; signed links \
+             (previews, password resets) stop working at the next restart"
+        );
+    }
+    buf
 }
 
 /// HMAC-SHA256(`key`, `msg`) as lowercase hex (64 chars). Callers that
@@ -123,5 +170,24 @@ mod tests {
         assert!(constant_time_eq(b"abc", b"abc"));
         assert!(!constant_time_eq(b"abc", b"abd"));
         assert!(!constant_time_eq(b"abc", b"ab"));
+    }
+
+    /// With no `RCMS_SECRET_KEY`, the generated key is kept on disk, so a
+    /// restart — or a second replica reading the same file — signs alike.
+    #[test]
+    fn a_generated_key_is_persisted_and_read_back() {
+        let dir = std::env::temp_dir().join(format!("rcms-signing-{}", std::process::id()));
+        let path = dir.join("var").join("key");
+        let first = load_or_generate(&path);
+        assert_eq!(first.len(), 32);
+        assert_eq!(load_or_generate(&path), first, "a second read returns the stored key");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn derived_keys_differ_per_purpose() {
+        set_secret(b"test-secret".to_vec());
+        assert_ne!(derived_key("rcms:flash"), derived_key("rcms:password-reset"));
+        assert_ne!(derived_key("rcms:flash"), secret().to_vec());
     }
 }

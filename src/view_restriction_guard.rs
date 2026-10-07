@@ -274,9 +274,8 @@ fn has_valid_password_grant(
 }
 
 /// The signature over a grant. Keyed by the CMS signing secret
-/// ([`crate::signing::secret`]) when one is configured, so a leaked
-/// database row can't mint grants; without one, by the stored hash as
-/// before. Either way the message carries the tenant, the page, a
+/// ([`crate::signing::secret`]), so a leaked database row can't mint
+/// grants. The message carries the tenant, the page, a
 /// fingerprint of the password hash (changing the password revokes every
 /// grant) and the issue time (so a grant expires on the server).
 #[must_use]
@@ -288,9 +287,8 @@ pub fn grant_signature(
 ) -> String {
     let fingerprint =
         crate::signing::hmac_sha256_hex(b"rcms-grant-fp", restriction.password_hash.as_bytes());
-    let key = crate::signing::secret().unwrap_or(restriction.password_hash.as_bytes());
     crate::signing::hmac_sha256_hex(
-        key,
+        crate::signing::secret(),
         format!("view_grant|{tenant_slug}|{page_id}|{fingerprint}|{issued_at}").as_bytes(),
     )
 }

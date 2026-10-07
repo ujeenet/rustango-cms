@@ -28,6 +28,15 @@
 //! Then sign in at <http://shop.localhost:8080/login>. Emails (order-form
 //! notifications, workflow steps, password resets) are printed to the
 //! console, so the tutorial can show them without a mail server.
+//!
+//! The headless chapters also need, before `runserver`:
+//!
+//! ```sh
+//! export RCMS_API_CORS_ORIGINS="http://localhost:8250"   # lets headless/ call the API
+//! ```
+//!
+//! and serve the storefront with `python3 -m http.server 8250` from
+//! `examples/ceramics_shop/headless/`.
 
 mod models;
 

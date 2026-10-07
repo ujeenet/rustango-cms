@@ -4,6 +4,14 @@ What to change in a host application when upgrading rustango-cms. Find
 your symptom below; each entry names the change and the fix. The full list
 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Unreleased
+
+### An API client parses `extension.<stream field>` with `JSON.parse`
+
+Page detail now returns StreamField extension columns as arrays. Drop the
+parse step — read `extension.body` as the list of blocks. A client that
+must work against both versions can parse only when the value is a string.
+
 ## 0.1.0
 
 ### rustango 0.60

@@ -36,8 +36,14 @@
             {% for r in rows %}
                 <tr>
                     <td>
-                        <strong>{{ r.scope }}</strong>
-                        {% if r.typed %}<span class="rcms-tag" title="{{ r.label }} — registered typed schema">{{ "Typed" | translate(locale=LANG) }}</span>{% endif %}
+                        {% if r.typed and r.label %}
+                            <strong>{{ r.label }}</strong>
+                            <span class="rcms-tag">{{ "Typed" | translate(locale=LANG) }}</span>
+                            <div><code class="rcms-text-2xs">{{ r.scope }}</code></div>
+                        {% else %}
+                            <strong>{{ r.scope }}</strong>
+                            {% if r.typed %}<span class="rcms-tag">{{ "Typed" | translate(locale=LANG) }}</span>{% endif %}
+                        {% endif %}
                     </td>
                     <td>
                         {% if r.configured %}

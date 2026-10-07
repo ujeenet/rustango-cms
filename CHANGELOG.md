@@ -8,6 +8,32 @@ Issue numbers such as `#258` in entries written before the public release
 refer to the project's earlier, private tracker, not to issues in this
 repository.
 
+## Unreleased
+
+### Changed
+
+- Page detail in the headless API (and a page's JSON form) returns a
+  StreamField extension column as the block array, not as the JSON text it
+  is stored as — the shape `builder` zones already had. Per-block
+  translations now apply to those streams under `?locale=` too.
+
+- `preview_token::mint` returns the token itself (no `Option`): the CMS
+  signing secret is always available now. Without `RCMS_SECRET_KEY` the
+  CMS generates a key once into `./var/.rustango_cms_signing.key`, so
+  headless preview works with no setup. Password-reset links and the
+  admin's flash messages use keys derived from the same secret, so they
+  also work across replicas that share it.
+
+### Fixed
+
+- Publishing purged nothing from the page cache: the invalidator built
+  cache keys without the tenant the framework's `CachePageLayer` now adds,
+  so edited pages stayed stale until the TTL ran out.
+
+- With `RCMS_API_CORS_ORIGINS` set, the preflight now allows `POST` and the
+  `Authorization` header, so a frontend on another origin can log a member
+  in and send the bearer token. Before, the browser refused both.
+
 ## 0.1.0 — 2026-10-06
 
 First release on crates.io: `rustango-cms` and `rustango-cms-macros`.

@@ -20,28 +20,12 @@ use serde::Deserialize;
 use std::sync::OnceLock;
 use tera::Context;
 
-/// Process-local HMAC key for signing the flash-messages cookie.
-///
-/// Seeded once per process from `rand::thread_rng().fill_bytes`.
-/// Pending messages stage in the cookie itself, so the only
-/// observable effect of a server restart is that any in-flight
-/// flash from before the restart is silently discarded
-/// ([`rustango::messages::drain`] returns an empty Vec on bad/
-/// missing signatures). Acceptable trade-off for one-shot UI
-/// hints; multi-instance deployments where flashes must survive a
-/// pool of admin servers should run pinned sessions or move to
-/// session-backed storage (queued upstream).
+/// HMAC key for the flash-messages cookie, derived from the CMS signing
+/// secret so every replica — and the same server after a restart — reads
+/// the flash another one set.
 fn messages_secret() -> &'static [u8] {
     static SECRET: OnceLock<Vec<u8>> = OnceLock::new();
-    SECRET.get_or_init(|| {
-        // #319 — 32 random bytes straight from the OS CSPRNG via
-        // `getrandom` (rand 0.10 removed `OsRng`; this is the source it
-        // wrapped). Explicit OS entropy at this HMAC-secret boundary,
-        // rather than `rand::random()`'s thread RNG.
-        let mut k = [0u8; 32];
-        getrandom::fill(&mut k).expect("OS CSPRNG unavailable");
-        k.to_vec()
-    })
+    SECRET.get_or_init(|| crate::signing::derived_key("rcms:flash"))
 }
 
 /// Sanitize WYSIWYG (RichText-widget) HTML server-side before it
@@ -4227,8 +4211,8 @@ pub async fn page_edit_form(
     //
     // Minted per render rather than per click: the token is short-lived
     // and page-scoped, and generating it here keeps the link a plain
-    // anchor instead of requiring JS. `None` (no secret configured, or
-    // no frontend set) simply hides the action.
+    // anchor instead of requiring JS. `None` (no frontend set) simply
+    // hides the action.
     // The site-wide template, which the page may override. A lookup
     // failure is not fatal — it costs the preview action, not the editor.
     let site_preview_base = match crate::preview_url::configured_base(tenant.pool()).await {
@@ -4246,16 +4230,18 @@ pub async fn page_edit_form(
     // override on a tenant with no frontend has no preview URL at all.
     let headless_preview_url = if site_preview_base.is_some() || !page.preview_path.trim().is_empty()
     {
-        crate::preview_token::mint(&tenant.org.slug, id, chrono::Utc::now().timestamp() + PREVIEW_TOKEN_TTL_SECS)
-            .and_then(|token| {
-                crate::preview_url::for_page(
-                    site_preview_base.as_deref(),
-                    &page.preview_path,
-                    &token,
-                    id,
-                    &page.url_path,
-                )
-            })
+        let token = crate::preview_token::mint(
+            &tenant.org.slug,
+            id,
+            chrono::Utc::now().timestamp() + PREVIEW_TOKEN_TTL_SECS,
+        );
+        crate::preview_url::for_page(
+            site_preview_base.as_deref(),
+            &page.preview_path,
+            &token,
+            id,
+            &page.url_path,
+        )
     } else {
         None
     };
@@ -8201,7 +8187,7 @@ pub async fn page_preview(
 /// signed preview token so a decoupled / headless frontend can fetch
 /// this page's DRAFT via `/api/v2/pages/{id}/?preview_token=…`. Returns
 /// JSON `{token, expires_at, api_path}`. Auth is enforced by the admin
-/// router's login guard. 422 when no signing secret is configured.
+/// router's login guard.
 pub async fn page_preview_token(
     tenant: Tenant,
     Path(id): Path<i64>,
@@ -8217,18 +8203,13 @@ pub async fn page_preview_token(
     // 1-hour token: long enough to click through + iterate, short
     // enough to bound exposure of an unpublished page.
     let expires = chrono::Utc::now().timestamp() + PREVIEW_TOKEN_TTL_SECS;
-    match crate::preview_token::mint(&tenant.org.slug, id, expires) {
-        Some(token) => Ok(Json(serde_json::json!({
-            "token": token,
-            "expires_at": expires,
-            "api_path": format!("/api/v2/pages/{id}/?preview_token={token}"),
-        }))
-        .into_response()),
-        None => Err(AdminError::Validation(
-            "Preview tokens are disabled — set RCMS_SECRET_KEY to enable headless draft preview."
-                .to_owned(),
-        )),
-    }
+    let token = crate::preview_token::mint(&tenant.org.slug, id, expires);
+    Ok(Json(serde_json::json!({
+        "token": token,
+        "expires_at": expires,
+        "api_path": format!("/api/v2/pages/{id}/?preview_token={token}"),
+    }))
+    .into_response())
 }
 
 /// POST /cms-admin/pages/{id}/preview — same as the GET variant, but

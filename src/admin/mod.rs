@@ -129,13 +129,11 @@ pub(crate) struct AdminState {
 /// app should layer [`with_login_required`] on top (or equivalent
 /// reverse-proxy basic auth).
 ///
-/// Persists a process-local secret at `./var/.rustango_cms_signing.key`
-/// to sign password-reset URLs (so links stay valid across server
-/// restarts).
+/// Password-reset links are signed with a key derived from the CMS
+/// signing secret ([`crate::signing::secret`]), so they stay valid across
+/// restarts and replicas.
 pub fn router(tera: Arc<Tera>) -> Router {
-    let secret = load_or_generate_signing_secret(&std::path::PathBuf::from(
-        "./var/.rustango_cms_signing.key",
-    ));
+    let secret = crate::signing::derived_key(PASSWORD_RESET_KEY_PURPOSE);
     crate::perf::instrument(router_with_state(AdminState {
         tera,
         signing_secret: Arc::new(secret),
@@ -153,9 +151,7 @@ pub fn router_with_invalidator(
     tera: Arc<Tera>,
     invalidator: Arc<dyn crate::cache_invalidate::PageCacheInvalidator>,
 ) -> Router {
-    let secret = load_or_generate_signing_secret(&std::path::PathBuf::from(
-        "./var/.rustango_cms_signing.key",
-    ));
+    let secret = crate::signing::derived_key(PASSWORD_RESET_KEY_PURPOSE);
     // Queued purge jobs a worker drains without this router fall back to it (#732).
     crate::task_queue::set_default_invalidator(Arc::clone(&invalidator));
     router_with_state(AdminState {
@@ -178,9 +174,7 @@ pub fn router_with_mailer(
     mailer: Arc<dyn rustango::email::Mailer>,
     from_addr: impl Into<String>,
 ) -> Router {
-    let secret = load_or_generate_signing_secret(&std::path::PathBuf::from(
-        "./var/.rustango_cms_signing.key",
-    ));
+    let secret = crate::signing::derived_key(PASSWORD_RESET_KEY_PURPOSE);
     // Queued purge jobs a worker drains without this router fall back to it (#732).
     crate::task_queue::set_default_invalidator(Arc::clone(&invalidator));
     router_with_state(AdminState {
@@ -228,9 +222,7 @@ fn public_router_inner(
     mailer: Option<Arc<dyn rustango::email::Mailer>>,
     mailer_from: String,
 ) -> Router {
-    let secret = load_or_generate_signing_secret(&std::path::PathBuf::from(
-        "./var/.rustango_cms_signing.key",
-    ));
+    let secret = crate::signing::derived_key(PASSWORD_RESET_KEY_PURPOSE);
     let state = AdminState {
         tera,
         signing_secret: Arc::new(secret),
@@ -395,45 +387,9 @@ async fn serve_third_party_notices() -> impl axum::response::IntoResponse {
     )
 }
 
-/// Load the 32-byte signing key from `path` if present, otherwise
-/// generate a fresh one + persist atomically. Mirrors the
-/// `SessionSecret::from_env_or_disk` shape but returns raw bytes
-/// (rustango's `SessionSecret` is opaque) so we can feed them to
-/// `signed_url::sign` / `PasswordReset::verify` which want `&[u8]`.
-fn load_or_generate_signing_secret(path: &std::path::Path) -> Vec<u8> {
-    if let Ok(bytes) = std::fs::read(path) {
-        if bytes.len() >= 32 {
-            return bytes;
-        }
-    }
-    // #319 — generate 32 random bytes straight from the OS CSPRNG via
-    // `getrandom` (the source `OsRng` wrapped; rand 0.10 removed the
-    // `OsRng` type). Explicit OS entropy at this signing-key boundary is
-    // self-documenting for auditors and avoids relying on
-    // `rand::random()`'s thread RNG (CSPRNG-backed today, but not
-    // obviously so at a glance).
-    let mut buf = [0u8; 32];
-    getrandom::fill(&mut buf).expect("OS CSPRNG unavailable");
-    let buf = buf.to_vec();
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let tmp = path.with_extension("tmp");
-    if std::fs::write(&tmp, &buf).is_ok() && std::fs::rename(&tmp, path).is_ok() {
-        tracing::info!(
-            path = %path.display(),
-            "generated new rustango-cms signing secret; password-reset \
-             links signed with this key. Persisted to disk so links \
-             survive restarts."
-        );
-    } else {
-        tracing::warn!(
-            "could not persist rustango-cms signing secret — \
-             password-reset links will become invalid on every restart"
-        );
-    }
-    buf
-}
+/// Purpose label for the key that signs password-reset links (derived
+/// from [`crate::signing::secret`]).
+const PASSWORD_RESET_KEY_PURPOSE: &str = "rcms:password-reset";
 
 /// Layer [`rustango::auth_decorators::login_required`] on top of the
 /// supplied router. Every protected route 302s anonymous visitors to

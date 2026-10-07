@@ -241,7 +241,7 @@ impl BoxedCacheInvalidator {
             .unwrap_or(&self.default_hosts)
     }
 
-    fn compute_key(&self, path: &str, host: &str) -> String {
+    fn compute_key(&self, path: &str, host: &str, tenant_slug: &str) -> String {
         use std::fmt::Write as _;
         let mut k = String::with_capacity(self.key_prefix.len() + 128);
         let _ = write!(&mut k, "{}|", self.key_prefix);
@@ -249,6 +249,9 @@ impl BoxedCacheInvalidator {
         write_lp(&mut k, path);
         write_lp(&mut k, "");
         write_lp(&mut k, host);
+        // The layer keys every page on the resolved tenant after the host;
+        // without it no delete matches and pages wait out the TTL.
+        write_lp(&mut k, tenant_slug);
         for (name, value) in &self.vary_values {
             write_lp(&mut k, name);
             write_lp(&mut k, value);
@@ -274,23 +277,24 @@ mod key_shape_tests {
     /// Locks in the key shape so a framework-side change to
     /// `compute_cache_key` becomes a hard test failure here.
     /// The format mirrors `rustango::cache_page::compute_cache_key`:
-    ///   `<prefix>|<method-len>:<method>|<path-len>:<path>|<query-len>:<query>|<host-len>:<host>|`
-    /// followed by any `vary_on` pairs.
+    ///   `<prefix>|<method-len>:<method>|<path-len>:<path>|<query-len>:<query>|<host-len>:<host>|<tenant-len>:<tenant>|`
+    /// followed by any `vary_on` pairs. `tests/cache_purge_roundtrip.rs`
+    /// checks the same thing against the real layer.
     #[test]
     fn key_shape_matches_cache_page_layer() {
         let inv = fake_invalidator();
-        let key = inv.compute_key("/about", "acme.localhost:8090");
-        assert_eq!(key, "rcms:page|3:GET|6:/about|0:|19:acme.localhost:8090|");
+        let key = inv.compute_key("/about", "acme.localhost:8090", "acme");
+        assert_eq!(key, "rcms:page|3:GET|6:/about|0:|19:acme.localhost:8090|4:acme|");
     }
 
     #[test]
     fn key_with_vary_values_appends_pairs() {
         let inv = fake_invalidator()
             .with_vary_values(vec![("accept-language".to_owned(), "en".to_owned())]);
-        let key = inv.compute_key("/about", "acme.localhost");
+        let key = inv.compute_key("/about", "acme.localhost", "acme");
         assert_eq!(
             key,
-            "rcms:page|3:GET|6:/about|0:|14:acme.localhost|15:accept-language|2:en|"
+            "rcms:page|3:GET|6:/about|0:|14:acme.localhost|4:acme|15:accept-language|2:en|"
         );
     }
 }
@@ -308,7 +312,7 @@ impl PageCacheInvalidator for BoxedCacheInvalidator {
             return;
         }
         for host in hosts {
-            let key = self.compute_key(url_path, host);
+            let key = self.compute_key(url_path, host, tenant_slug);
             match self.cache.delete(&key).await {
                 Ok(()) => tracing::debug!(
                     target: "rustango_cms::cache_invalidate",

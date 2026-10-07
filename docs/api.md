@@ -60,10 +60,13 @@ readable by any page a browser will load, so it stays an explicit act:
 RCMS_API_CORS_ORIGINS=https://app.example.com,https://admin.example.com
 ```
 
-Listed origins get `Access-Control-Allow-Credentials`, so a cross-origin
-SPA can send the member session cookie and read gated content. The
-literal `*` reflects any origin **without** credentials — development
-only. Unset, or empty, means no CORS headers and no preflight handling,
+Listed origins may call `POST /api/v2/auth/login` and send an
+`Authorization: Bearer` token, which is how a SPA on another origin reads
+gated content (see [Authenticating a member](#authenticating-a-member) —
+the session cookie does not travel on cross-site requests). They also get
+`Access-Control-Allow-Credentials`, for a frontend on a sibling subdomain
+of the same site, where the cookie does travel. The literal `*` reflects
+any origin **without** credentials — development only. Unset, or empty, means no CORS headers and no preflight handling,
 which is what every existing deployment already had.
 
 `ETag` and `Allow` are named in `Access-Control-Expose-Headers`. Browsers
@@ -179,7 +182,7 @@ The list item, plus:
 
 | Key | Present when |
 | --- | --- |
-| `extension` | The page type's `load_extension` returns data. |
+| `extension` | The page type's `load_extension` returns data. A StreamField column is the block array (`[{ "type", "id", "value" }, …]`), not JSON text. |
 | `builder` | The page type has a UI-defined body schema. Values only; the client renders. |
 | `routes` | The page type declares routable sub-URLs: `[{ "name", "pattern" }]`. |
 | `children` | Always — see [`children` on page detail](#children-on-page-detail). |
@@ -474,12 +477,14 @@ translations survive a reorder.
 
 A draft is invisible to the API — `/api/v2/pages/{id}/` 404s it — unless
 the request carries a signed `?preview_token=`. Tokens are page-scoped,
-expire in an hour, and require `RCMS_SECRET_KEY` to be set; without it
-preview is off entirely.
+and expire in an hour. They are signed with `RCMS_SECRET_KEY`, or — when it
+is unset — with a key the CMS generates once into
+`./var/.rustango_cms_signing.key`. Several servers must share one of the two.
 
 For a site the CMS renders, the admin's own preview pane handles this.
 For a **decoupled frontend**, point the tenant at it under
-**Settings → Headless preview**:
+**Site settings → Headless preview** (a walkthrough with the example shop:
+[Preview drafts on your own frontend](shop-dev-headless-preview.md)):
 
 ```text
 https://app.example.com/api/preview?token={token}&path={path}

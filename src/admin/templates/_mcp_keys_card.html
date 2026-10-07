@@ -30,7 +30,8 @@
                     <td><code>{{ key.prefix }}…</code></td>
                     <td>
                         {% if key.scope and key.scope | length > 0 %}
-                            {% for s in key.scope %}<span class="rcms-tag rcms-tag--small">{{ s }}</span> {% endfor %}
+                            {# Show the skill's name, as the form below does; a codename no longer seeded falls back to itself. #}
+                            {% for s in key.scope %}{% set_global skill_name = s %}{% for sk in mcp_skills | default(value=[]) %}{% if sk.codename == s %}{% set_global skill_name = sk.name %}{% endif %}{% endfor %}<span class="rcms-tag rcms-tag--small" title="{{ s }}">{{ skill_name }}</span> {% endfor %}
                         {% else %}
                             <span class="rcms-hint">{{ "All permitted skills" | translate(locale=LANG) }}</span>
                         {% endif %}

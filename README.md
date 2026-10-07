@@ -31,7 +31,7 @@ It runs multi-tenant from the start — every tenant gets its own page tree, med
 - **Multi-language content.** Locales per tenant, side-by-side translation screens for pages, snippets, forms and menus, and a localised admin (English, Ukrainian, Polish, French, German, Simplified Chinese and Japanese).
 - **A form builder.** Multi-step forms with conditional logic, submissions stored per form, and notification email.
 - **Members and permissions.** Roles and codename permissions for editors; private pages and sections for signed-in members, with sign-up, login and single sign-on.
-- **Headless when you want it.** A read/write JSON API under `/api/v2/`, locale-aware, and an MCP server so an AI agent can work in the CMS as a user, with its own keys.
+- **Headless when you want it.** A read-only JSON API under `/api/v2/` for a frontend you build yourself, with draft preview in the editor through short-lived preview links, and an MCP server so an AI agent can work in the CMS as a user, with its own keys.
 - **Production pieces.** SEO fields, sitemap, RSS/Atom feeds, `robots.txt`, search (built-in or Elasticsearch), S3-compatible media storage, front-cache purging (Cloudflare, Varnish, CloudFront, Google Cloud CDN, Azure CDN) and CSRF protection on every admin form.
 
 ## Install
@@ -205,10 +205,9 @@ rustango_cms::translation::register_tera_filter(&mut tera); // `t`
 
 ```sh
 RUST_LOG=info,rustango_cms::render=debug cargo run   # one module in detail
-RUSTANGO_LOG_FORMAT=json cargo run                   # JSON lines for production
 ```
 
-[docs/logging.md](docs/logging.md) lists every log target and the OpenTelemetry setup.
+[docs/logging.md](docs/logging.md) lists every log target and shows JSON logs for production and the OpenTelemetry setup.
 
 ## Cargo features
 
@@ -226,7 +225,8 @@ RUSTANGO_LOG_FORMAT=json cargo run                   # JSON lines for production
 - **[cms.rustango.com](https://cms.rustango.com)** — everything below, as a website.
 - **[What is Rustango-CMS?](docs/cms-overview.md)** and **[Getting started](docs/getting-started.md)** — from an empty folder to a blog in about 20 minutes.
 - **For editors** — [find your way](docs/admin-find-your-way.md), [your first page](docs/admin-first-page.md), [live preview](docs/admin-live-preview.md).
-- **[Build a ceramics shop](docs/shop-overview.md)** — the tutorial, 15 editor chapters and 2 developer chapters.
+- **[Build a ceramics shop](docs/shop-overview.md)** — the tutorial, 16 editor chapters and 4 developer chapters, including [a headless storefront](docs/shop-dev-headless.md) with [draft preview](docs/shop-dev-headless-preview.md).
+- **[Run it in production](docs/production.md)** — secrets, migrations, the reverse proxy, S3 media, caching, search and email.
 - **[Headless API](docs/api.md)**, **[per-tenant templates](docs/tenant-templates.md)**, **[Google sign-in](docs/sso-google-setup.md)**.
 - **[API reference on docs.rs](https://docs.rs/rustango-cms)** — every module, trait and type.
 - [CHANGELOG.md](CHANGELOG.md) and [UPGRADING.md](UPGRADING.md).

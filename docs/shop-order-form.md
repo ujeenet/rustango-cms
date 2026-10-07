@@ -154,7 +154,7 @@ Delivery address: Lindenstraße 12
 Germany
 Message (optional): It is a present for my mother. Could you add a small card?
 
-http://shop.localhost:8240/shop/moon-jar
+http://shop.localhost:8080/shop/moon-jar
 ```
 
 The last line is the page the customer ordered from — so you know **which piece** they want, without an extra field.

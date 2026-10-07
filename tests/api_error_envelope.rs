@@ -177,3 +177,47 @@ async fn cors_exposes_the_validator_and_allow_headers() {
         "Allow names the verbs that would work: {exposed:?}",
     );
 }
+
+/// A SPA on another origin logs a member in with `POST /api/v2/auth/login`
+/// and then sends `Authorization: Bearer …`. Both need the preflight to
+/// allow them; when it only allowed GET and `content-type`, the browser
+/// refused the login and every authorized read before they were sent.
+#[tokio::test]
+async fn cors_preflight_allows_the_member_login_and_bearer_token() {
+    use rustango_cms::api::Cors;
+
+    for (method, header) in [("POST", "content-type"), ("GET", "authorization")] {
+        let cors = Cors::Origins(vec!["https://spa.example.com".to_owned()]);
+        let res = rustango_cms::api::router_with(&cors)
+            .oneshot(
+                Request::builder()
+                    .method("OPTIONS")
+                    .uri("/api/v2/auth/login")
+                    .header("Origin", "https://spa.example.com")
+                    .header("Access-Control-Request-Method", method)
+                    .header("Access-Control-Request-Headers", header)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .expect("oneshot");
+
+        let get = |name: &str| {
+            res.headers()
+                .get(name)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or_default()
+                .to_ascii_lowercase()
+        };
+        assert!(
+            get("access-control-allow-methods").contains(&method.to_ascii_lowercase()),
+            "preflight must allow {method}: {:?}",
+            get("access-control-allow-methods"),
+        );
+        assert!(
+            get("access-control-allow-headers").contains(header),
+            "preflight must allow the {header} header: {:?}",
+            get("access-control-allow-headers"),
+        );
+    }
+}

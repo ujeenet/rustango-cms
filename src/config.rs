@@ -7,11 +7,11 @@
 //!
 //! | Setting | Purpose |
 //! |---|---|
-//! | `RCMS_SECRET_KEY` | Signs preview tokens and other CMS artifacts |
+//! | `RCMS_SECRET_KEY` | Signs preview tokens, password-reset links and other CMS artifacts; generated into `./var/.rustango_cms_signing.key` when unset |
 //! | `RCMS_RENDITION_SIGNING_KEY` | Signs image rendition URLs |
 //! | `RCMS_API_CORS_ORIGINS` | Origins allowed to call `/api/v2` |
 //! | `RCMS_MEDIA_BACKEND` | `local` (default), `memory` or `s3` |
-//! | `RCMS_MEDIA_CDN_BASE` | Public base URL media is served from |
+//! | `RCMS_MEDIA_CDN_BASE` | Base URL [`crate::media_storage::public_url`] returns for stored objects (`s3`/`memory` backends). Pages the CMS renders keep serving media through `/__media__/…` with year-long immutable caching, so a CDN in front of the site caches them |
 //! | `RCMS_MEDIA_TENANT_BUCKETS` / `RCMS_MEDIA_TENANT_CDNS` | Per-tenant S3 buckets / CDNs, `slug=value,…` |
 //! | `RCMS_S3_BUCKET`, `_REGION`, `_ENDPOINT`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, `_PATH_STYLE` | S3 media backend |
 //! | `RCMS_SITE_HOST_SUFFIXES` | Domains a tenant may add hostnames under without approval |

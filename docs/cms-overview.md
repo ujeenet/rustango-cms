@@ -1,6 +1,6 @@
 # What is Rustango-CMS?
 
-**Goal:** understand what Rustango-CMS is, and the three ways it gives you to make pages — from fixed pages made in code to free pages that editors build themselves.
+**Goal:** understand what Rustango-CMS is, the three ways it gives you to make pages — from fixed pages made in code to free pages that editors build themselves — and the two ways to show them: drawn by the CMS, or by your own frontend.
 
 **Who this is for:** everybody — editors, site managers and developers. Read this page first.
 
@@ -113,11 +113,28 @@ The three ways are not a choice for the whole site. They work together:
 - a type **built in the admin** can have a **flexible zone** — fixed fields for the price, a free zone below;
 - any page can show **Library elements**, so shared text is written only once.
 
+## Two ways to show the pages
+
+The three ways above decide **how a page is made**. A separate question is **who draws it** for visitors:
+
+| | The CMS draws it | Your own frontend draws it ("headless") |
+|---|---|---|
+| **The HTML comes from** | templates in the Rust project | a separate website or app — in JavaScript, a mobile app, anything that reads JSON |
+| **The content comes from** | the same database | the CMS's JSON API (`/api/v2/`) |
+| **Editors work in** | the admin | the same admin |
+| **Preview of a draft** | the editor's live preview | the editor shows the real frontend, with a short-lived preview link |
+
+Every page type works both ways — made in code, built in the admin, or full of blocks. The API is always there next to the normal pages, so one site can let the CMS draw most pages and send some content to an app.
+
+- **Developers:** [A headless storefront](shop-dev-headless.md) shows the ceramics shop on a second website in plain JavaScript, and [Preview drafts on your own frontend](shop-dev-headless-preview.md) adds the draft preview.
+- **Editors:** nothing changes, except the extra preview buttons — see [When your site has its own frontend](admin-live-preview.md#when-your-site-has-its-own-frontend).
+
 ## How to choose
 
 1. **Does code need the data** (searching, sorting, special logic)? → model-based.
 2. **Will there be many pages with the same shape**, and should non-developers be able to change that shape? → build the type in the admin.
 3. **Is every page different**? → give the type a Stream field or a flexible zone, and let editors build.
+4. **Is the site drawn by another program** — an app, or a website in another language? → keep any of the three, and read the content from the API.
 
 When you are not sure, start with a type built in the admin. You can move a type to code later, when you need its extra powers.
 

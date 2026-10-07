@@ -76,7 +76,7 @@ cache_azure = ["rustango/http-client"]
 # `ravif`/`rav1e` AV1 encoder (heavy build + binary). `format-avif`
 # specs return a clear error until this is enabled.
 avif = ["image/avif"]
-# Elasticsearch full-text backend (`search::elasticsearch`).
+# Elasticsearch full-text backend (`search_elasticsearch`).
 # Off by default; pulls the framework's reqwest-based HTTP client. When
 # enabled + `search::set_backend(...)` is wired, search routes to ES
 # instead of the built-in Postgres FTS path.

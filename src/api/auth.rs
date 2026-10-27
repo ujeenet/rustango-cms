@@ -49,6 +49,7 @@ pub struct LoginForm {
 pub async fn login(
     tenant: Tenant,
     axum::Extension(ctx): axum::Extension<Arc<rustango::extractors::TenantContext>>,
+    request: crate::security_log::LoginRequest,
     headers: axum::http::HeaderMap,
     body: axum::body::Bytes,
 ) -> Response {
@@ -69,29 +70,36 @@ pub async fn login(
         .into_response();
     };
 
-    login_inner(&tenant, &ctx, &form).await
+    login_inner(&tenant, &ctx, &request, &form).await
 }
 
 async fn login_inner(
     tenant: &Tenant,
     ctx: &rustango::extractors::TenantContext,
+    request: &crate::security_log::LoginRequest,
     form: &LoginForm,
 ) -> Response {
-    let Some(user) = crate::admin::members::authenticate_member(
+    use crate::admin::MemberLoginError;
+    use crate::api::error::{ApiError, ErrorCode};
+    let outcome = crate::admin::authenticate_member(
         tenant.pool(),
+        &tenant.org.slug,
+        request,
+        "api",
         &form.identifier,
         &form.password,
     )
-    .await
-    else {
+    .await;
+    let user = match outcome {
+        Ok(user) => user,
         // One message for "no such account" and "wrong password" — the
         // difference is an account-enumeration oracle, and a client can
         // do nothing useful with it either way.
-        return crate::api::error::ApiError::new(
-            crate::api::error::ErrorCode::Unauthenticated,
-            "invalid credentials",
-        )
-        .into_response();
+        Err(MemberLoginError::Invalid) => {
+            return ApiError::new(ErrorCode::Unauthenticated, "invalid credentials")
+                .into_response();
+        }
+        Err(MemberLoginError::Refused(refused)) => return refused_response(refused),
     };
 
     let uid = user.id.get().copied().unwrap_or_default();
@@ -117,6 +125,27 @@ async fn login_inner(
         },
     }))
     .into_response()
+}
+
+/// A login the throttle refused, in the API's error envelope, with the
+/// framework's `Retry-After`.
+fn refused_response(refused: rustango::login_throttle::LoginRefused) -> Response {
+    use crate::api::error::{ApiError, ErrorCode};
+    use rustango::login_throttle::LoginRefused;
+    let (error, retry_after) = match refused {
+        LoginRefused::Throttled { retry_after_secs } => (
+            ApiError::new(ErrorCode::RateLimited, "too many login attempts"),
+            retry_after_secs,
+        ),
+        LoginRefused::Busy => (
+            ApiError::new(ErrorCode::Unavailable, "login is busy, try again"),
+            1,
+        ),
+    };
+    let mut resp = error.into_response();
+    resp.headers_mut()
+        .insert(axum::http::header::RETRY_AFTER, retry_after.into());
+    resp
 }
 
 /// A member resolved from `Authorization: Bearer <token>`.

@@ -76,11 +76,27 @@ async fn a_long_body_saves_once_widened() {
     assert_eq!(back.body_markdown.len(), body.len(), "stored whole, not truncated");
 }
 
+async fn slug_collation(pool: &Pool) -> String {
+    let my = pool.as_mysql().expect("a MySQL pool");
+    rustango::sql::sqlx::query_scalar(
+        "SELECT CAST(COLLATION_NAME AS CHAR) FROM information_schema.COLUMNS \
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cms_snippet' AND COLUMN_NAME = 'slug'",
+    )
+    .fetch_one(my)
+    .await
+    .expect("collation")
+}
+
+async fn by_slug(pool: &Pool, slug: &str) -> Result<Option<Snippet>, rustango::sql::ExecError> {
+    Snippet::objects().where_(Snippet::slug.eq(slug.to_owned())).first(pool).await
+}
+
 /// #726 — slugs differing only in case coexist and resolve exactly once
-/// the identity columns are binary, as on Postgres and SQLite.
+/// the identity columns are converted, as on Postgres and SQLite, and the
+/// rows still decode.
 #[tokio::test]
 #[ignore = "needs a live MySQL server (RCMS_TEST_MYSQL_URL)"]
-async fn identity_lookups_are_exact_once_binary() {
+async fn identity_lookups_are_exact_once_converted() {
     let pool = fresh_db("collate").await;
     let mut hero = snippet(String::new());
     hero.slug = "Hero".to_owned();
@@ -96,10 +112,37 @@ async fn identity_lookups_are_exact_once_binary() {
     let mut lower = snippet(String::new());
     lower.slug = "hero".to_owned();
     lower.save_pool(&pool).await.expect("hero coexists with Hero");
-    let found = Snippet::objects()
-        .where_(Snippet::slug.eq("HERO".to_owned()))
-        .first(&pool)
-        .await
-        .expect("query");
-    assert!(found.is_none(), "no case-folded match");
+    assert!(by_slug(&pool, "HERO").await.expect("query").is_none(), "no case-folded match");
+    let found = by_slug(&pool, "hero").await.expect("the row decodes").expect("row");
+    assert_eq!(found.slug, "hero", "the exact row, not Hero");
+    assert_eq!(slug_collation(&pool).await, "utf8mb4_0900_as_cs");
+}
+
+/// A column an earlier version made `utf8mb4_bin` comes back flagged
+/// BINARY and fails to decode; the next run moves it to the
+/// case-sensitive collation and it decodes again, still exact.
+#[tokio::test]
+#[ignore = "needs a live MySQL server (RCMS_TEST_MYSQL_URL)"]
+async fn a_binary_column_from_an_earlier_boot_is_repaired() {
+    let pool = fresh_db("rebin").await;
+    rustango::sql::raw_execute_pool(
+        &pool,
+        "ALTER TABLE cms_snippet MODIFY COLUMN slug varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL",
+        Vec::new(),
+    )
+    .await
+    .expect("the old conversion");
+    for slug in ["Hero", "hero"] {
+        let mut row = snippet(String::new());
+        row.slug = slug.to_owned();
+        row.save_pool(&pool).await.expect(slug);
+    }
+    let err = by_slug(&pool, "hero").await.expect_err("binary columns do not decode");
+    assert!(err.to_string().contains("VARBINARY"), "{err}");
+
+    assert_eq!(rustango_cms::mysql_text::exact_identity_columns(&pool).await.expect("repair"), 1);
+    assert_eq!(slug_collation(&pool).await, "utf8mb4_0900_as_cs");
+    let found = by_slug(&pool, "hero").await.expect("decodes again").expect("row");
+    assert_eq!(found.slug, "hero");
+    assert!(by_slug(&pool, "HERO").await.expect("query").is_none());
 }

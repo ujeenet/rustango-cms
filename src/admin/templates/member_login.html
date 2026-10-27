@@ -16,7 +16,7 @@
     {{ csrf_token | csrf_input | safe }}
     <h1>{{ "Welcome back" | translate(locale=LANG) }}</h1>
     <p class="rcms-lead">{{ "Sign in to continue." | translate(locale=LANG) }}</p>
-    {% if error %}<p class="rcms-error">{{ "That email/username and password didn't match." | translate(locale=LANG) }}</p>{% endif %}
+    {% if error == "throttled" %}<p class="rcms-error">{{ "Too many sign-in attempts. Wait a few minutes, then try again." | translate(locale=LANG) }}</p>{% elif error %}<p class="rcms-error">{{ "That email/username and password didn't match." | translate(locale=LANG) }}</p>{% endif %}
     {% if sso_error %}<p class="rcms-error">{{ "Single sign-on failed — try again, or sign in with your password." | translate(locale=LANG) }}</p>{% endif %}
     {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
     <label for="member-identifier">{{ "Email or username" | translate(locale=LANG) }}</label>

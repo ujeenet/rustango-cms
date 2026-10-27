@@ -1,0 +1,98 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Security log" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block heading %}{{ "Security log" | translate(locale=LANG) }}{% endblock %}
+
+{% macro event_label(event, lang) %}{% if event == "login" %}{{ "Signed in" | translate(locale=lang) }}{% elif event == "login_failed" %}{{ "Sign-in failed" | translate(locale=lang) }}{% elif event == "lockout" %}{{ "Account locked" | translate(locale=lang) }}{% elif event == "logout" %}{{ "Signed out" | translate(locale=lang) }}{% elif event == "password_reset_requested" %}{{ "Password reset requested" | translate(locale=lang) }}{% elif event == "password_reset" %}{{ "Password reset" | translate(locale=lang) }}{% elif event == "permissions_changed" %}{{ "Permissions changed" | translate(locale=lang) }}{% else %}{{ event }}{% endif %}{% endmacro event_label %}
+
+{% block topbar_actions %}
+    {% if filter_event or filter_username %}
+        <a href="{{ url(name='rcms-admin:security-log') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+            <span class="material-symbols-rounded sm">filter_alt_off</span>
+            {{ "Clear filters" | translate(locale=LANG) }}
+        </a>
+    {% endif %}
+{% endblock %}
+
+{% block description %}
+    {{ "Sign-ins, failed attempts, lockouts, sign-outs, password resets and permission changes on this site, newest first. An account is locked for a while after repeated failed sign-ins." | translate(locale=LANG) }}
+{% endblock %}
+
+{% block body %}
+    <form method="get" action="{{ url(name='rcms-admin:security-log') }}" class="rcms-list-filter-row rcms-mb-3">
+        <label class="rcms-search-input">
+            <span class="material-symbols-rounded">person_search</span>
+            <input type="search" name="username" value="{{ filter_username }}" autocomplete="off"
+                   placeholder="{{ "Exact username" | translate(locale=LANG) }}">
+        </label>
+        <select name="event" aria-label="{{ "Event" | translate(locale=LANG) }}">
+            <option value="">{{ "All events" | translate(locale=LANG) }}</option>
+            {% for e in events %}
+                <option value="{{ e }}"{% if e == filter_event %} selected{% endif %}>{{ self::event_label(event=e, lang=LANG) }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="rcms-btn rcms-btn-small">{{ "Apply" | translate(locale=LANG) }}</button>
+    </form>
+
+    {% if rows | length == 0 %}
+        <div class="rcms-empty">
+            <p>{{ "No security events match the current filters." | translate(locale=LANG) }}</p>
+        </div>
+    {% else %}
+        <div class="rcms-table-wrap">
+        <table class="rcms-data">
+            <thead>
+                <tr>
+                    <th>{{ "When" | translate(locale=LANG) }}</th>
+                    <th>{{ "Event" | translate(locale=LANG) }}</th>
+                    <th>{{ "Account" | translate(locale=LANG) }}</th>
+                    <th>{{ "Details" | translate(locale=LANG) }}</th>
+                    <th>{{ "Client" | translate(locale=LANG) }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr>
+                        <td>
+                            {% if row.created_at %}
+                                <span>{{ row.created_at | naturaltime }}</span>
+                                <br>
+                                <time class="rcms-hint rcms-text-2xs" data-utc="{{ row.created_at | date(format='%+') }}">{{ row.created_at }}</time>
+                            {% else %}
+                                <span class="rcms-hint">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="rcms-tag {{ row.tone }}">{{ self::event_label(event=row.event, lang=LANG) }}</span>
+                            <br>
+                            <span class="rcms-hint rcms-text-2xs">{{ row.source }}</span>
+                        </td>
+                        <td>
+                            {% if row.username %}
+                                <a href="?username={{ row.username | urlencode }}">{{ row.username }}</a>
+                                {% if row.user_id %}<br><code class="rcms-text-2xs rcms-text-muted">#{{ row.user_id }}</code>{% endif %}
+                            {% else %}
+                                <span class="rcms-hint">—</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.reason == "inactive" %}
+                                {{ "Account disabled" | translate(locale=LANG) }}
+                            {% elif row.reason == "invalid_credentials" %}
+                                {{ "Wrong name or password" | translate(locale=LANG) }}
+                            {% endif %}
+                            {% if row.detail %}{{ row.detail }}{% endif %}
+                            {% if row.actor %}<br><span class="rcms-hint rcms-text-2xs">{{ "by" | translate(locale=LANG) }} {{ row.actor }}</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if row.ip_address %}<code>{{ row.ip_address }}</code>{% else %}<span class="rcms-hint">—</span>{% endif %}
+                            {% if row.user_agent %}<br><span class="rcms-hint rcms-text-2xs" title="{{ row.user_agent }}">{{ row.user_agent | truncate(length=48) }}</span>{% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+
+        {% include "rcms_admin/_pagination.html" %}
+    {% endif %}
+{% endblock %}

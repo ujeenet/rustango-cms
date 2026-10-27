@@ -48,6 +48,12 @@ turn a public page into a 401. A bad password and an unknown account
 return the identical 401, since the difference is an account-enumeration
 oracle.
 
+Failed logins count toward the same per-account lock as the admin and
+member sign-in forms (5 failures in an hour lock the account for 15
+minutes by default). While an account or your address is locked out the
+login answers **429** `rate_limited` with a `Retry-After` header, without
+checking the password.
+
 Precedence, when more than one is present: member cookie, then bearer
 token, then admin session.
 
@@ -566,8 +572,8 @@ Every failure is JSON, with a stable code:
 
 Branch on `code` and the HTTP status; `message` is for humans and may be
 reworded. The codes are `not_found`, `bad_request`, `unauthenticated`,
-`forbidden`, `password_required`, `method_not_allowed` and
-`internal_error`.
+`forbidden`, `password_required`, `method_not_allowed`, `rate_limited`,
+`unavailable` and `internal_error`.
 
 *Every* failure means every one — including the **405** you get for a
 write verb, since the API is read-only. Its `Allow` header names the

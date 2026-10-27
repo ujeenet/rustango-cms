@@ -70,24 +70,9 @@
                   {% if w.read_only %}readonly{% endif %}>{{ w.value | default(value='') }}</textarea>
 
     {% elif w.kind == "richtext" %}
-        {# #205 — rich-text widget. Same markdown toolbar as the
-           plain-markdown widget; ships a `data-widget="richtext"`
-           hook so host apps can swap in EasyMDE / TipTap / Draftail
-           when they want a full WYSIWYG. #}
-        <div class="rcms-md-toolbar" data-md-toolbar-for="w_{{ w.name }}" hidden>
-            <button type="button" class="rcms-md-btn" data-md-action="bold" title="{{ "Bold (Cmd+B)" | translate(locale=LANG) }}"><strong>B</strong></button>
-            <button type="button" class="rcms-md-btn" data-md-action="italic" title="{{ "Italic (Cmd+I)" | translate(locale=LANG) }}"><em>I</em></button>
-            <span class="rcms-md-sep"></span>
-            <button type="button" class="rcms-md-btn" data-md-action="h2" title="{{ "Heading 2" | translate(locale=LANG) }}">H2</button>
-            <button type="button" class="rcms-md-btn" data-md-action="h3" title="{{ "Heading 3" | translate(locale=LANG) }}">H3</button>
-            <span class="rcms-md-sep"></span>
-            <button type="button" class="rcms-md-btn" data-md-action="link" title="{{ "Link (Cmd+K)" | translate(locale=LANG) }}">🔗</button>
-            <button type="button" class="rcms-md-btn" data-md-action="ul" title="{{ "Bulleted list" | translate(locale=LANG) }}">• {{ "List" | translate(locale=LANG) }}</button>
-            <button type="button" class="rcms-md-btn" data-md-action="ol" title="{{ "Numbered list" | translate(locale=LANG) }}">1. {{ "List" | translate(locale=LANG) }}</button>
-            <span class="rcms-md-sep"></span>
-            <button type="button" class="rcms-md-btn" data-md-action="quote" title="{{ "Quote" | translate(locale=LANG) }}">❝</button>
-            <button type="button" class="rcms-md-btn" data-md-action="code" title="{{ "Inline code" | translate(locale=LANG) }}">&lt;/&gt;</button>
-        </div>
+        {# richtext-editor.js swaps this textarea for the TipTap editor,
+           which brings its own toolbar; the textarea stays as the
+           submitted value and the no-JS fallback. #}
         <textarea id="w_{{ w.name }}" name="{{ w.name }}" rows="10"
                   data-widget-mode="richtext"
                   {% if w.required %}required{% endif %}
@@ -224,7 +209,7 @@
     {# ---- color ---------------------------------------------------- #}
     {% elif w.kind == "color" %}
         <input type="color" id="w_{{ w.name }}" name="{{ w.name }}"
-               value="{{ w.value | default(value='#000000') }}"
+               value="{% if w.value %}{{ w.value }}{% else %}#000000{% endif %}"
                {% if w.read_only %}disabled{% endif %}>
 
     {# ---- file ----------------------------------------------------- #}

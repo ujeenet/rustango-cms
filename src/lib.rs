@@ -150,6 +150,7 @@ pub mod search;
 pub mod search_elasticsearch;
 pub mod search_promotion;
 pub mod schedule;
+pub mod security_log;
 pub mod seed;
 pub mod signing;
 pub mod site;

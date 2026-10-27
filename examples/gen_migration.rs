@@ -34,6 +34,8 @@ fn main() {
     let _ = rustango_cms::CategoryTranslation::SCHEMA;
     // Changes to a live page held for review.
     let _ = rustango_cms::pending_change::PendingChange::SCHEMA;
+    // #433 — sign-in and permission-change log.
+    let _ = rustango_cms::security_log::SecurityEvent::SCHEMA;
 
     // #338: also force-link the framework's tenant-scoped models so the
     // `from_registry_for_scope(Tenant)` snapshot below includes the

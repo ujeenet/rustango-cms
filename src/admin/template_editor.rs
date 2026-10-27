@@ -477,8 +477,8 @@ async fn load_type(
 /// the binary alongside the ones on disk — and it is exactly the set the
 /// renderer will look in.
 ///
-/// Admin chrome is filtered out: `rcms_admin/…` renders the CMS UI and
-/// assigning one to a page type would produce nonsense. **Except**
+/// Admin chrome and partials are filtered out (see [`offerable`]).
+/// **Except**
 /// `schema_page.html`, which lives in that namespace but is a public
 /// page template — it is the generic renderer every builder-created page
 /// type gets by default.
@@ -514,11 +514,21 @@ fn renderable_templates(tenant: &Tenant, current: &str) -> Vec<String> {
 }
 
 /// Whether a template is a sensible thing to offer for a page type.
+///
+/// Admin chrome (`rcms_admin/…`, `rcms/…`) renders the CMS UI, and
+/// partials cannot render a page on their own: a file name starting with
+/// `_` (`_base.html`, `_card.html`) or anything under a `blocks/`
+/// directory (block templates).
 pub(crate) fn offerable(name: &str) -> bool {
     if name == crate::page_builder::DEFAULT_SCHEMA_TEMPLATE {
         return true;
     }
-    !name.starts_with("rcms_admin/") && !name.starts_with("rcms/")
+    if name.starts_with("rcms_admin/") || name.starts_with("rcms/") {
+        return false;
+    }
+    let mut segments = name.split('/');
+    let file = segments.next_back().unwrap_or(name);
+    !file.starts_with('_') && !segments.any(|dir| dir == "blocks")
 }
 
 #[cfg(test)]
@@ -547,6 +557,21 @@ mod tests {
     #[test]
     fn ordinary_site_templates_are_offered() {
         assert!(offerable("landing.html"));
-        assert!(offerable("blocks/hero.html"));
+        assert!(offerable("shop/product.html"));
+        assert!(offerable("login.html"));
+    }
+
+    #[test]
+    fn partials_are_not_offered_for_a_page_type() {
+        // #853 — layouts, includes and block templates cannot render a
+        // page on their own.
+        assert!(!offerable("_base.html"));
+        assert!(!offerable("_product_card.html"));
+        assert!(!offerable("shop/_card.html"));
+        assert!(!offerable("blocks/hero.html"));
+        assert!(!offerable("theme/blocks/quote.html"));
+        // Only a whole `blocks` segment marks a block template.
+        assert!(offerable("blocks_index.html"));
+        assert!(offerable("myblocks/page.html"));
     }
 }

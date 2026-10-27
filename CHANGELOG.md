@@ -10,6 +10,30 @@ repository.
 
 ## Unreleased
 
+## 0.2.0 — 2026-10-27
+
+### Breaking
+
+- Requires rustango 0.61 (built and tested against 0.61.6). Types from
+  rustango appear in this crate's API, so a host must move to the same
+  rustango minor; see UPGRADING.md.
+
+### Added
+
+- A security log at `/cms-admin/security-log` (superusers only, under
+  Management): sign-ins, failed attempts, lockouts, sign-outs, password
+  resets and changes to user flags, role memberships and role permissions,
+  with the account, the client address and who made a change. Stored per
+  tenant in `cms_security_event` (migration 0016) and pruned after 90 days
+  (`RCMS_SECURITY_LOG_RETENTION_DAYS`). The framework's own admin `/login`
+  is recorded from its auth signals while the request log is on.
+- The member login (`/members/login`) and `POST /api/v2/auth/login` share
+  the admin login's per-account lock and per-IP limits: 5 failures in an
+  hour lock the account for 15 minutes (`RCMS_LOGIN_LOCKOUT_ATTEMPTS`,
+  `RCMS_LOGIN_LOCKOUT_SECONDS`, `RCMS_LOGIN_LOCKOUT_WINDOW_SECONDS`). The API
+  answers a locked login with `429 rate_limited` and `Retry-After`. A
+  password reset lifts the lock.
+
 ### Changed
 
 - Page detail in the headless API (and a page's JSON form) returns a
@@ -40,6 +64,21 @@ repository.
 - With `RCMS_API_CORS_ORIGINS` set, the preflight now allows `POST` and the
   `Authorization` header, so a frontend on another origin can log a member
   in and send the bearer token. Before, the browser refused both.
+
+- A colour field with no value yet rendered `value=""`, which the browser
+  rejects as not `#rrggbb`. It now starts at `#000000`.
+
+- The media Collections panel and a few admin tooltips showed leftover
+  development notes (issue numbers, "follow-up PR") to editors. They are
+  gone.
+
+- The page-type template picker offered partials that cannot render a
+  page on their own: files starting with `_` and block templates under
+  `blocks/`. They are no longer listed; a type already set to one keeps it.
+
+- A rich-text field showed two toolbars (a markdown one above the editor's
+  own) and a Preview toggle that could reveal the raw HTML. The field now
+  shows only the rich-text editor.
 
 ## 0.1.0 — 2026-10-06
 

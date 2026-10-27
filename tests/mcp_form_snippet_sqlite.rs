@@ -32,6 +32,7 @@ async fn upsert(pool: &Pool, uid: i64, args: Value) -> Value {
             tools: vec!["upsert_snippet".to_owned()],
             user_id: Some(uid),
             jti: "j".to_owned(),
+            secret_prefix: String::new(),
         },
         progress: ProgressReporter::disabled(),
         cancel: CancelToken::default(),

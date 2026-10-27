@@ -86,11 +86,10 @@ impl PageTypeHandler for ArticlePage {
     /// Read path: the extension row as JSON for the public template
     /// (`extension.body_markdown`, `extension.hero_media_id`).
     ///
-    /// A page always spends some time with no extension row: the create form
-    /// has no page id to hang the fields on, so the row is first written on
-    /// the save *after* creation. Return an empty row rather than `null` for
-    /// that gap — otherwise `{{ extension.body_markdown }}` raises Tera's
-    /// "Variable not found" and the public page 500s instead of rendering an
+    /// A page can have no extension row — one created through the API or
+    /// MCP, say, before anything saved its fields. Return an empty row
+    /// rather than `null` for that case — otherwise
+    /// `{{ extension.body_markdown }}` raises Tera's "Variable not found" and the public page 500s instead of rendering an
     /// empty article (#620). Templates should never have to tell "no row yet"
     /// apart from "empty row".
     async fn load_extension(&self, pool: &Pool, page_id: i64) -> Result<Value, ExecError> {

@@ -125,9 +125,9 @@ mod tests {
         assert_eq!(render(""), "");
     }
 
-    // #263 — `sanitize_html` is the entry point the richtext preview
-    // endpoint uses. Pin the same XSS guarantees the markdown path
-    // gets: no script tags, no javascript: hrefs.
+    // `sanitize_html` cleans stored richtext; pin the same XSS
+    // guarantees the markdown path gets: no script tags, no
+    // javascript: hrefs.
     #[test]
     fn sanitize_html_strips_script_tags() {
         let out = sanitize_html("<p>Hi <script>alert(1)</script></p>");

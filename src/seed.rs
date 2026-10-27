@@ -63,6 +63,8 @@ pub enum SeedError {
 pub async fn ensure_seeded(registry: &rustango::sql::Pool) -> Result<(), SeedError> {
     // Queued jobs resolve tenants they weren't dispatched with through it.
     crate::task_queue::set_registry(registry.clone());
+    // Lockout policy + the sign-in log of the framework's own logins.
+    crate::security_log::install();
     match registry {
         #[cfg(feature = "postgres")]
         rustango::sql::Pool::Postgres(pg) => {
@@ -190,6 +192,15 @@ pub(crate) async fn lazy_seed_layer(
 /// The first failing step.
 pub async fn seed_tenant(tenant_pool: &rustango::sql::Pool, org: &Org) -> Result<(), SeedError> {
     let tenant_pool = tenant_pool.clone();
+    // #726 — exact, case-sensitive matching on the columns the CMS
+    // resolves URLs, slugs and hosts by, as on Postgres and SQLite. First,
+    // because it also repairs columns an earlier version made binary, which
+    // no step below can read.
+    match crate::mysql_text::exact_identity_columns(&tenant_pool).await {
+        Ok(0) => {}
+        Ok(n) => tracing::info!(target: "rustango_cms::seed", columns = n, "gave identity columns a case-sensitive collation"),
+        Err(e) => tracing::warn!(target: "rustango_cms::seed", error = %e, "could not set a case-sensitive collation on identity columns"),
+    }
     for handler in registered_handlers() {
         upsert_page_type(&tenant_pool, handler.as_ref()).await?;
     }
@@ -275,7 +286,7 @@ pub async fn seed_tenant(tenant_pool: &rustango::sql::Pool, org: &Org) -> Result
     // #532 — editable admin-translation overrides. The model is
     // `managed = false`, so create its table here (idempotent CREATE TABLE
     // IF NOT EXISTS); the framework admin can then browse/edit it and the
-    // shared translator picks edits up via `i18n::maybe_refresh_overrides`.
+    // tenant's admin picks edits up via `i18n::tenant_overrides`.
     rustango::i18n::db::ensure_table_pool(&tenant_pool).await?;
     // #587 — MCP skills: bundle the CMS tools and map each bundle onto the
     // existing permission codenames, so a user-owned key's capabilities
@@ -314,13 +325,6 @@ pub async fn seed_tenant(tenant_pool: &rustango::sql::Pool, org: &Org) -> Result
         Ok(0) => {}
         Ok(n) => tracing::info!(target: "rustango_cms::seed", columns = n, "widened TEXT columns to LONGTEXT"),
         Err(e) => tracing::warn!(target: "rustango_cms::seed", error = %e, "could not widen TEXT columns"),
-    }
-    // #726 — exact, case-sensitive matching on the columns the CMS
-    // resolves URLs, slugs and hosts by, as on Postgres and SQLite.
-    match crate::mysql_text::exact_identity_columns(&tenant_pool).await {
-        Ok(0) => {}
-        Ok(n) => tracing::info!(target: "rustango_cms::seed", columns = n, "gave identity columns a binary collation"),
-        Err(e) => tracing::warn!(target: "rustango_cms::seed", error = %e, "could not set binary collation on identity columns"),
     }
     Ok(())
 }

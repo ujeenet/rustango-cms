@@ -843,3 +843,50 @@ async fn site_setting_translation_mode_shows_rows() {
     assert!(html.contains(">Fait main.</textarea>"));
     assert!(!html.contains("data-primary-save"), "the English form is left out");
 }
+
+/// The security log (#433) renders its rows with translated event names,
+/// and the account link filters by that account.
+#[test]
+fn security_log_template_renders_events() {
+    let tera = fresh_tera();
+    let mut ctx = test_ctx();
+    ctx.insert("active_tab", "security-log");
+    ctx.insert("brand_name", &"Test CMS");
+    ctx.insert("theme_css", &"");
+    ctx.insert("csrf_token", &"test-token");
+    ctx.insert("messages", &Vec::<serde_json::Value>::new());
+    ctx.insert("events", rustango_cms::security_log::EVENTS);
+    ctx.insert("filter_event", "lockout");
+    ctx.insert("filter_username", "");
+    ctx.insert("total", &2);
+    ctx.insert("pagination", &admin::pagination::context(1, 50, 2));
+    ctx.insert(
+        "rows",
+        &serde_json::json!([
+            {
+                "event": "lockout", "tone": "expired", "source": "member",
+                "user_id": 7, "username": "a b", "reason": "", "actor": "",
+                "detail": "", "ip_address": "10.0.0.1",
+                "user_agent": "curl/8", "created_at": "2026-10-14T10:00:00Z",
+            },
+            {
+                "event": "permissions_changed", "tone": "archived", "source": "admin",
+                "user_id": 7, "username": "a b", "reason": "", "actor": "root",
+                "detail": "superuser: off → on", "ip_address": "",
+                "user_agent": "", "created_at": "2026-10-14T10:01:00Z",
+            },
+        ]),
+    );
+    let html = tera
+        .render("rcms_admin/security_log.html", &ctx)
+        .expect("security_log.html renders");
+    assert!(html.contains(">Account locked</span>"), "{html}");
+    assert!(html.contains(">Permissions changed</span>"));
+    assert!(html.contains("superuser: off → on") && html.contains("root"));
+    assert!(html.contains("?username=a%20b"));
+    assert!(html.contains(r#"<option value="lockout" selected>Account locked</option>"#));
+
+    ctx.insert("LANG", "de");
+    let html = tera.render("rcms_admin/security_log.html", &ctx).expect("de renders");
+    assert!(html.contains(">Konto gesperrt</span>"), "macro labels follow LANG");
+}

@@ -26,11 +26,13 @@ use axum::response::{IntoResponse, Redirect, Response};
 use axum::Extension;
 use tera::Context;
 
-use rustango::extractors::{Tenant, TenantContext};
+use rustango::extractors::{Tenant, TenantContext, TenantRejection};
+use rustango::login_throttle::{self, LoginRefused, LoginScope};
 use rustango::tenancy::auth::User;
 use rustango::tenancy::member_auth::{self, CurrentMember};
 
 use super::handlers::{add_branding_urls, render_with_csrf};
+use crate::security_log::{self, LoginRequest};
 use super::{AdminError, AdminState};
 
 /// Member session lifetime — 7 days, matching the framework's
@@ -95,11 +97,21 @@ pub(crate) async fn member_login_form(
 pub(crate) async fn member_login_submit(
     Extension(ctx): Extension<Arc<TenantContext>>,
     tenant: Tenant,
+    request: LoginRequest,
     Form(form): Form<MemberLoginForm>,
 ) -> Response {
     let next = sanitize_next(&form.next);
-    match authenticate_member(tenant.pool(), &form.identifier, &form.password).await {
-        Some(user) => {
+    let outcome = authenticate_member(
+        tenant.pool(),
+        &tenant.org.slug,
+        &request,
+        "member",
+        &form.identifier,
+        &form.password,
+    )
+    .await;
+    match outcome {
+        Ok(user) => {
             let cookie = member_auth::mint_cookie(
                 &ctx.session_secret,
                 &user,
@@ -108,11 +120,17 @@ pub(crate) async fn member_login_submit(
             );
             redirect_with_cookie(&next, &cookie)
         }
-        None => Redirect::to(&format!(
-            "/members/login?error=invalid_credentials&next={}",
-            crate::view_restriction_guard::url_encode_path(&next)
-        ))
-        .into_response(),
+        Err(e) => {
+            let reason = match e {
+                MemberLoginError::Invalid => "invalid_credentials",
+                MemberLoginError::Refused(_) => "throttled",
+            };
+            Redirect::to(&format!(
+                "/members/login?error={reason}&next={}",
+                crate::view_restriction_guard::url_encode_path(&next)
+            ))
+            .into_response()
+        }
     }
 }
 
@@ -216,7 +234,16 @@ pub(crate) async fn member_signup_submit(
 
 /// POST `/members/logout` — expire the member session and return to
 /// the site root.
-pub(crate) async fn member_logout() -> Response {
+pub(crate) async fn member_logout(
+    member: CurrentMember,
+    tenant: Result<Tenant, TenantRejection>,
+    request: LoginRequest,
+) -> Response {
+    if let (Some(user), Ok(tenant)) = (member.0, tenant) {
+        let entry = security_log::Entry::new(security_log::EVENT_LOGOUT, "member", &request.meta)
+            .user(user.id.get().copied(), &user.username);
+        security_log::record(tenant.pool(), &tenant.org.slug, entry).await;
+    }
     redirect_with_cookie("/", &member_auth::clear_cookie())
 }
 
@@ -224,44 +251,110 @@ pub(crate) async fn member_logout() -> Response {
 // Helpers
 // ===================================================================
 
-/// Authenticate a member by username OR (lowercased) email + password.
-/// Runs a dummy verify on the unknown-account branch so response timing
-/// doesn't reveal whether the identifier exists.
-pub(crate) async fn authenticate_member(
+/// Why a member sign-in was refused.
+#[derive(Debug)]
+pub enum MemberLoginError {
+    /// Too many attempts at this account or from this address, or the
+    /// password-hashing queue is full. The password was not checked.
+    Refused(LoginRefused),
+    /// Unknown name, wrong password, or a disabled account — one answer
+    /// for all three, so the response tells nothing about the account.
+    Invalid,
+}
+
+/// Sign a member in by username OR (lowercased) email + password, in
+/// `tenant_slug` (the tenant `pool` belongs to).
+///
+/// The attempt goes through the framework's login gate in the tenant
+/// scope, so the account shares one lock with the admin `/login`, and is
+/// written to the [`security_log`] as `source`. Runs a dummy verify on
+/// the unknown-account branch so response timing doesn't reveal whether
+/// the identifier exists.
+///
+/// # Errors
+/// [`MemberLoginError`].
+pub async fn authenticate_member(
     pool: &rustango::sql::Pool,
+    tenant_slug: &str,
+    request: &LoginRequest,
+    source: &'static str,
     identifier: &str,
     password: &str,
-) -> Option<User> {
-    use rustango::core::Column as _;
-    use rustango::sql::FetcherPool as _;
+) -> Result<User, MemberLoginError> {
     let ident = identifier.trim();
     if ident.is_empty() || password.is_empty() {
-        return None;
+        return Err(MemberLoginError::Invalid);
     }
-    let mut rows: Vec<User> = User::objects()
+    let scope = LoginScope::Tenant(tenant_slug.to_owned());
+    let mut attempt = login_throttle::shared()
+        .begin(&scope, &request.ip, ident)
+        .await
+        .map_err(MemberLoginError::Refused)?;
+    let found = find_member(pool, ident).await;
+    if let Some(user) = &found {
+        attempt.resolve(&user.username).await.map_err(MemberLoginError::Refused)?;
+    }
+    // Verify before checking `active` (#770): returning at once for a
+    // disabled account made its response measurably faster than an active
+    // one's or an unknown one's (which pays `verify_dummy`), so timing told
+    // an attacker the account exists but is disabled.
+    let password_ok = match &found {
+        Some(user) => {
+            matches!(crate::passwords::verify(password, &user.password_hash).await, Ok(true))
+        }
+        None => {
+            crate::passwords::verify_dummy(password).await;
+            false
+        }
+    };
+    let active = found.as_ref().is_some_and(|u| u.active);
+    let user_id = found.as_ref().and_then(|u| u.id.get().copied());
+    let username = found.as_ref().map_or(ident, |u| u.username.as_str());
+    if password_ok && active {
+        attempt.succeeded().await;
+        let entry = security_log::Entry::new(security_log::EVENT_LOGIN, source, &request.meta)
+            .user(user_id, username);
+        security_log::record(pool, tenant_slug, entry).await;
+        return found.ok_or(MemberLoginError::Invalid);
+    }
+    attempt.failed().await;
+    let reason = if password_ok { "inactive" } else { "invalid_credentials" };
+    let entry = security_log::Entry::new(security_log::EVENT_LOGIN_FAILED, source, &request.meta)
+        .user(user_id, username)
+        .reason(reason);
+    security_log::record(pool, tenant_slug, entry).await;
+    // The gate refuses a locked account before it gets here, so a lock
+    // seen now is the one this failure set.
+    if security_log::is_locked(tenant_slug, &[ident, username]).await {
+        let entry = security_log::Entry::new(security_log::EVENT_LOCKOUT, source, &request.meta)
+            .user(user_id, username);
+        security_log::record(pool, tenant_slug, entry).await;
+    }
+    Err(MemberLoginError::Invalid)
+}
+
+/// The `rustango_users` row named `ident` (username first, then the
+/// lowercased email).
+async fn find_member(pool: &rustango::sql::Pool, ident: &str) -> Option<User> {
+    use rustango::core::Column as _;
+    use rustango::sql::FetcherPool as _;
+    let by_name: Vec<User> = User::objects()
         .where_(User::username.eq(ident.to_owned()))
         .limit(1)
         .fetch(pool)
         .await
         .unwrap_or_default();
-    if rows.is_empty() {
-        rows = User::objects()
-            .filter("email", ident.to_ascii_lowercase())
-            .limit(1)
-            .fetch(pool)
-            .await
-            .unwrap_or_default();
+    if let Some(user) = by_name.into_iter().next() {
+        return Some(user);
     }
-    let Some(user) = rows.into_iter().next() else {
-        crate::passwords::verify_dummy(password).await;
-        return None;
-    };
-    // Verify before checking `active` (#770): returning at once for a
-    // disabled account made its response measurably faster than an active
-    // one's or an unknown one's (which pays `verify_dummy`), so timing told
-    // an attacker the account exists but is disabled.
-    let matches = matches!(crate::passwords::verify(password, &user.password_hash).await, Ok(true));
-    (matches && user.active).then_some(user)
+    User::objects()
+        .filter("email", ident.to_ascii_lowercase())
+        .limit(1)
+        .fetch(pool)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .next()
 }
 
 /// True when a `rustango_users` row already carries this (lowercased)

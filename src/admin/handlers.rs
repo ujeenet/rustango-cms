@@ -19,6 +19,7 @@ use rustango::sql::{transaction_pool, FetcherPool as _, FetcherTx as _};
 use serde::Deserialize;
 use std::sync::OnceLock;
 use tera::Context;
+use crate::security_log::Entry as SecurityEntry;
 
 /// HMAC key for the flash-messages cookie, derived from the CMS signing
 /// secret so every replica — and the same server after a restart — reads
@@ -490,9 +491,6 @@ pub async fn add_chrome(
     session_user: Option<&rustango::tenancy::auth::User>,
 ) {
     add_chrome_sync(ctx, tenant, active_tab);
-    // #532 — pull any operator edits from `rustango_translations` into the
-    // shared translator (TTL-throttled) so admin chrome reflects them live.
-    super::i18n::maybe_refresh_overrides(tenant.pool()).await;
     if let Some(user) = session_user {
         add_user_chrome(ctx, user, tenant.pool()).await;
     }
@@ -1807,26 +1805,162 @@ pub(crate) async fn save_page_builder_values(
     crate::page_builder::values::save_from_form(pool, page_id, &compiled, form_map).await
 }
 
+/// Save a page's type-specific content from a posted page form: the
+/// handler's extension row and inline panels, then the page-builder
+/// body values. Shared by the new-page and edit submits.
+async fn save_type_content(
+    pool: &rustango::sql::Pool,
+    page_type: Option<&PageType>,
+    page_type_id: i64,
+    page_id: i64,
+    form_map: &std::collections::HashMap<String, String>,
+) -> Result<(), AdminError> {
+    if let Some(handler) = page_type.and_then(|pt| find_handler(&pt.type_name)) {
+        let ext_form = sanitized_extension_form(handler.as_ref(), pool, page_id, form_map).await;
+        handler.save_extension(pool, page_id, &ext_form).await?;
+        // #117 — inline panels. Reassemble row dicts from the
+        // posted `inline__<panel>__<idx>__<field>` keys and hand
+        // them to the handler. Handler is responsible for the
+        // upsert / delete-removed semantics.
+        for spec in handler.inline_panels() {
+            let rows = extract_inline_panel_rows(form_map, &spec);
+            handler.save_inline_panel(pool, page_id, &spec.name, &rows).await?;
+        }
+    }
+    // #564 — page-builder body values (additive to any code handler).
+    save_page_builder_values(pool, page_type_id, page_id, form_map).await?;
+    Ok(())
+}
+
+/// #146 — reindex the reference graph from the just-saved form
+/// values. The (cheap, in-memory) scan stays here where the form is
+/// in hand; #432 moves the (DB-write) reindex onto the task queue
+/// via `reindex_page` — dispatched + retried when a sink is
+/// installed, inline otherwise. Best-effort either way.
+async fn reindex_from_form(
+    pool: &rustango::sql::Pool,
+    org_slug: &str,
+    page_id: i64,
+    form_map: &std::collections::HashMap<String, String>,
+) {
+    let mut refs: Vec<crate::reference_index::Reference> = Vec::new();
+    for (key, value) in form_map {
+        // Scan every form field for /__media__/... + page/snippet
+        // links. Field-scoped so the index records which input
+        // produced each reference.
+        let mut found = crate::reference_index::scan(value, key);
+        refs.append(&mut found);
+    }
+    crate::task_queue::reindex_page(pool, org_slug, page_id, refs).await;
+}
+
+/// The page type's own editor fields — the handler's widgets (custom and
+/// stream widgets pre-rendered), the page-builder body and the inline
+/// panels — into `ctx`. `page_id` 0 is a page not created yet: every
+/// field shows its default. `held` is a change held for review, shown in
+/// place of the stored values.
+#[allow(clippy::too_many_arguments)]
+async fn insert_type_fields(
+    ctx: &mut Context,
+    tera: &tera::Tera,
+    pool: &rustango::sql::Pool,
+    handler: Option<&dyn crate::page_type::PageTypeHandler>,
+    mut widgets: Vec<crate::widget::Widget>,
+    page_id: i64,
+    page_type_id: i64,
+    held: Option<&std::collections::HashMap<String, String>>,
+) {
+    if let Some(form) = held {
+        overlay_pending_widgets(&mut widgets, form);
+    }
+    // Pre-render `Custom`-kind widgets via the inventory registry.
+    // Tera's `{% include %}` requires a string literal, so we
+    // render once on the Rust side and stash the result on each
+    // widget — same shape `cms_snippet` uses for its
+    // pre-fetched-snippet HTML map.
+    for w in &mut widgets {
+        if matches!(w.kind, crate::widget::WidgetKind::Custom) {
+            if let Some(reg) = crate::widget::registry::find_custom_widget(&w.custom_name) {
+                let mut sub = Context::new();
+                sub.insert("w", &w);
+                w.custom_html = tera.render(reg.template, &sub).unwrap_or_else(|e| {
+                    tracing::warn!(
+                        target: "rustango_cms::widget",
+                        custom_name = %w.custom_name,
+                        template = reg.template,
+                        error = %e,
+                        "custom widget template render failed",
+                    );
+                    String::new()
+                });
+            }
+        }
+    }
+
+    // -- StreamField pre-render --------------------------------------
+    // Walk each `Widget::Stream` once: parse its stored JSON, render
+    // every contained block's editor markup + `<template>` clones
+    // for each allowed type. The output lives on `w.custom_html`
+    // (same stash slot the Custom widget arm uses); the `_widget.html`
+    // macro emits it `| safe` for the stream arm.
+    for w in &mut widgets {
+        if matches!(w.kind, crate::widget::WidgetKind::Stream) {
+            w.custom_html = crate::block::admin::render_stream_editor(w, tera);
+        }
+    }
+    ctx.insert("extension_fields", &widgets);
+
+    // #564 — page-builder body. When the page type has a published
+    // schema, pre-render its fixed fields/rows/groups + repeater/flex
+    // stream editors (prefilled + lazily upgraded) into one HTML blob the
+    // Body fieldset emits, plus a conditional-rules island.
+    if let Some((body_html, rules_json, upgraded)) =
+        page_builder_editor_ctx(pool, tera, page_id, page_type_id, held).await
+    {
+        ctx.insert("builder_body_html", &body_html);
+        ctx.insert("builder_rules_json", &rules_json);
+        ctx.insert("builder_upgraded", &upgraded);
+    }
+
+    // #117 — inline panels. Collect each spec the handler declared
+    // and the persisted rows behind it. Each panel renders as a
+    // section with N rows; per-row fields come from the spec.
+    let mut inline_panels: Vec<serde_json::Value> = Vec::new();
+    if let Some(h) = handler {
+        for spec in h.inline_panels() {
+            let rows = h
+                .load_inline_panel(pool, page_id, &spec.name)
+                .await
+                .unwrap_or_default();
+            inline_panels.push(serde_json::json!({
+                "spec": spec,
+                "rows": rows,
+            }));
+        }
+    }
+    ctx.insert("inline_panels", &inline_panels);
+}
+
 /// GET-side: build the editor HTML + rules island + upgrade flag for a
 /// page whose type has a published schema. Returns `None` when
 /// the type has no published schema.
 async fn page_builder_editor_ctx(
-    tenant: &Tenant,
+    pool: &rustango::sql::Pool,
     tera: &tera::Tera,
     page_id: i64,
     page_type_id: i64,
     held: Option<&std::collections::HashMap<String, String>>,
 ) -> Option<(String, String, bool)> {
-    let row = crate::page_builder::model::published_for(tenant.pool(), page_type_id)
+    let row = crate::page_builder::model::published_for(pool, page_type_id)
         .await
         .ok()??;
     let doc = crate::page_builder::parse_schema(&row.document).ok()?;
-    let components = crate::page_builder::model::component_map(tenant.pool())
+    let components = crate::page_builder::model::component_map(pool)
         .await
         .unwrap_or_default();
     let compiled = crate::page_builder::compile(&doc, &components, row.version.max(1) as u32);
     let (mut values, report) =
-        crate::page_builder::values::load_upgraded(tenant.pool(), page_id, &compiled)
+        crate::page_builder::values::load_upgraded(pool, page_id, &compiled)
             .await
             .unwrap_or_else(|_| (serde_json::json!({}), Default::default()));
     // A change held for review shows in place of the stored values.
@@ -3792,11 +3926,17 @@ pub async fn page_new_form(
     // calls the handler for them. New-page mode shows the built-in
     // tabs only.
     ctx.insert("extra_tabs", &Vec::<crate::page_type::TabSpec>::new());
+    // The type's own fields, at their defaults, so they can be filled
+    // in before the first save (#857).
+    let handler = find_handler(&chosen_type.type_name);
+    let widgets = match &handler {
+        Some(h) => h.widgets(tenant.pool(), 0).await.unwrap_or_default(),
+        None => Vec::new(),
+    };
+    insert_type_fields(&mut ctx, &state.tera, tenant.pool(), handler.as_deref(), widgets, 0, type_id, None).await;
     // Stream-field picker options — every registered block surfaces
     // as an option even on the new-page form (so authors can drop
-    // blocks before the first save). Empty
-    // [`extension_fields`] keeps the new form lean otherwise.
-    ctx.insert("extension_fields", &Vec::<crate::widget::Widget>::new());
+    // blocks before the first save).
     ctx.insert(
         "picker_options",
         &crate::block::admin::picker_options(&state.tera),
@@ -3915,8 +4055,14 @@ pub async fn page_new_submit(
     tenant: Tenant,
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
-    Form(form): Form<PageForm>,
+    Form(form_map): Form<std::collections::HashMap<String, String>>,
 ) -> Result<Response, AdminError> {
+    // The raw map also carries the type's own fields (#857), saved once
+    // the page exists.
+    let form: PageForm = serde_urlencoded::from_str(
+        &serde_urlencoded::to_string(&form_map).unwrap_or_default(),
+    )
+    .map_err(|e| AdminError::Validation(format!("page form: {e}")))?;
     // #614 — a type that names `allowed_parent_types` may only live under one
     // of those parents, so it can never be a root. The picker now hides such
     // types at the root, but `page_type_id` arrives in the form (and the
@@ -4007,7 +4153,7 @@ pub async fn page_new_submit(
     // (robots, sitemap_priority) via a follow-up save.
     page.robots_index = form.parsed_robots_index();
     page.sitemap_priority = form.parsed_sitemap_priority();
-    page.theme_id = form.theme_id;
+    page.theme_id = form.theme_id.flatten();
     // A held-back page keeps no go-live date: a dated draft would be
     // scheduled, and go live without the review.
     page.go_live_at = if held_back.is_some() { None } else { form.parsed_go_live_at() };
@@ -4034,12 +4180,18 @@ pub async fn page_new_submit(
         crate::page_tag::replace_tags(tenant.pool(), new_id, &names).await?;
     }
     crate::category::assign::save_from_form(tenant.pool(), new_id, form.categories.as_deref()).await?;
+    let page_type: Option<PageType> = PageType::objects()
+        .where_(PageType::id.eq(page.page_type_id))
+        .first(tenant.pool())
+        .await?;
+    save_type_content(tenant.pool(), page_type.as_ref(), page.page_type_id, new_id, &form_map).await?;
 
     // Capture revision #1 for this page so the history
     // panel has something to show from the moment a page is born.
     crate::revision::capture(tenant.pool(), &page, None)
         .await
         .log_warn("revision not captured; the history has a gap");
+    reindex_from_form(tenant.pool(), &tenant.org.slug, new_id, &form_map).await;
 
     // Public render cache (rustango::cache_page::CachePageLayer)
     // expires on TTL; no manual invalidation needed here.
@@ -4646,85 +4798,19 @@ pub async fn page_edit_form(
         render_extra_tabs(raw_extra_tabs, &state.tera, &ctx, &headers);
     ctx.insert("extra_tabs", &extra_tabs);
 
-    let mut extension_fields: Vec<crate::widget::Widget> = raw_widgets;
     // A change held for review shows in place of the live values.
     let pending_form = pending.as_ref().filter(|_| !translation_mode).map(crate::pending_change::PendingChange::form_map);
-    if let Some(form) = pending_form.as_ref() {
-        overlay_pending_widgets(&mut extension_fields, form);
-    }
-    // Pre-render `Custom`-kind widgets via the inventory registry.
-    // Tera's `{% include %}` requires a string literal, so we
-    // render once on the Rust side and stash the result on each
-    // widget — same shape `cms_snippet` uses for its
-    // pre-fetched-snippet HTML map.
-    for w in &mut extension_fields {
-        if matches!(w.kind, crate::widget::WidgetKind::Custom) {
-            if let Some(reg) = crate::widget::registry::find_custom_widget(&w.custom_name) {
-                let mut sub = Context::new();
-                sub.insert("w", &w);
-                w.custom_html = state.tera.render(reg.template, &sub).unwrap_or_else(|e| {
-                    tracing::warn!(
-                        target: "rustango_cms::widget",
-                        custom_name = %w.custom_name,
-                        template = reg.template,
-                        error = %e,
-                        "custom widget template render failed",
-                    );
-                    String::new()
-                });
-            }
-        }
-    }
-
-    // -- StreamField pre-render --------------------------------------
-    // Walk each `Widget::Stream` once: parse its stored JSON, render
-    // every contained block's editor markup + `<template>` clones
-    // for each allowed type. The output lives on `w.custom_html`
-    // (same stash slot the Custom widget arm uses); the `_widget.html`
-    // macro emits it `| safe` for the stream arm.
-    for w in &mut extension_fields {
-        if matches!(w.kind, crate::widget::WidgetKind::Stream) {
-            w.custom_html =
-                crate::block::admin::render_stream_editor(w, &state.tera);
-        }
-    }
-    ctx.insert("extension_fields", &extension_fields);
-
-    // #564 — page-builder body. When the page type has a published
-    // schema, pre-render its fixed fields/rows/groups + repeater/flex
-    // stream editors (prefilled + lazily upgraded) into one HTML blob the
-    // Body fieldset emits, plus a conditional-rules island.
-    if let Some((body_html, rules_json, upgraded)) = page_builder_editor_ctx(
-        &tenant,
+    insert_type_fields(
+        &mut ctx,
         &state.tera,
+        tenant.pool(),
+        resolved_handler.as_deref(),
+        raw_widgets,
         id,
         page.page_type_id,
         pending_form.as_ref(),
     )
-    .await
-    {
-        ctx.insert("builder_body_html", &body_html);
-        ctx.insert("builder_rules_json", &rules_json);
-        ctx.insert("builder_upgraded", &upgraded);
-    }
-
-    // #117 — inline panels. Collect each spec the handler declared
-    // and the persisted rows behind it. Each panel renders as a
-    // section with N rows; per-row fields come from the spec.
-    let mut inline_panels: Vec<serde_json::Value> = Vec::new();
-    if let Some(h) = resolved_handler.as_deref() {
-        for spec in h.inline_panels() {
-            let rows = h
-                .load_inline_panel(tenant.pool(), id, &spec.name)
-                .await
-                .unwrap_or_default();
-            inline_panels.push(serde_json::json!({
-                "spec": spec,
-                "rows": rows,
-            }));
-        }
-    }
-    ctx.insert("inline_panels", &inline_panels);
+    .await;
 
     // Picker options — every registered block surfaces as an option in
     // the block-picker dialog inside each stream editor. The dialog
@@ -5474,7 +5560,11 @@ pub(crate) async fn apply_page_edit(
     page.seo_description = form.seo_description.clone();
     page.robots_index = form.parsed_robots_index();
     page.sitemap_priority = form.parsed_sitemap_priority();
-    page.theme_id = form.theme_id;
+    // The editor has no theme input: keep the stored theme unless the
+    // request carries the field (#902).
+    if let Some(theme_id) = form.theme_id {
+        page.theme_id = theme_id;
+    }
     // #207 — clear the pre-publish reminder flag when go_live_at
     // moves so a fresh schedule horizon gets a fresh reminder.
     let new_go_live = form.parsed_go_live_at();
@@ -5638,27 +5728,11 @@ pub(crate) async fn apply_page_edit(
         form_map.get(crate::category::assign::FORM_KEY).map(String::as_str),
     )
     .await?;
-    let pts: Vec<PageType> = PageType::objects()
+    let pt_opt: Option<PageType> = PageType::objects()
         .where_(PageType::id.eq(page.page_type_id))
-        .fetch(pool)
+        .first(pool)
         .await?;
-    let pt_opt: Option<PageType> = pts.into_iter().next();
-    if let Some(pt) = &pt_opt {
-        if let Some(handler) = find_handler(&pt.type_name) {
-            let ext_form = sanitized_extension_form(handler.as_ref(), pool, id, &form_map).await;
-            handler.save_extension(pool, id, &ext_form).await?;
-            // #117 — inline panels. Reassemble row dicts from the
-            // posted `inline__<panel>__<idx>__<field>` keys and hand
-            // them to the handler. Handler is responsible for the
-            // upsert / delete-removed semantics.
-            for spec in handler.inline_panels() {
-                let rows = extract_inline_panel_rows(&form_map, &spec);
-                handler.save_inline_panel(pool, id, &spec.name, &rows).await?;
-            }
-        }
-    }
-    // #564 — page-builder body values (additive to any code handler).
-    save_page_builder_values(pool, page.page_type_id, id, &form_map).await?;
+    save_type_content(pool, pt_opt.as_ref(), page.page_type_id, id, form_map).await?;
 
     // Capture revision after commit so the committed
     // page row is visible to the sequence SELECT inside capture.
@@ -5666,23 +5740,7 @@ pub(crate) async fn apply_page_edit(
         .await
         .log_warn("revision not captured; the history has a gap");
 
-    // #146 — reindex the reference graph from the just-saved form
-    // values. The (cheap, in-memory) scan stays here where the form is
-    // in hand; #432 moves the (DB-write) reindex onto the task queue
-    // via `reindex_page` — dispatched + retried when a sink is
-    // installed, inline otherwise. Best-effort either way.
-    {
-        let mut refs: Vec<crate::reference_index::Reference> = Vec::new();
-        for (key, value) in form_map {
-            // Scan every form field for /__media__/... + page/snippet
-            // links. Field-scoped so the index records which input
-            // produced each reference.
-            let mut found = crate::reference_index::scan(value, key);
-            refs.append(&mut found);
-        }
-        let page_id = page.id.get().copied().unwrap_or_default();
-        crate::task_queue::reindex_page(pool, org_slug, page_id, refs).await;
-    }
+    reindex_from_form(pool, org_slug, id, form_map).await;
 
     // #408 — keep an external search index (Elasticsearch) in sync:
     // published → indexed, otherwise removed. No-op when no backend is
@@ -17235,6 +17293,97 @@ pub async fn users_list(
     render_with_csrf(&state, &headers, "rcms_admin/users_list.html", &mut ctx)
 }
 
+/// Query string for the security log: filters plus pagination. Not a
+/// flattened [`crate::security_log::Filter`]: serde's `flatten` reads
+/// every query value as a string, which breaks the numeric fields.
+#[derive(Debug, Deserialize)]
+pub struct SecurityLogQuery {
+    #[serde(default)]
+    pub event: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub page: Option<i64>,
+    #[serde(default)]
+    pub per_page: Option<usize>,
+}
+
+/// The tag colour a security event shows in.
+fn security_event_tone(event: &str) -> &'static str {
+    use crate::security_log as log;
+    match event {
+        log::EVENT_LOGIN => "published",
+        log::EVENT_LOGIN_FAILED => "scheduled",
+        log::EVENT_LOCKOUT => "expired",
+        log::EVENT_PERMISSIONS_CHANGED => "archived",
+        _ => "draft",
+    }
+}
+
+/// GET /cms-admin/security-log — sign-ins, lockouts, sign-outs, password
+/// resets and permission changes, newest first (#433). Superuser-only,
+/// like the user and role screens it audits.
+pub async fn security_log_page(
+    State(state): State<super::AdminState>,
+    tenant: Tenant,
+    headers: HeaderMap,
+    rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
+    Query(q): Query<SecurityLogQuery>,
+) -> Result<Response, AdminError> {
+    if let Some(redirect) = require_superuser_for_user_admin(session_user.as_ref()) {
+        return Ok(redirect);
+    }
+    let per_page = crate::admin::pagination::clamp_per_page(q.per_page);
+    let filter = crate::security_log::Filter {
+        event: q.event.trim().to_owned(),
+        username: q.username.trim().to_owned(),
+    };
+    let total = crate::security_log::count(tenant.pool(), &filter).await?;
+    let pagination = crate::admin::pagination::context(
+        q.page.unwrap_or(1),
+        per_page,
+        usize::try_from(total).unwrap_or(0),
+    );
+    // Clamped into range, so a page past the end shows the last one.
+    let page = pagination["page"].as_i64().unwrap_or(1);
+    let events = crate::security_log::list(
+        tenant.pool(),
+        &filter,
+        per_page as i64,
+        crate::admin::pagination::offset(page, per_page),
+    )
+    .await?;
+    let rows: Vec<serde_json::Value> = events
+        .iter()
+        .map(|e| {
+            serde_json::json!({
+                "event": e.event,
+                "tone": security_event_tone(&e.event),
+                "source": e.source,
+                "user_id": e.user_id,
+                "username": e.username,
+                "reason": e.reason,
+                "actor": e.actor,
+                "detail": e.detail,
+                "ip_address": e.ip_address,
+                "user_agent": e.user_agent,
+                "created_at": e.created_at.get().copied(),
+            })
+        })
+        .collect();
+
+    let mut ctx = Context::new();
+    add_chrome(&mut ctx, &tenant, "security-log", session_user.as_ref()).await;
+    add_admin_theme(&mut ctx, tenant.pool()).await;
+    ctx.insert("rows", &rows);
+    ctx.insert("total", &total);
+    ctx.insert("events", crate::security_log::EVENTS);
+    ctx.insert("filter_event", &filter.event);
+    ctx.insert("filter_username", &filter.username);
+    ctx.insert("pagination", &pagination);
+    render_with_csrf(&state, &headers, "rcms_admin/security_log.html", &mut ctx)
+}
+
 /// GET /cms-admin/roles — list every role with its permission count
 /// and member count.
 pub async fn roles_list(
@@ -17629,6 +17778,7 @@ pub async fn roles_create_submit(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
     headers: HeaderMap,
+    request: crate::security_log::LoginRequest,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
     Form(form): Form<std::collections::HashMap<String, String>>,
 ) -> Result<Response, AdminError> {
@@ -17655,6 +17805,10 @@ pub async fn roles_create_submit(
     let role_id = row.id.get().copied().unwrap_or_default();
     let codenames = parse_matrix_form(&form);
     sync_role_codenames(tenant.pool(), role_id, &codenames).await?;
+    let detail = crate::security_log::describe_role_change(&name, &[], &codenames)
+        .unwrap_or_else(|| format!("role “{name}”: no permissions"));
+    record_access_change(&tenant, session_user.as_ref(), &request, None, format!("created {detail}"))
+        .await;
     redirect_named_with_message_args(
         "rcms-admin:roles",
         MsgLevel::Success,
@@ -17671,6 +17825,7 @@ pub async fn roles_edit_submit(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
     headers: HeaderMap,
+    request: crate::security_log::LoginRequest,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
     Path(id): Path<i64>,
     Form(form): Form<std::collections::HashMap<String, String>>,
@@ -17711,6 +17866,11 @@ pub async fn roles_edit_submit(
     codenames.sort();
     codenames.dedup();
     sync_role_codenames(tenant.pool(), id, &codenames).await?;
+    if let Some(detail) =
+        crate::security_log::describe_role_change(&name, &existing_codenames, &codenames)
+    {
+        record_access_change(&tenant, session_user.as_ref(), &request, None, detail).await;
+    }
     redirect_named_with_message_args(
         "rcms-admin:roles",
         MsgLevel::Success,
@@ -17726,6 +17886,7 @@ pub async fn roles_delete_submit(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
     headers: HeaderMap,
+    request: crate::security_log::LoginRequest,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
     Path(id): Path<i64>,
 ) -> Result<Response, AdminError> {
@@ -17755,6 +17916,14 @@ pub async fn roles_delete_submit(
         ur.delete_pool(tenant.pool()).await?;
     }
     role.delete_pool(tenant.pool()).await?;
+    record_access_change(
+        &tenant,
+        session_user.as_ref(),
+        &request,
+        None,
+        format!("deleted role “{name}”"),
+    )
+    .await;
     redirect_named_with_message_args(
         "rcms-admin:roles",
         MsgLevel::Success,
@@ -18190,6 +18359,7 @@ pub async fn users_create_submit(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
     headers: HeaderMap,
+    request: crate::security_log::LoginRequest,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
     Form(pairs): Form<Vec<(String, String)>>,
 ) -> Result<Response, AdminError> {
@@ -18254,6 +18424,15 @@ pub async fn users_create_submit(
     if let Some(new_id) = row.id.get().copied() {
         sync_user_roles(tenant.pool(), new_id, &role_ids).await?;
     }
+    let access = user_access(tenant.pool(), &row).await?;
+    record_access_change(
+        &tenant,
+        session_user.as_ref(),
+        &request,
+        Some(&row),
+        crate::security_log::describe_new_user(&access),
+    )
+    .await;
     redirect_named_with_message_args(
         "rcms-admin:users",
         MsgLevel::Success,
@@ -18274,6 +18453,7 @@ pub async fn users_edit_submit(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
     headers: HeaderMap,
+    request: crate::security_log::LoginRequest,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
     Path(id): Path<i64>,
     Form(form): Form<Vec<(String, String)>>,
@@ -18312,6 +18492,7 @@ pub async fn users_edit_submit(
         .first(tenant.pool())
         .await?
         .ok_or(AdminError::NotFound(id))?;
+    let before = user_access(tenant.pool(), &user).await?;
     user.username = username.clone();
     user.is_superuser = is_superuser;
     user.active = active;
@@ -18350,6 +18531,10 @@ pub async fn users_edit_submit(
     }
     user.save_pool(tenant.pool()).await?;
     sync_user_roles(tenant.pool(), id, &role_ids).await?;
+    let after = user_access(tenant.pool(), &user).await?;
+    if let Some(detail) = crate::security_log::describe_user_change(&before, &after) {
+        record_access_change(&tenant, session_user.as_ref(), &request, Some(&user), detail).await;
+    }
     if rotated.is_some() {
         redirect_named_with_message_args(
             "rcms-admin:users",
@@ -18401,12 +18586,68 @@ async fn sync_user_roles(
     Ok(())
 }
 
+/// `user`'s flags and role names, as the security log compares them.
+async fn user_access(
+    pool: &rustango::sql::Pool,
+    user: &rustango::tenancy::auth::User,
+) -> Result<crate::security_log::Access, AdminError> {
+    use rustango::tenancy::permissions::{Role, UserRole};
+    let role_ids: Vec<i64> = match user.id.get().copied() {
+        Some(uid) => UserRole::objects()
+            .where_(UserRole::user_id.eq(uid))
+            .fetch(pool)
+            .await?
+            .into_iter()
+            .map(|m| m.role_id)
+            .collect(),
+        None => Vec::new(),
+    };
+    let roles = if role_ids.is_empty() {
+        Vec::new()
+    } else {
+        Role::objects()
+            .where_(Role::id.is_in(role_ids))
+            .fetch(pool)
+            .await?
+            .into_iter()
+            .map(|r| r.name)
+            .collect()
+    };
+    Ok(crate::security_log::Access {
+        superuser: user.is_superuser,
+        active: user.active,
+        roles,
+    })
+}
+
+/// Log a change to who may do what, made by `actor` to `target` (a
+/// user, or `None` for a role).
+async fn record_access_change(
+    tenant: &Tenant,
+    actor: Option<&rustango::tenancy::auth::User>,
+    request: &crate::security_log::LoginRequest,
+    target: Option<&rustango::tenancy::auth::User>,
+    detail: String,
+) {
+    let mut entry = SecurityEntry::new(
+        crate::security_log::EVENT_PERMISSIONS_CHANGED,
+        "admin",
+        &request.meta,
+    )
+    .change(actor.map_or("", |u| u.username.as_str()), detail);
+    if let Some(user) = target {
+        entry = entry.user(user.id.get().copied(), &user.username);
+    }
+    crate::security_log::record(tenant.pool(), &tenant.org.slug, entry).await;
+}
+
 /// POST /cms-admin/users/{id}/deactivate — flip the `active` bit
 /// off. Idempotent. Reversed via the edit form's checkbox.
 pub async fn users_deactivate_submit(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
     headers: HeaderMap,
+    request: crate::security_log::LoginRequest,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
     Path(id): Path<i64>,
 ) -> Result<Response, AdminError> {
@@ -18418,8 +18659,19 @@ pub async fn users_deactivate_submit(
         .first(tenant.pool())
         .await?
         .ok_or(AdminError::NotFound(id))?;
+    let was_active = user.active;
     user.active = false;
     user.save_pool(tenant.pool()).await?;
+    if was_active {
+        record_access_change(
+            &tenant,
+            session_user.as_ref(),
+            &request,
+            Some(&user),
+            "active: on → off".to_owned(),
+        )
+        .await;
+    }
     redirect_named_with_message_args(
         "rcms-admin:users",
         MsgLevel::Success,
@@ -18437,6 +18689,7 @@ pub async fn users_bulk_submit(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
     headers: HeaderMap,
+    request: crate::security_log::LoginRequest,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
     Form(pairs): Form<Vec<(String, String)>>,
 ) -> Result<Response, AdminError> {
@@ -18494,6 +18747,15 @@ pub async fn users_bulk_submit(
                 user.active = target_active;
                 user.save_pool(tenant.pool()).await?;
                 changed += 1;
+                let detail = if target_active { "active: off → on" } else { "active: on → off" };
+                record_access_change(
+                    &tenant,
+                    session_user.as_ref(),
+                    &request,
+                    Some(&user),
+                    detail.to_owned(),
+                )
+                .await;
             }
         }
     }
@@ -18576,38 +18838,6 @@ pub async fn settings_page(
     }
 
     render_with_csrf(&state, &headers, "rcms_admin/settings.html", &mut ctx)
-}
-
-/// POST /cms-admin/__richtext-preview — sanitize a richtext-widget's
-/// textarea source through the same `ammonia` allow-list the public
-/// render uses, return the cleaned HTML body so the editor's
-/// preview swap matches what visitors will see.
-///
-/// Accepts the source under a `body` form field. Other field names
-/// fall through to the empty string. Output is `text/html` so the
-/// client can drop it straight into `innerHTML` without re-parsing.
-///
-/// Session-gated like the rest of the admin POST surface — anonymous
-/// requests get the friendly 401 page. CSRF is handled by the
-/// framework's middleware (header-based for the fetch path the JS
-/// uses).
-pub async fn richtext_preview(
-    State(_state): State<super::AdminState>,
-    _tenant: Tenant,
-    rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
-    Form(form): Form<std::collections::HashMap<String, String>>,
-) -> Result<Response, AdminError> {
-    if session_user.is_none() {
-        return Ok(unauthorized_no_session());
-    }
-    let src = form.get("body").map(String::as_str).unwrap_or("");
-    let html = crate::markdown::sanitize_html(src);
-    Ok((
-        axum::http::StatusCode::OK,
-        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
-        html,
-    )
-        .into_response())
 }
 
 /// POST /cms-admin/settings/branding — multipart upload of logo
@@ -20014,7 +20244,16 @@ fn empty_page_form_values() -> serde_json::Value {
 /// redirect to `/login`. Self-contained so the button works
 /// regardless of which framework auth flow signed the user in —
 /// avoids depending on the right cookie name being known here.
-pub async fn cms_logout_submit() -> Response {
+pub async fn cms_logout_submit(
+    rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
+    tenant: Result<Tenant, rustango::extractors::TenantRejection>,
+    request: crate::security_log::LoginRequest,
+) -> Response {
+    if let (Some(user), Ok(tenant)) = (session_user, tenant) {
+        let entry = SecurityEntry::new(crate::security_log::EVENT_LOGOUT, "admin", &request.meta)
+            .user(user.id.get().copied(), &user.username);
+        crate::security_log::record(tenant.pool(), &tenant.org.slug, entry).await;
+    }
     let mut resp = Redirect::to("/login").into_response();
     // Reset all three cookies (`Max-Age=0` clears, the empty value
     // is a fallback for browsers that only honor expiry-by-value).
@@ -20793,6 +21032,7 @@ pub async fn account_email_submit(
     // round-trip we used to stash in user.data.
     if let Some(mailer) = state.mailer.as_deref() {
         let link = rustango::auth_flows::EmailVerification::issue(
+            &rustango::auth_flows::LinkScope::from(&tenant),
             "/cms-admin/me/email/confirm",
             uid,
             &new_email,
@@ -20851,6 +21091,7 @@ pub async fn account_email_confirm(
         .unwrap_or_default()
         .to_owned();
     let (token_uid, signed_email) = match rustango::auth_flows::EmailVerification::verify(
+        &rustango::auth_flows::LinkScope::from(&tenant),
         &path_and_query,
         state.signing_secret.as_slice(),
     ) {
@@ -21122,6 +21363,12 @@ pub async fn password_reset_request_form(
 /// tenant. Binding the tenant slug makes a link verify only where it was
 /// issued; binding the current password hash makes it die the moment the
 /// password changes, so it is single-use without any cache.
+/// The scope stamped on a reset link: the link only verifies on the tenant
+/// it was issued for, alongside the tenant-bound key.
+fn password_reset_scope(tenant_slug: &str) -> rustango::auth_flows::LinkScope {
+    rustango::auth_flows::LinkScope::audience(&format!("rcms-reset:{tenant_slug}"))
+}
+
 fn password_reset_key(secret: &[u8], tenant_slug: &str, password_hash: &str) -> Vec<u8> {
     let msg = format!("rcms-password-reset\0{tenant_slug}\0{password_hash}");
     crate::signing::hmac_sha256_hex(secret, msg.as_bytes()).into_bytes()
@@ -21137,6 +21384,7 @@ fn password_reset_url(
 ) -> String {
     let key = password_reset_key(secret, tenant_slug, &user.password_hash);
     rustango::auth_flows::PasswordReset::issue(
+        &password_reset_scope(tenant_slug),
         "/cms-admin/password-reset/confirm",
         user.id.get().copied().unwrap_or(0),
         &key,
@@ -21194,7 +21442,11 @@ async fn password_reset_user(
         .await
         .ok()??;
     let key = password_reset_key(secret, &tenant.org.slug, &user.password_hash);
-    match rustango::auth_flows::PasswordReset::verify(signed_url, &key) {
+    match rustango::auth_flows::PasswordReset::verify(
+        &password_reset_scope(&tenant.org.slug),
+        signed_url,
+        &key,
+    ) {
         Ok(uid) if uid == claimed => Some(user),
         _ => None,
     }
@@ -21204,6 +21456,7 @@ pub async fn password_reset_request_submit(
     State(state): State<super::AdminState>,
     tenant: Tenant,
     headers: HeaderMap,
+    request: crate::security_log::LoginRequest,
     rustango::extractors::SessionUser(_session_user): rustango::extractors::SessionUser,
     Form(form): Form<std::collections::HashMap<String, String>>,
 ) -> Result<Response, AdminError> {
@@ -21221,6 +21474,13 @@ pub async fn password_reset_request_submit(
             .into_iter()
             .next();
         if let Some(u) = user {
+            let entry = SecurityEntry::new(
+                crate::security_log::EVENT_PASSWORD_RESET_REQUESTED,
+                "admin",
+                &request.meta,
+            )
+            .user(u.id.get().copied(), &u.username);
+            crate::security_log::record(tenant.pool(), &tenant.org.slug, entry).await;
             // The link goes to the user's real address. The response below
             // renders "sent" either way, so the form never confirms or
             // denies that an account exists.
@@ -21326,6 +21586,7 @@ pub async fn password_reset_confirm_submit(
     State(state): State<super::AdminState>,
     tenant: Tenant,
     headers: HeaderMap,
+    request: crate::security_log::LoginRequest,
     rustango::extractors::SessionUser(_session_user): rustango::extractors::SessionUser,
     Form(form): Form<std::collections::HashMap<String, String>>,
 ) -> Result<Response, AdminError> {
@@ -21403,6 +21664,11 @@ pub async fn password_reset_confirm_submit(
             "Could not save the new password. Try again.",
         );
     }
+    // Proving control of the account's mail lifts a lock a guesser set.
+    crate::security_log::unlock(&tenant.org.slug, &user.username).await;
+    let entry = SecurityEntry::new(crate::security_log::EVENT_PASSWORD_RESET, "admin", &request.meta)
+        .user(user.id.get().copied(), &user.username);
+    crate::security_log::record(tenant.pool(), &tenant.org.slug, entry).await;
 
     render_with_csrf(
         &state,
@@ -21488,11 +21754,13 @@ mod tests {
         let url = password_reset_url(secret, "blog", &reset_user("hash-1"));
         assert!(url.starts_with("/cms-admin/password-reset/confirm?user_id=7&"), "{url}");
         let key = password_reset_key(secret, "blog", "hash-1");
-        assert_eq!(rustango::auth_flows::PasswordReset::verify(&url, &key).ok(), Some(7));
+        let blog = password_reset_scope("blog");
+        assert_eq!(rustango::auth_flows::PasswordReset::verify(&blog, &url, &key).ok(), Some(7));
         let after_change = password_reset_key(secret, "blog", "hash-2");
-        assert!(rustango::auth_flows::PasswordReset::verify(&url, &after_change).is_err());
+        assert!(rustango::auth_flows::PasswordReset::verify(&blog, &url, &after_change).is_err());
         let other_tenant = password_reset_key(secret, "shop", "hash-1");
-        assert!(rustango::auth_flows::PasswordReset::verify(&url, &other_tenant).is_err());
+        let shop = password_reset_scope("shop");
+        assert!(rustango::auth_flows::PasswordReset::verify(&shop, &url, &other_tenant).is_err());
     }
 
     #[test]
@@ -22151,7 +22419,7 @@ mod forms_list_tests {
 
 #[cfg(test)]
 mod password_reset_key_tests {
-    use super::password_reset_key;
+    use super::{password_reset_key, password_reset_scope};
     use rustango::auth_flows::PasswordReset;
     use std::time::Duration;
 
@@ -22159,14 +22427,20 @@ mod password_reset_key_tests {
     const BASE: &str = "/cms-admin/password-reset/confirm";
 
     fn link(tenant: &str, hash: &str) -> String {
-        PasswordReset::issue(BASE, 1, &password_reset_key(SECRET, tenant, hash), Duration::from_secs(3600))
+        PasswordReset::issue(
+            &password_reset_scope(tenant),
+            BASE,
+            1,
+            &password_reset_key(SECRET, tenant, hash),
+            Duration::from_secs(3600),
+        )
     }
 
     #[test]
     fn a_link_verifies_for_the_tenant_and_password_it_was_issued_for() {
         let url = link("acme", "$argon2id$v=19$old");
         let key = password_reset_key(SECRET, "acme", "$argon2id$v=19$old");
-        assert_eq!(PasswordReset::verify(&url, &key).ok(), Some(1));
+        assert_eq!(PasswordReset::verify(&password_reset_scope("acme"), &url, &key).ok(), Some(1));
     }
 
     #[test]
@@ -22174,14 +22448,14 @@ mod password_reset_key_tests {
         // User ids restart at 1 per tenant: this is the takeover in #673.
         let url = link("acme", "$argon2id$v=19$same");
         let other = password_reset_key(SECRET, "globex", "$argon2id$v=19$same");
-        assert!(PasswordReset::verify(&url, &other).is_err());
+        assert!(PasswordReset::verify(&password_reset_scope("globex"), &url, &other).is_err());
     }
 
     #[test]
     fn a_link_stops_verifying_once_the_password_changes() {
         let url = link("acme", "$argon2id$v=19$before");
         let after = password_reset_key(SECRET, "acme", "$argon2id$v=19$after");
-        assert!(PasswordReset::verify(&url, &after).is_err());
+        assert!(PasswordReset::verify(&password_reset_scope("acme"), &url, &after).is_err());
     }
 }
 
@@ -22313,6 +22587,103 @@ mod publish_gate_tests {
             .expect("query")
             .expect("page")
             .status
+    }
+
+    async fn stored_theme(pool: &Pool, page: &Page) -> Option<i64> {
+        Page::objects()
+            .where_(Page::id.eq(page.id.get().copied().expect("id")))
+            .first(pool)
+            .await
+            .expect("query")
+            .expect("page")
+            .theme_id
+    }
+
+    /// #902 — the editor has no theme input, so its save must keep a theme
+    /// set some other way; only a posted (empty) `theme_id` changes it.
+    #[tokio::test]
+    async fn an_editor_save_keeps_the_page_theme() {
+        let pool = mem_pool().await;
+        let mut page = draft(&pool).await;
+        let mut theme = crate::theme::tests::fixture_theme();
+        theme.save_pool(&pool).await.expect("theme");
+        let theme_id = theme.id.get().copied().expect("theme id");
+        page.theme_id = Some(theme_id);
+        page.save_pool(&pool).await.expect("set theme");
+
+        let invalidator: std::sync::Arc<dyn crate::cache_invalidate::PageCacheInvalidator> =
+            std::sync::Arc::new(crate::cache_invalidate::Noop);
+        let id = page.id.get().copied().expect("id");
+        let mut form = crate::page_form::prefill(&pool, &page).await;
+        form.remove("theme_id");
+        assert!(apply_page_edit(&pool, "t", &invalidator, None, "", false, id, &form, None).await.expect("save").is_ok());
+        assert_eq!(stored_theme(&pool, &page).await, Some(theme_id), "a form without the field keeps it");
+
+        form.insert("theme_id".into(), String::new());
+        assert!(apply_page_edit(&pool, "t", &invalidator, None, "", false, id, &form, None).await.expect("save").is_ok());
+        assert_eq!(stored_theme(&pool, &page).await, None, "posted empty clears it");
+    }
+
+    /// Publish a page-builder body with one text field, `headline`.
+    async fn publish_headline_schema(pool: &Pool, type_id: i64) {
+        let document = serde_json::json!({
+            "nodes": [{ "kind": "field", "key": "headline", "label": "Headline", "widget": "text" }]
+        });
+        rustango::sql::raw_execute_pool(
+            pool,
+            "INSERT INTO cms_page_type_schema (page_type_id, status, version, document) \
+             VALUES (?, 'published', 1, ?)",
+            vec![
+                rustango::core::SqlValue::I64(type_id),
+                rustango::core::SqlValue::Json(document),
+            ],
+        )
+        .await
+        .expect("schema");
+    }
+
+    /// #857 — the new-page form carries the type's own fields, not only
+    /// Title, Slug and Status.
+    #[tokio::test]
+    async fn the_new_page_form_shows_the_type_fields() {
+        let pool = mem_pool().await;
+        let type_id = draft(&pool).await.page_type_id;
+        publish_headline_schema(&pool, type_id).await;
+        let mut tera = tera::Tera::default();
+        crate::admin::register_templates(&mut tera).expect("templates");
+        let mut ctx = tera::Context::new();
+        super::insert_type_fields(&mut ctx, &tera, &pool, None, Vec::new(), 0, type_id, None).await;
+        let body = ctx
+            .get("builder_body_html")
+            .and_then(serde_json::Value::as_str)
+            .expect("builder body on the new form")
+            .to_owned();
+        assert!(body.contains("pb__headline"), "headline input missing: {body}");
+    }
+
+    /// #857 — what the new-page form posts for the type's fields is saved
+    /// with the page, not dropped until a second save.
+    #[tokio::test]
+    async fn creating_a_page_saves_its_type_fields() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        publish_headline_schema(&pool, page.page_type_id).await;
+        let page_type = PageType::objects()
+            .where_(PageType::id.eq(page.page_type_id))
+            .first(&pool)
+            .await
+            .expect("type query");
+        let id = page.id.get().copied().expect("id");
+        let form = std::collections::HashMap::from([("pb__headline".to_owned(), "Hello".to_owned())]);
+        super::save_type_content(&pool, page_type.as_ref(), page.page_type_id, id, &form)
+            .await
+            .expect("save");
+        let data = crate::page_builder::model::data_for_page(&pool, id)
+            .await
+            .expect("builder data query")
+            .expect("builder data row")
+            .data;
+        assert_eq!(data["headline"], "Hello", "{data}");
     }
 
     #[tokio::test]

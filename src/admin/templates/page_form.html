@@ -761,7 +761,7 @@
         {% if a11y_violations and a11y_violations | length > 0 %}
             {% for v in a11y_violations %}
                 <li class="rcms-a11y-row rcms-a11y-row--{{ v.severity }}" data-a11y-source="heuristic">
-                    <span class="material-symbols-rounded sm" title="{{ "Server-side heuristic (#116)" | translate(locale=LANG) }}">
+                    <span class="material-symbols-rounded sm" title="{{ "Server-side heuristic" | translate(locale=LANG) }}">
                         {% if v.severity == "error" %}error
                         {% elif v.severity == "warning" %}warning
                         {% else %}info
@@ -782,8 +782,8 @@
     </p>
     <p class="rcms-hint rcms-a11y-footer">
         <span class="material-symbols-rounded sm">accessibility_new</span>
-        <strong data-a11y-heuristic-icon title="{{ "Server-side heuristic" | translate(locale=LANG) }}">⚙</strong> = {{ "server-side heuristic (#116)." | translate(locale=LANG) }}
-        <strong data-a11y-axe-icon title="{{ "Client-side axe-core" | translate(locale=LANG) }}">🛠</strong> = {{ "client-side axe-core over the rendered preview (#208)." | translate(locale=LANG) }}
+        <strong data-a11y-heuristic-icon title="{{ "Server-side heuristic" | translate(locale=LANG) }}">⚙</strong> = {{ "server-side heuristic." | translate(locale=LANG) }}
+        <strong data-a11y-axe-icon title="{{ "Client-side axe-core" | translate(locale=LANG) }}">🛠</strong> = {{ "client-side axe-core over the rendered preview." | translate(locale=LANG) }}
     </p>
 </details>
 </section>
@@ -2196,7 +2196,7 @@
 
         const icon = document.createElement("span");
         icon.className = "material-symbols-rounded sm";
-        icon.title = "Client-side axe-core (#208)";
+        icon.title = document.querySelector("[data-a11y-axe-icon]")?.title || "Client-side axe-core";
         icon.textContent =
             severity === "error" ? "error" : severity === "warning" ? "warning" : "info";
         li.appendChild(icon);

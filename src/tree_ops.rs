@@ -4,7 +4,7 @@
 //! `&rustango::sql::Pool`. Write operations that require atomic
 //! transactions (`create_root`, `create_child`, `move_to`,
 //! `cascade_url_path_to_descendants`) open a `PoolTx` via
-//! `transaction_pool(&tenant.pool())` and use the `_tx` ORM helpers.
+//! `write_transaction(&tenant.pool())` and use the `_tx` ORM helpers.
 //!
 //! Path generation is two-step: the materialized-path segment is the
 //! row's auto-assigned id, which we don't know until after INSERT. To
@@ -21,7 +21,7 @@ use chrono::Utc;
 use rustango::core::Column as _;
 use rustango::extractors::Tenant;
 use rustango::sql::{
-    sqlx, transaction_pool, Auto, ExecError, FetcherPool as _, FetcherTx as _, Pool, PoolTx,
+    sqlx, write_transaction, Auto, ExecError, FetcherPool as _, FetcherTx as _, Pool, PoolTx,
 };
 
 use crate::page::{Page, PageStatus};
@@ -350,7 +350,7 @@ impl Page {
     /// publicly constructible on Postgres (test-gated), leaving no way to
     /// seed pages on SQLite/MySQL; this is that way.
     pub async fn create_root_pool(pool: &Pool, new: NewPage) -> Result<Self, TreeError> {
-        let mut tx = transaction_pool(pool).await?;
+        let mut tx = write_transaction(pool).await?;
         // #317 — compute sort_order inside the tx under a FOR UPDATE lock
         // on the existing roots so concurrent root inserts can't read the
         // same max and collide.
@@ -397,18 +397,20 @@ impl Page {
         let parent_id = page_id(parent)?;
         validate_child_placement(pool, parent.page_type_id, new.page_type_id).await?;
 
-        let mut tx = transaction_pool(pool).await?;
+        let mut tx = write_transaction(pool).await?;
         // #317 — serialize concurrent inserts under this parent. Lock the
         // parent row (FOR UPDATE) so a second create_child blocks until
         // the first commits; otherwise both read the same
         // MAX(sort_order) and write duplicate sort_orders. Locking the
         // parent (not the sibling set) covers the first child too, when
         // there are no siblings to lock. The lock is held for the whole
-        // tx — dropping the result Vec doesn't release it. No-op on
-        // SQLite (no row locks; writers serialize anyway).
+        // tx — dropping the result Vec doesn't release it. On SQLite the
+        // tx is opened with `write_transaction`, whose up-front write lock
+        // does the same job.
         let _locked_parent: Vec<Page> = Page::objects()
             .where_(Page::id.eq(parent_id))
             .select_for_update()
+            .silent_on_sqlite()
             .fetch_tx(&mut tx)
             .await?;
         let sort_order = next_child_sort_order_tx(&mut tx, parent_id).await?;
@@ -513,7 +515,7 @@ impl Page {
         }
 
         let subtree = self.descendants(tenant.pool()).await?;
-        let mut tx = transaction_pool(tenant.pool()).await?;
+        let mut tx = write_transaction(tenant.pool()).await?;
         self.move_to_in_tx(new_parent, subtree, &mut tx).await?;
         tx.commit().await?;
         Ok(())
@@ -556,6 +558,7 @@ impl Page {
                 let _locked_parent: Vec<Page> = Page::objects()
                     .where_(Page::id.eq(np_id))
                     .select_for_update()
+                    .silent_on_sqlite()
                     .fetch_tx(tx)
                     .await?;
                 next_child_sort_order_tx(tx, np_id).await?
@@ -614,13 +617,14 @@ fn page_id(page: &Page) -> Result<i64, TreeError> {
 ///
 /// Empty roots → nothing to lock → a narrow gap when the first couple of
 /// roots are created concurrently (rare; acceptable). `FOR UPDATE` is a
-/// no-op on SQLite, which serializes writers via its implicit tx lock.
+/// no-op on SQLite, where callers open the tx with `write_transaction`.
 async fn next_root_sort_order_tx(tx: &mut PoolTx<'_>) -> Result<i32, TreeError> {
     let _lock: Vec<Page> = Page::objects()
         .where_(Page::parent_id.is_null())
         .order_by(&[("id", false)])
         .limit(1)
         .select_for_update()
+        .silent_on_sqlite()
         .fetch_tx(tx)
         .await?;
     let rows = Page::objects()

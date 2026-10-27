@@ -478,9 +478,7 @@ body.rcms-admin {
 }
 /* #314 — scope the heading font to the admin shell, stopping at inline
    user-content wrappers so a user's stored <h2> in a rich-text / stream /
-   block preview keeps its own (public/UA) font instead of admin chrome.
-   The richtext preview deliberately styles its own content and is left
-   in-scope. */
+   block preview keeps its own (public/UA) font instead of admin chrome. */
 @scope (.rcms-admin) to (.rcms-block-paragraph, .rcms-block-rich-text, .rcms-block-raw-html, .rcms-block-snippet-chooser, .rcms-block-picker-tile-preview, .rcms-stream-block, .rcms-display-chip-value) {
     h1, h2, h3, h4, h5, h6 { font-family: var(--font-heading); }
 }
@@ -4672,98 +4670,6 @@ select:not(.rcms-field select) {
     background: var(--md-sys-color-outline-variant);
     margin: 0 2px;
 }
-
-/* #263 — richtext widget preview pane. Wraps a richtext textarea
- * with a Preview/Edit toggle row; the preview pane swaps in on blur
- * and renders the sanitized HTML so the editor sees styled output
- * instead of literal `<h3>` tags. */
-.rcms-richtext-wrap {
-    display: flex;
-    flex-direction: column;
-}
-.rcms-richtext-toolbar-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-}
-.rcms-richtext-toolbar-row > .rcms-md-toolbar {
-    flex: 1 1 auto;
-}
-.rcms-richtext-toggle {
-    align-self: flex-end;
-    margin-left: auto;
-    background: transparent;
-    border: 1px solid var(--md-sys-color-outline-variant);
-    border-radius: var(--md-sys-radius-md);
-    padding: 4px 10px;
-    font-size: 11px;
-    color: var(--md-sys-color-on-surface);
-    cursor: pointer;
-    font-family: inherit;
-}
-.rcms-richtext-toggle:hover {
-    background: var(--md-sys-color-surface-container-high);
-}
-.rcms-richtext-toggle:active {
-    background: var(--md-sys-color-secondary-container);
-}
-.rcms-richtext-preview {
-    padding: 10px 12px;
-    min-height: 140px;
-    border: 1px solid var(--md-sys-color-outline-variant);
-    border-radius: var(--md-sys-radius-md);
-    background: var(--md-sys-color-surface);
-    color: var(--md-sys-color-on-surface);
-    cursor: text;
-    font: inherit;
-    line-height: 1.55;
-}
-.rcms-richtext-preview:hover {
-    border-color: var(--md-sys-color-outline);
-}
-.rcms-richtext-preview:focus {
-    outline: 2px solid var(--md-sys-color-primary);
-    outline-offset: -2px;
-}
-/* Style the rendered output so headings/lists/quotes look like
- * the public render, not naked. Scoped to the preview to avoid
- * bleeding into other admin chrome. */
-.rcms-richtext-preview > :first-child { margin-top: 0; }
-.rcms-richtext-preview > :last-child { margin-bottom: 0; }
-.rcms-richtext-preview h1,
-.rcms-richtext-preview h2,
-.rcms-richtext-preview h3,
-.rcms-richtext-preview h4 {
-    margin: 12px 0 6px;
-    font-weight: 600;
-}
-.rcms-richtext-preview p { margin: 0 0 10px; }
-.rcms-richtext-preview ul,
-.rcms-richtext-preview ol { margin: 0 0 10px 20px; }
-.rcms-richtext-preview blockquote {
-    margin: 0 0 10px;
-    padding: 4px 12px;
-    border-left: 3px solid var(--md-sys-color-outline-variant);
-    color: var(--md-sys-color-on-surface-variant);
-}
-.rcms-richtext-preview code {
-    background: var(--md-sys-color-surface-container);
-    padding: 1px 4px;
-    border-radius: 3px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 0.92em;
-}
-.rcms-richtext-preview pre {
-    background: var(--md-sys-color-surface-container);
-    padding: 10px 12px;
-    border-radius: var(--md-sys-radius-md);
-    overflow-x: auto;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12px;
-}
-.rcms-richtext-preview a { color: var(--md-sys-color-primary); }
-.rcms-richtext-preview a:hover { text-decoration: underline; }
 
 /* #205 Phase 2 — block picker tile description. The picker tile
  * now shows the block name + (optional) one-line description. */

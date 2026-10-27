@@ -514,6 +514,7 @@ register_url!(
     "/cms-admin/users/{id}/deactivate"
 );
 register_url!("rcms-admin:roles", "/cms-admin/roles");
+register_url!("rcms-admin:security-log", "/cms-admin/security-log");
 register_url!("rcms-admin:roles:new", "/cms-admin/roles/new");
 register_url!("rcms-admin:roles:edit", "/cms-admin/roles/{id}/edit");
 register_url!("rcms-admin:roles:delete", "/cms-admin/roles/{id}/delete");

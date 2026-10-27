@@ -16,10 +16,11 @@
 //! This module owns: the locale set ([`UI_LOCALES`]), per-request resolution
 //! ([`negotiate`] — cookie → per-user pref → Accept-Language → tenant default →
 //! English), server-string translation ([`tr`]), the embedded
-//! [`admin_translator`], and the completeness/extraction tooling (tests).
+//! [`admin_translator`], the per-tenant override layer behind the Tera
+//! bindings ([`register_tera_bindings`]), and the completeness/extraction
+//! tooling (tests).
 //! See `docs/i18n-admin.md` for the authoring workflow.
 
-use crate::log_err::LogErr as _;
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
 
@@ -185,11 +186,10 @@ pub(crate) fn admin_translator() -> Arc<Translator> {
     Arc::new(t)
 }
 
-/// Process-wide cached admin translator — THE shared instance used by both the
-/// Tera `translate`/`translate_plural` bindings (via `register_templates`) and
-/// the server-string `tr`/`tr_plural` helpers, so a DB override applied to it is
-/// visible everywhere. The embedded catalogs are immutable; only the override
-/// layer mutates, via [`maybe_refresh_overrides`].
+/// Process-wide cached admin translator: the embedded catalogs plus any
+/// [`extend_ui_catalog`] entries. Identical for every tenant, so it never
+/// carries the DB override layer — tenant overrides live in
+/// [`tenant_overrides`] and are consulted first by [`translate`].
 pub(crate) fn cached_translator() -> &'static Arc<Translator> {
     static T: OnceLock<Arc<Translator>> = OnceLock::new();
     T.get_or_init(admin_translator)
@@ -203,8 +203,8 @@ pub(crate) fn cached_translator() -> &'static Arc<Translator> {
 ///
 /// `extra` is `{ locale_code -> { english_key -> translated } }`. The shipped
 /// admin catalog wins on any shared key, so admin UI strings are never
-/// overwritten. Only the catalog layer is touched — the DB override layer
-/// (`maybe_refresh_overrides`) is independent and keeps working.
+/// overwritten. Only the catalog layer is touched — the per-tenant DB
+/// override layer is independent and keeps working.
 ///
 /// Call once at boot AFTER [`crate::admin::register_templates`] (which
 /// registers the binding against this same cached translator).
@@ -221,32 +221,239 @@ pub fn extend_ui_catalog(extra: HashMap<String, HashMap<String, String>>) {
     }
 }
 
-/// Live admin-translation overrides: reload the editable DB layer
-/// (`rustango_translations`) into the shared translator, at most once per TTL.
-/// Called from `add_chrome`, so an operator's edit in the admin takes effect
-/// within ~10s without a redeploy. Best-effort — a missing table or query error
-/// just leaves the shipped file catalogs in force.
-///
-/// The override map is process-wide (admin chrome is product-global). In a
-/// multi-tenant deployment it reflects whichever tenant most recently rendered
-/// an admin page; per-tenant admin translations would need a per-tenant
-/// translator (future work).
-pub(crate) async fn maybe_refresh_overrides(pool: &rustango::sql::Pool) {
+/// One tenant's editable admin-translation overrides (`rustango_translations`):
+/// `locale → key → value`.
+type Overrides = HashMap<Locale, HashMap<String, String>>;
+
+rustango::__private_runtime::tokio::task_local! {
+    /// The overrides of the tenant whose request this task is serving (#652).
+    ///
+    /// The framework binds `translate` to one process-wide translator and has
+    /// no per-request hook (ujeenet/rustango-private#675), so one tenant's
+    /// overrides used to render in every tenant's admin. A task-local rather
+    /// than a thread-local: Tera's functions see only call-site kwargs, and
+    /// tokio moves a task between threads at every await, so a thread-local
+    /// set before a handler's awaits could be read by another tenant's render.
+    /// Drop this module's bindings once the framework gains that hook.
+    static ACTIVE_OVERRIDES: Arc<Overrides>;
+}
+
+/// Middleware that makes the request tenant's overrides visible to the
+/// `translate` bindings and [`tr`] for the rest of the request. No tenant
+/// resolved → no scope, and only the shipped catalogs apply.
+pub(crate) async fn tenant_overrides_layer(
+    req: axum::http::Request<axum::body::Body>,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    use rustango::tenancy::OrgResolver as _;
+    if req.uri().path().starts_with("/cms-admin/static/") {
+        return next.run(req).await;
+    }
+    let (parts, body) = req.into_parts();
+    let mut overrides = None;
+    if let Some(ctx) = parts
+        .extensions
+        .get::<Arc<rustango::extractors::TenantContext>>()
+        .cloned()
+    {
+        let registry = ctx.pools.registry_pool();
+        if let Ok(Some(org)) = ctx.resolver.resolve(&parts, &registry).await {
+            if let Ok(pool) = ctx.pools.scoped_pool_dyn(&org).await {
+                overrides = Some(tenant_overrides(&org.slug, &pool).await);
+            }
+        }
+    }
+    let req = axum::http::Request::from_parts(parts, body);
+    match overrides {
+        Some(o) => ACTIVE_OVERRIDES.scope(o, next.run(req)).await,
+        None => next.run(req).await,
+    }
+}
+
+/// `slug`'s overrides, reloaded from its own pool at most once per TTL so an
+/// edit in the translations editor shows within ~10s without a query per
+/// render. Cached per tenant and never shared. A failed load serves the last
+/// good copy (or none), so a missing table just leaves the shipped catalogs.
+pub(crate) async fn tenant_overrides(slug: &str, pool: &rustango::sql::Pool) -> Arc<Overrides> {
     use std::time::{Duration, Instant};
     const REFRESH_TTL: Duration = Duration::from_secs(10);
-    static LAST: OnceLock<std::sync::Mutex<Option<Instant>>> = OnceLock::new();
-    let slot = LAST.get_or_init(|| std::sync::Mutex::new(None));
-    {
-        let mut guard = slot.lock().expect("override-refresh clock poisoned");
-        if matches!(*guard, Some(t) if t.elapsed() < REFRESH_TTL) {
-            return;
+    type Cache = std::sync::Mutex<HashMap<String, (Instant, Arc<Overrides>)>>;
+    static CACHE: OnceLock<Cache> = OnceLock::new();
+    let cache = CACHE.get_or_init(Default::default);
+    let stale = {
+        let mut guard = cache.lock().expect("override cache poisoned");
+        match guard.get_mut(slug) {
+            Some((at, o)) if at.elapsed() < REFRESH_TTL => return Arc::clone(o),
+            Some((at, o)) => {
+                // Claim the refresh before the await; concurrent renders keep
+                // serving the previous copy instead of stampeding the pool.
+                *at = Instant::now();
+                Some(Arc::clone(o))
+            }
+            None => None,
         }
-        // Claim the slot before the await so concurrent renders don't stampede.
-        *guard = Some(Instant::now());
+    };
+    let fresh = match rustango::i18n::db::all_pool(pool).await {
+        Ok(rows) => {
+            let mut map = Overrides::new();
+            for t in rows {
+                map.entry(Locale::new(&t.locale)).or_default().insert(t.key, t.value);
+            }
+            Arc::new(map)
+        }
+        Err(e) => {
+            tracing::warn!(tenant = slug, error = %e, "admin translation overrides not refreshed");
+            stale.unwrap_or_default()
+        }
+    };
+    cache
+        .lock()
+        .expect("override cache poisoned")
+        .insert(slug.to_owned(), (Instant::now(), Arc::clone(&fresh)));
+    fresh
+}
+
+/// The active tenant's override for `key` in `locale` (exact, then base
+/// language — the framework's override precedence).
+fn active_override(locale: &str, key: &str) -> Option<String> {
+    ACTIVE_OVERRIDES
+        .try_with(|ov| {
+            let req = Locale::new(locale);
+            ov.get(&req)
+                .and_then(|c| c.get(key))
+                .or_else(|| ov.get(&Locale::new(req.base_language())).and_then(|c| c.get(key)))
+                .cloned()
+        })
+        .ok()
+        .flatten()
+}
+
+/// Translate `key` for `locale`: the active tenant's override, else the
+/// shipped catalogs. An override of a key that carries markup is
+/// HTML-escaped — templates render those keys through `| safe`, and an
+/// override is tenant-authored text, never trusted markup (#652).
+#[must_use]
+pub(crate) fn translate(locale: &str, key: &str, params: &[(&str, &str)]) -> String {
+    match active_override(locale, key) {
+        Some(v) if key.contains('<') => substitute(&tera::escape_html(&v), params),
+        Some(v) => substitute(&v, params),
+        None => cached_translator().translate(locale, key, params),
     }
-    rustango::i18n::db::refresh_overrides_pool(cached_translator(), pool)
-        .await
-        .log_warn("admin translation overrides not refreshed");
+}
+
+/// Count-aware [`translate`]. The plural catalogs win, exactly as in the
+/// framework; only a key with no plural entry reaches the override layer.
+#[must_use]
+pub(crate) fn translate_plural(locale: &str, key: &str, n: i64, params: &[(&str, &str)]) -> String {
+    static PLURAL_KEYS: OnceLock<std::collections::HashSet<String>> = OnceLock::new();
+    let plural = PLURAL_KEYS.get_or_init(|| {
+        UI_LOCALES
+            .iter()
+            .flat_map(|(code, _)| parse_plural(plural_catalog_json(code)).into_keys())
+            .collect()
+    });
+    if plural.contains(key) {
+        cached_translator().translate_plural(locale, key, n, params)
+    } else {
+        translate(locale, key, params)
+    }
+}
+
+/// `{name}` placeholder substitution in one pass, so an inserted value is
+/// never re-scanned — a copy of the framework's private helper.
+fn substitute(template: &str, params: &[(&str, &str)]) -> String {
+    let mut out = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(open) = rest.find('{') {
+        out.push_str(&rest[..open]);
+        let after = &rest[open + 1..];
+        let value = after.find('}').and_then(|close| {
+            let name = &after[..close];
+            params.iter().rev().find(|(n, _)| *n == name).map(|(_, v)| (*v, close))
+        });
+        match value {
+            Some((v, close)) => {
+                out.push_str(v);
+                rest = &after[close + 1..];
+            }
+            None => {
+                out.push('{');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Register the tenant-aware `translate` function + filter and
+/// `translate_plural` function, replacing the framework's process-wide
+/// bindings of the same names (ujeenet/rustango-private#675). Call after
+/// `rustango::i18n::tera_tags::register`, which still supplies the locale
+/// helpers (`get_text_direction`, `is_rtl`, …).
+pub(crate) fn register_tera_bindings(tera: &mut tera::Tera) {
+    use tera::Value;
+    /// Every string / number / bool arg except the control keys, for
+    /// `{name}` interpolation.
+    fn interp(args: &HashMap<String, Value>, exclude: &[&str]) -> Vec<(String, String)> {
+        args.iter()
+            .filter(|(k, _)| !exclude.contains(&k.as_str()))
+            .filter_map(|(k, v)| {
+                let s = match v {
+                    Value::String(s) => s.clone(),
+                    Value::Number(n) => n.to_string(),
+                    Value::Bool(b) => b.to_string(),
+                    _ => return None,
+                };
+                Some((k.clone(), s))
+            })
+            .collect()
+    }
+    fn run(key: &str, args: &HashMap<String, Value>) -> Value {
+        let locale = args.get("locale").and_then(Value::as_str).unwrap_or("");
+        let owned = interp(args, &["key", "locale"]);
+        let refs: Vec<(&str, &str)> = owned.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        Value::String(translate(locale, key, &refs))
+    }
+    tera.register_function("translate", |args: &HashMap<String, Value>| {
+        let key = args
+            .get("key")
+            .and_then(Value::as_str)
+            .ok_or_else(|| tera::Error::msg("translate(): missing required `key` argument"))?;
+        Ok(run(key, args))
+    });
+    tera.register_filter("translate", |value: &Value, args: &HashMap<String, Value>| {
+        let key = value
+            .as_str()
+            .ok_or_else(|| tera::Error::msg("translate filter: input must be a string (the translation key)"))?;
+        Ok(run(key, args))
+    });
+    tera.register_function("translate_plural", |args: &HashMap<String, Value>| {
+        let key = args
+            .get("key")
+            .and_then(Value::as_str)
+            .ok_or_else(|| tera::Error::msg("translate_plural(): missing required `key` argument"))?;
+        let n = args
+            .get("n")
+            .and_then(Value::as_i64)
+            .ok_or_else(|| tera::Error::msg("translate_plural(): missing required integer `n` argument"))?;
+        let locale = args.get("locale").and_then(Value::as_str).unwrap_or("");
+        let owned = interp(args, &["key", "n", "locale"]);
+        let refs: Vec<(&str, &str)> = owned.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        Ok(Value::String(translate_plural(locale, key, n, &refs)))
+    });
+}
+
+/// The request's admin locale for a server-emitted string.
+fn request_locale(headers: &HeaderMap) -> String {
+    negotiate(
+        headers.get(header::COOKIE).and_then(|v| v.to_str().ok()),
+        headers
+            .get(header::ACCEPT_LANGUAGE)
+            .and_then(|v| v.to_str().ok()),
+        None,
+        tenant_default_locale().as_deref(),
+    )
 }
 
 /// Translate a server-emitted English string for the request's admin locale
@@ -256,15 +463,7 @@ pub(crate) async fn maybe_refresh_overrides(pool: &rustango::sql::Pool) {
 /// entry exists. `params` are `{name}`-style interpolation pairs.
 #[must_use]
 pub(crate) fn tr(headers: &HeaderMap, source: &str, params: &[(&str, &str)]) -> String {
-    let lang = negotiate(
-        headers.get(header::COOKIE).and_then(|v| v.to_str().ok()),
-        headers
-            .get(header::ACCEPT_LANGUAGE)
-            .and_then(|v| v.to_str().ok()),
-        None,
-        tenant_default_locale().as_deref(),
-    );
-    cached_translator().translate(&lang, source, params)
+    translate(&request_locale(headers), source, params)
 }
 
 /// Count-aware server-string translation — the plural sibling of
@@ -273,15 +472,7 @@ pub(crate) fn tr(headers: &HeaderMap, source: &str, params: &[(&str, &str)]) -> 
 /// to the scalar source string when no plural entry exists.
 #[must_use]
 pub(crate) fn tr_plural(headers: &HeaderMap, key: &str, n: i64, params: &[(&str, &str)]) -> String {
-    let lang = negotiate(
-        headers.get(header::COOKIE).and_then(|v| v.to_str().ok()),
-        headers
-            .get(header::ACCEPT_LANGUAGE)
-            .and_then(|v| v.to_str().ok()),
-        None,
-        tenant_default_locale().as_deref(),
-    );
-    cached_translator().translate_plural(&lang, key, n, params)
+    translate_plural(&request_locale(headers), key, n, params)
 }
 
 #[cfg(test)]
@@ -418,6 +609,18 @@ mod tests {
         );
     }
 
+    /// Editors never see development notes: no admin string points at a
+    /// tracker issue or a pull request (#852).
+    #[test]
+    fn template_keys_carry_no_tracker_references() {
+        let dev_note = regex::Regex::new(r"#\d|\bPR\b|follow-up").unwrap();
+        let notes: Vec<String> = extract_template_keys()
+            .into_iter()
+            .filter(|k| dev_note.is_match(k))
+            .collect();
+        assert!(notes.is_empty(), "development notes in admin strings: {notes:?}");
+    }
+
     /// Every bundled admin template parses and its inheritance
     /// chain resolves. `add_raw_templates` builds inheritance at the end, so a
     /// broken `{% extends %}`/`{% block %}` or any Tera syntax error introduced
@@ -521,5 +724,134 @@ mod tests {
             gaps.len(),
             gaps.join("\n")
         );
+    }
+
+    /// The markup-escaping in [`translate`] keys off `<` in the source key, so
+    /// every `translate … | safe` sink must translate a literal key that
+    /// carries markup. A plain key (or a variable) piped to `| safe` would let
+    /// an override inject markup unescaped (#652).
+    #[test]
+    fn safe_translate_sinks_use_markup_keys() {
+        let root =
+            std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/src/admin/templates"));
+        let expr_re = regex::Regex::new(r"\{\{(.*?)\}\}").unwrap();
+        let key_re = regex::Regex::new(r#""([^"\n]*)"\s*\|\s*translate\b|translate(?:_plural)?\(\s*key\s*=\s*"([^"\n]*)""#).unwrap();
+        let mut bad = Vec::new();
+        let mut stack = vec![root];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).expect("read templates dir") {
+                let path = entry.expect("dir entry").path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                if path.extension().and_then(|e| e.to_str()) != Some("html") {
+                    continue;
+                }
+                let src = std::fs::read_to_string(&path).expect("read template");
+                for cap in expr_re.captures_iter(&src) {
+                    let expr = &cap[1];
+                    if !expr.contains("translate") || !expr.trim_end().ends_with("safe") {
+                        continue;
+                    }
+                    let markup_key = key_re
+                        .captures(expr)
+                        .and_then(|k| k.get(1).or_else(|| k.get(2)))
+                        .is_some_and(|k| k.as_str().contains('<'));
+                    if !markup_key {
+                        bad.push(format!("{}: {{{{{expr}}}}}", path.display()));
+                    }
+                }
+            }
+        }
+        assert!(bad.is_empty(), "`| safe` on a translation without a markup key:\n{}", bad.join("\n"));
+    }
+
+    const TIP: &str = "Tip: press <code>/</code> from any admin page to jump straight to the search box.";
+
+    fn overrides(rows: &[(&str, &str, &str)]) -> Arc<Overrides> {
+        let mut map = Overrides::new();
+        for (locale, key, value) in rows {
+            map.entry(Locale::new(*locale))
+                .or_default()
+                .insert((*key).to_owned(), (*value).to_owned());
+        }
+        Arc::new(map)
+    }
+
+    /// An admin Tera with the real bindings and one template that renders a
+    /// markup key through `| safe` and a plain key through autoescape.
+    fn admin_tera() -> tera::Tera {
+        let mut tera = tera::Tera::default();
+        crate::admin::register_templates(&mut tera).expect("admin templates");
+        tera.add_raw_template(
+            "probe.html",
+            r#"{{ "Tip: press <code>/</code> from any admin page to jump straight to the search box." | translate(locale=LANG) | safe }}|{{ translate(key="Pages", locale=LANG) }}"#,
+        )
+        .expect("probe template");
+        tera
+    }
+
+    fn render(tera: &tera::Tera, lang: &str) -> String {
+        let mut ctx = tera::Context::new();
+        ctx.insert("LANG", lang);
+        tera.render("probe.html", &ctx).expect("render")
+    }
+
+    /// An override reaches only the render scoped to its tenant, its markup
+    /// is escaped at a `| safe` sink, and a plain key keeps its text.
+    #[test]
+    fn overrides_are_scoped_to_their_tenant_and_escaped() {
+        let tera = admin_tera();
+        let a = overrides(&[
+            ("en", TIP, "<img src=x onerror=alert(1)>"),
+            ("en", "Pages", "Stories & posts"),
+        ]);
+        let in_a = ACTIVE_OVERRIDES.sync_scope(a, || render(&tera, "en"));
+        assert_eq!(in_a, "&lt;img src=x onerror=alert(1)&gt;|Stories &amp; posts");
+        let in_b = ACTIVE_OVERRIDES.sync_scope(overrides(&[]), || render(&tera, "en"));
+        assert_eq!(in_b, format!("{TIP}|Pages"));
+        assert_eq!(render(&tera, "en"), in_b, "no tenant scope → shipped catalog");
+    }
+
+    /// The regression for #652, end to end from each tenant's own database:
+    /// tenant A's override never shows in tenant B's admin render, nor in
+    /// B's server strings.
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn tenant_a_override_does_not_reach_tenant_b() {
+        let pool_a = rustango::sql::Pool::connect("sqlite::memory:").await.expect("pool a");
+        let pool_b = rustango::sql::Pool::connect("sqlite::memory:").await.expect("pool b");
+        for pool in [&pool_a, &pool_b] {
+            rustango::i18n::db::ensure_table_pool(pool).await.expect("translations table");
+        }
+        rustango::i18n::db::upsert_pool(&pool_a, "fr", TIP, "<script>steal()</script>", "a-admin")
+            .await
+            .expect("override");
+        rustango::i18n::db::upsert_pool(&pool_a, "fr", "Pages", "Articles", "a-admin")
+            .await
+            .expect("override");
+        let tera = admin_tera();
+        let mut headers = HeaderMap::new();
+        headers.insert(header::COOKIE, format!("{ADMIN_LANG_COOKIE}=fr").parse().unwrap());
+
+        let a = tenant_overrides("i18n-652-a", &pool_a).await;
+        let (page_a, flash_a) = ACTIVE_OVERRIDES
+            .scope(a, async { (render(&tera, "fr"), tr(&headers, "Pages", &[])) })
+            .await;
+        assert_eq!(page_a, "&lt;script&gt;steal()&lt;&#x2F;script&gt;|Articles");
+        assert_eq!(flash_a, "Articles");
+
+        let b = tenant_overrides("i18n-652-b", &pool_b).await;
+        let (page_b, flash_b) = ACTIVE_OVERRIDES
+            .scope(b, async { (render(&tera, "fr"), tr(&headers, "Pages", &[])) })
+            .await;
+        let shipped = admin_translator();
+        assert_eq!(
+            page_b,
+            format!("{}|{}", shipped.translate("fr", TIP, &[]), shipped.translate("fr", "Pages", &[]))
+        );
+        assert_eq!(flash_b, shipped.translate("fr", "Pages", &[]));
+        assert!(!page_b.contains("steal"));
     }
 }

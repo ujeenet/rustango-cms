@@ -180,7 +180,7 @@ pub fn set_registry(registry: rustango::sql::Pool) {
 /// A tenant's pool: the one this process registered, or — for a durable
 /// job drained by another process or after a restart — resolved from the
 /// registry by slug, and then registered. `None` when neither knows it.
-async fn resolve_pool(tenant_slug: &str) -> Option<rustango::sql::Pool> {
+pub(crate) async fn resolve_pool(tenant_slug: &str) -> Option<rustango::sql::Pool> {
     if let Some(pool) = registered_pool(tenant_slug) {
         return Some(pool);
     }

@@ -42,6 +42,10 @@ pub enum ErrorCode {
     /// The path exists but not with this verb. The API is read-only, so
     /// this is what every write attempt gets.
     MethodNotAllowed,
+    /// Too many attempts; retry after the `Retry-After` header.
+    RateLimited,
+    /// Busy for a moment; retry after the `Retry-After` header.
+    Unavailable,
     /// Something failed server-side. The detail is logged, not returned.
     Internal,
 }
@@ -56,6 +60,8 @@ impl ErrorCode {
             Self::Forbidden => "forbidden",
             Self::PasswordRequired => "password_required",
             Self::MethodNotAllowed => "method_not_allowed",
+            Self::RateLimited => "rate_limited",
+            Self::Unavailable => "unavailable",
             Self::Internal => "internal_error",
         }
     }
@@ -68,6 +74,8 @@ impl ErrorCode {
             Self::Unauthenticated => StatusCode::UNAUTHORIZED,
             Self::Forbidden | Self::PasswordRequired => StatusCode::FORBIDDEN,
             Self::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
+            Self::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+            Self::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
             Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -196,6 +204,8 @@ mod tests {
         assert_eq!(ErrorCode::Unauthenticated.status(), StatusCode::UNAUTHORIZED);
         assert_eq!(ErrorCode::Forbidden.status(), StatusCode::FORBIDDEN);
         assert_eq!(ErrorCode::PasswordRequired.status(), StatusCode::FORBIDDEN);
+        assert_eq!(ErrorCode::RateLimited.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(ErrorCode::Unavailable.status(), StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(
             ErrorCode::Internal.status(),
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -213,6 +223,8 @@ mod tests {
             (ErrorCode::PasswordRequired, "password_required"),
             (ErrorCode::Internal, "internal_error"),
             (ErrorCode::MethodNotAllowed, "method_not_allowed"),
+            (ErrorCode::RateLimited, "rate_limited"),
+            (ErrorCode::Unavailable, "unavailable"),
         ] {
             assert_eq!(code.as_str(), want);
         }

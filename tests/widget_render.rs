@@ -88,6 +88,18 @@ async fn markdown_renders_with_markdown_data_attr() {
 }
 
 #[tokio::test]
+async fn richtext_renders_without_the_markdown_toolbar() {
+    // #856 — the TipTap editor brings its own toolbar; a markdown toolbar
+    // on the same field showed a second one above it.
+    let tera = fresh_tera();
+    let w = Widget::new(WidgetKind::RichText, "body", "Body");
+    let res = render_widget(&tera, &w);
+    assert_contains(res, r#"data-widget-mode="richtext""#).await;
+    let res = render_widget(&tera, &w);
+    assert_not_contains(res, "data-md-toolbar-for").await;
+}
+
+#[tokio::test]
 async fn email_renders_as_input_type_email() {
     let tera = fresh_tera();
     let w = Widget::new(WidgetKind::Email, "addr", "Email");
@@ -230,6 +242,18 @@ async fn color_renders_as_input_type_color() {
         &Widget::new(WidgetKind::Color, "tint", "Tint").with_value("#ff8800"),
     );
     assert_contains(res2, "#ff8800").await;
+}
+
+#[tokio::test]
+async fn color_without_a_value_falls_back_to_black() {
+    // #851 — an unsaved colour field carries `""`; `type="color"` rejects
+    // `value=""`, so the widget must fall back to a valid `#rrggbb`.
+    let tera = fresh_tera();
+    let w = Widget::new(WidgetKind::Color, "tint", "Tint");
+    let res = render_widget(&tera, &w);
+    assert_contains(res, r##"value="#000000""##).await;
+    let res = render_widget(&tera, &w);
+    assert_not_contains(res, r#"value="""#).await;
 }
 
 #[tokio::test]

@@ -247,7 +247,7 @@ Type some Markdown into the body and press **Save & keep editing**. The preview 
 
 ![The page editor with a Markdown body on the left and a live preview of the rendered article on the right](img/gs-07-editor-with-preview.png)
 
-> Extension fields only appear once the page exists — there's no page to attach them to before you've created it. That's why this step used **Create & keep editing**: create the page, then fill in the body.
+> The new-page form shows these fields too, so you can fill in the body before the first save. This step used **Create & keep editing** so you stay in the editor and see the preview.
 
 ---
 

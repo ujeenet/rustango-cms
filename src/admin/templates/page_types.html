@@ -124,7 +124,7 @@
                             {% if row.count > 0 %}
                                 <a class="rcms-btn rcms-btn-outlined rcms-btn-small"
                                    href="{{ url(name='rcms-admin:pages:list') }}?type={{ row.type_name }}"
-                                   title="{{ "Filter the page list by this type (filter UI lands with #2)." | translate(locale=LANG) }}">
+                                   title="{{ "Filter the page list by this type." | translate(locale=LANG) }}">
                                     <span class="material-symbols-rounded sm">list_alt</span> {{ "View pages" | translate(locale=LANG) }}
                                 </a>
                             {% endif %}

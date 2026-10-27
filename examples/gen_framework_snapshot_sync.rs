@@ -116,6 +116,7 @@ fn main() {
         atomic: true,
         scope: file::MigrationScope::Tenant,
         replaces: Vec::new(),
+        merges: Vec::new(),
         snapshot: current,
         // Deliberately empty: the database already matches. See the module
         // docs — this migration corrects bookkeeping, not schema.

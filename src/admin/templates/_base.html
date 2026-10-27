@@ -323,7 +323,7 @@
                admin-only entries. Site settings stays at the top
                level since it's editor-facing content config (logo,
                favicon, brand). #}
-            {% set management_active = active_tab == "users" or active_tab == "roles" or active_tab == "permissions" or active_tab == "settings" %}
+            {% set management_active = active_tab == "users" or active_tab == "roles" or active_tab == "permissions" or active_tab == "settings" or active_tab == "security-log" %}
             <details class="rcms-sidebar-group{% if management_active %} active{% endif %}"
                      data-sidebar-group="management"
                      {% if management_active %}open{% endif %}>
@@ -345,6 +345,11 @@
                     {# #436 — read-only permission overview matrix. #}
                     <a href="/cms-admin/permissions" class="rcms-sidebar-link{% if active_tab == "permissions" %} active{% endif %}">
                         <span class="material-symbols-rounded">grid_on</span> {{ "Permissions" | translate(locale=LANG) }}
+                    </a>
+                    {% endif %}
+                    {% if not sidebar_gating or user_is_superuser %}
+                    <a href="{{ url(name='rcms-admin:security-log') }}" class="rcms-sidebar-link{% if active_tab == "security-log" %} active{% endif %}">
+                        <span class="material-symbols-rounded">shield_person</span> {{ "Security log" | translate(locale=LANG) }}
                     </a>
                     {% endif %}
                     {% if not sidebar_gating or user_is_superuser or "cms_settings.view" in allowed_resources %}

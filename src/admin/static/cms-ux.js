@@ -421,16 +421,6 @@
         //   we've attached.
         wireMarkdownToolbars();
 
-        // 6.22. #263 — richtext preview-on-blur. Each
-        //   `textarea[data-widget-mode="richtext"]` gets a small
-        //   Preview / Edit toggle and a sibling preview pane. On
-        //   blur (or explicit toggle click) the textarea source
-        //   POSTs to `/cms-admin/__richtext-preview` and the
-        //   returned sanitized HTML lands in the preview pane.
-        //   Source is still the source of truth — the preview is
-        //   purely a viewport.
-        wireRichtextPreview();
-
         // 6.24. #243 — multi-value widget shim. Any
         //   `[data-widget-multivalue]` group (checkboxes / multiselect /
         //   snippetm2m) authoritatively drives its visible control from
@@ -1365,24 +1355,6 @@
             .slice(0, 80);
     }
 
-    // #263 — richtext widget preview-on-blur. Wraps each
-    // `textarea[data-widget-mode="richtext"]` with a toggle row + a
-    // preview pane. Source is still the source of truth (we never
-    // overwrite the textarea from the rendered preview); the preview
-    // is a read-only viewport rendered server-side so the bytes
-    // match the public render.
-    //
-    // States:
-    //   "edit"    — textarea visible, preview hidden, toggle says "Preview"
-    //   "preview" — preview visible, textarea hidden, toggle says "Edit"
-    //
-    // Transitions:
-    //   • blur on the textarea → fetch + render → swap to "preview"
-    //   • click preview pane → swap to "edit", focus textarea
-    //   • click toggle → flip
-    //
-    // The fetch is debounced+coalesced via a per-textarea token so a
-    // fast blur/focus cycle doesn't race responses.
     // #243 — multi-value widget shim. The checkboxes / multiselect /
     // snippetm2m render arms emit a hidden `input[name]` carrying a JSON
     // array of i64 ids plus a visible control (a `<select multiple
@@ -1580,125 +1552,7 @@
         });
     }
 
-    function wireRichtextPreview() {
-        const textareas = document.querySelectorAll('textarea[data-widget-mode="richtext"]');
-        textareas.forEach((ta) => {
-            if (ta.dataset.richtextWired === "1") return;
-            ta.dataset.richtextWired = "1";
-
-            const wrap = document.createElement("div");
-            wrap.className = "rcms-richtext-wrap";
-            wrap.dataset.mode = "edit";
-
-            const toolbarRow = document.createElement("div");
-            toolbarRow.className = "rcms-richtext-toolbar-row";
-            const toggle = document.createElement("button");
-            toggle.type = "button";
-            toggle.className = "rcms-richtext-toggle";
-            toggle.textContent = "Preview";
-            toggle.title = "Switch to rendered preview";
-            toolbarRow.appendChild(toggle);
-
-            const preview = document.createElement("div");
-            preview.className = "rcms-richtext-preview";
-            preview.hidden = true;
-            preview.setAttribute("role", "region");
-            preview.setAttribute("aria-label", "Rendered preview — click to edit");
-            preview.tabIndex = 0;
-
-            // Insert wrap in place, then move the textarea + add chrome.
-            ta.parentNode.insertBefore(wrap, ta);
-            wrap.appendChild(toolbarRow);
-            wrap.appendChild(ta);
-            wrap.appendChild(preview);
-
-            // Promote a sibling `.rcms-md-toolbar` (the markdown toolbar
-            // from #205) into the wrap so the editor sees it next to
-            // the textarea, not stranded above the new chrome.
-            const sibling = wrap.previousElementSibling;
-            if (sibling && sibling.classList && sibling.classList.contains("rcms-md-toolbar")) {
-                toolbarRow.insertBefore(sibling, toggle);
-            }
-
-            let token = 0;
-            async function renderPreview() {
-                const my = ++token;
-                const body = ta.value || "";
-                try {
-                    const csrf = readCsrfCookieValue();
-                    const resp = await fetch("/cms-admin/__richtext-preview", {
-                        method: "POST",
-                        credentials: "same-origin",
-                        headers: {
-                            "Content-Type": "application/x-www-form-urlencoded",
-                            "X-CSRF-Token": csrf,
-                            "Accept": "text/html",
-                        },
-                        body: "body=" + encodeURIComponent(body),
-                    });
-                    if (my !== token) return; // a later edit superseded us
-                    if (resp.ok) {
-                        preview.innerHTML = await resp.text();
-                    } else {
-                        // Friendly fallback — show source verbatim so
-                        // the editor isn't stuck staring at nothing.
-                        preview.textContent = body;
-                    }
-                } catch (_) {
-                    if (my !== token) return;
-                    preview.textContent = body;
-                }
-            }
-
-            function setMode(mode) {
-                wrap.dataset.mode = mode;
-                if (mode === "preview") {
-                    ta.hidden = true;
-                    preview.hidden = false;
-                    toggle.textContent = "Edit";
-                    toggle.title = "Switch back to source edit";
-                } else {
-                    preview.hidden = true;
-                    ta.hidden = false;
-                    toggle.textContent = "Preview";
-                    toggle.title = "Switch to rendered preview";
-                }
-            }
-
-            ta.addEventListener("blur", async () => {
-                // Don't swap if the textarea is empty — keep the
-                // editor in edit mode so the first paint isn't a
-                // blank preview pane.
-                if (!ta.value.trim()) return;
-                await renderPreview();
-                setMode("preview");
-            });
-
-            preview.addEventListener("click", () => {
-                setMode("edit");
-                ta.focus();
-            });
-            preview.addEventListener("keydown", (e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setMode("edit");
-                    ta.focus();
-                }
-            });
-
-            toggle.addEventListener("click", async () => {
-                if (wrap.dataset.mode === "edit") {
-                    await renderPreview();
-                    setMode("preview");
-                } else {
-                    setMode("edit");
-                    ta.focus();
-                }
-            });
-        });
-    }
-
-    // #205 — markdown / rich-text toolbar enhancer. Attaches click
+    // #205 — markdown toolbar enhancer. Attaches click
     // handlers to every `[data-md-toolbar-for]` block, mapping each
     // button to a wrap-or-prefix transformation against the
     // targeted textarea's selection. Plain-textarea fallback still

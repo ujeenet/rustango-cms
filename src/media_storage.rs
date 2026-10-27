@@ -11,17 +11,18 @@
 //! host app can point media at any backend:
 //!
 //! ```ignore
-//! use rustango::storage::{registry::StorageRegistry, s3::{S3Storage, S3Config}, BoxedStorage};
+//! use rustango::storage::{registry::StorageRegistry, s3::{S3Storage, S3Config, S3Credentials}, BoxedStorage};
 //! use std::sync::Arc;
 //!
-//! let s3: BoxedStorage = Arc::new(S3Storage::new(S3Config {
-//!     bucket: "media".into(),
-//!     region: "us-west-2".into(),
-//!     endpoint: Some("https://<ref>.storage.supabase.co/storage/v1/s3".into()),
-//!     access_key_id: std::env::var("S3_ACCESS_KEY_ID").unwrap(),
-//!     secret_access_key: std::env::var("S3_SECRET_ACCESS_KEY").unwrap(),
-//!     path_style: true,
-//! }));
+//! let s3: BoxedStorage = Arc::new(S3Storage::new(
+//!     S3Config::new("media", "us-west-2")
+//!         .with_endpoint("https://<ref>.storage.supabase.co/storage/v1/s3")
+//!         .with_path_style(true),
+//!     S3Credentials::new(
+//!         std::env::var("S3_ACCESS_KEY_ID").unwrap(),
+//!         std::env::var("S3_SECRET_ACCESS_KEY").unwrap(),
+//!     ),
+//! ));
 //! rustango_cms::media_storage::install(
 //!     StorageRegistry::new().set("media", s3).with_default("media"),
 //! );
@@ -220,23 +221,19 @@ pub fn install_from_env() -> Result<(), String> {
         }
         #[cfg(feature = "storage_s3")]
         "s3" => {
-            use rustango::storage::s3::{S3Config, S3Storage};
+            use rustango::storage::s3::{S3Config, S3Credentials, S3Storage};
             let req = |k: &str| {
                 crate::config::var(k).ok_or_else(|| format!("RCMS_MEDIA_BACKEND=s3 requires RCMS_{k}"))
             };
-            let cfg = S3Config {
-                bucket: req("S3_BUCKET")?,
-                region: req("S3_REGION")?,
-                endpoint: crate::config::var("S3_ENDPOINT"),
-                access_key_id: req("S3_ACCESS_KEY_ID")?,
-                secret_access_key: req("S3_SECRET_ACCESS_KEY")?,
-                path_style: crate::config::var("S3_PATH_STYLE").as_deref() != Some("false"),
-            };
+            let mut cfg = S3Config::new(req("S3_BUCKET")?, req("S3_REGION")?)
+                .with_path_style(crate::config::var("S3_PATH_STYLE").as_deref() != Some("false"));
+            cfg.endpoint = crate::config::var("S3_ENDPOINT");
+            let creds = S3Credentials::new(req("S3_ACCESS_KEY_ID")?, req("S3_SECRET_ACCESS_KEY")?);
             tracing::info!(
                 bucket = %cfg.bucket, region = %cfg.region, endpoint = ?cfg.endpoint,
                 "media storage backend = s3",
             );
-            std::sync::Arc::new(S3Storage::new(cfg))
+            std::sync::Arc::new(S3Storage::new(cfg, creds))
         }
         other => {
             return Err(format!(
@@ -278,20 +275,19 @@ pub fn install_from_env() -> Result<(), String> {
     // same `slug=value` shape — a white-label domain per tenant.
     #[cfg(feature = "storage_s3")]
     if backend == "s3" {
-        use rustango::storage::s3::{S3Config, S3Storage};
+        use rustango::storage::s3::{S3Config, S3Credentials, S3Storage};
         let cdns = parse_pairs(&crate::config::var("MEDIA_TENANT_CDNS").unwrap_or_default());
         for (slug, bucket) in
             parse_pairs(&crate::config::var("MEDIA_TENANT_BUCKETS").unwrap_or_default())
         {
-            let cfg = S3Config {
-                bucket: bucket.clone(),
-                region: crate::config::var("S3_REGION").unwrap_or_default(),
-                endpoint: crate::config::var("S3_ENDPOINT"),
-                access_key_id: crate::config::var("S3_ACCESS_KEY_ID").unwrap_or_default(),
-                secret_access_key: crate::config::var("S3_SECRET_ACCESS_KEY").unwrap_or_default(),
-                path_style: crate::config::var("S3_PATH_STYLE").as_deref() != Some("false"),
-            };
-            let tenant_disk: BoxedStorage = std::sync::Arc::new(S3Storage::new(cfg));
+            let mut cfg = S3Config::new(bucket.clone(), crate::config::var("S3_REGION").unwrap_or_default())
+                .with_path_style(crate::config::var("S3_PATH_STYLE").as_deref() != Some("false"));
+            cfg.endpoint = crate::config::var("S3_ENDPOINT");
+            let creds = S3Credentials::new(
+                crate::config::var("S3_ACCESS_KEY_ID").unwrap_or_default(),
+                crate::config::var("S3_SECRET_ACCESS_KEY").unwrap_or_default(),
+            );
+            let tenant_disk: BoxedStorage = std::sync::Arc::new(S3Storage::new(cfg, creds));
             registry = registry.set(tenant_disk_name(&slug), tenant_disk);
             if let Some(base) = cdns.iter().find(|(s, _)| *s == slug).map(|(_, b)| b) {
                 registry = registry.cdn(tenant_disk_name(&slug), base.trim_end_matches('/').to_owned());

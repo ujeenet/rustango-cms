@@ -73,6 +73,7 @@ async fn call(pool: &Pool, uid: i64, tool: &str, args: Value) -> Result<Value, S
             tools: vec![tool.to_owned()],
             user_id: Some(uid),
             jti: "j".to_owned(),
+            secret_prefix: String::new(),
         },
         progress: ProgressReporter::disabled(),
         cancel: CancelToken::default(),

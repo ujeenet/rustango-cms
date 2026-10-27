@@ -59,6 +59,7 @@ pub mod chooser;
 mod handlers;
 mod i18n;
 pub(crate) mod members;
+pub use members::{authenticate_member, MemberLoginError};
 /// Merge host-supplied UI-catalog entries into the shared admin translator
 /// so a consumer's own template chrome localizes through the same
 /// `translate` binding without clobbering the admin catalog.
@@ -372,6 +373,8 @@ fn public_router_inner(
             "/cms-admin/static/vendor/THIRD-PARTY-NOTICES.txt",
             get(serve_third_party_notices),
         )
+        // #652 — login, reset and member screens render translated chrome too.
+        .route_layer(axum::middleware::from_fn(i18n::tenant_overrides_layer))
         .with_state(state)
 }
 
@@ -1164,6 +1167,8 @@ fn router_with_state(state: AdminState) -> Router {
             "/cms-admin/users/{id}/deactivate",
             post(handlers::users_deactivate_submit),
         )
+        // #433 — sign-in and permission-change log, superuser-only.
+        .route("/cms-admin/security-log", get(handlers::security_log_page))
         .route("/cms-admin/roles", get(handlers::roles_list))
         // #436 — tenant-wide read-only permission overview matrix.
         .route(
@@ -1284,14 +1289,6 @@ fn router_with_state(state: AdminState) -> Router {
             "/cms-admin/settings/theme",
             post(handlers::settings_theme_switch),
         )
-        // #263 — richtext preview pane. JS in the editor POSTs the
-        // textarea source here on blur; we sanitize through the same
-        // ammonia allow-list the public render uses and return the
-        // styled HTML for the in-editor preview swap.
-        .route(
-            "/cms-admin/__richtext-preview",
-            post(handlers::richtext_preview),
-        )
         // Per-user account preferences (#27) — appearance, text size,
         // accessibility. localStorage-backed, no DB write.
         .route("/cms-admin/me", get(handlers::account_preferences))
@@ -1388,6 +1385,8 @@ fn router_with_state(state: AdminState) -> Router {
         // #672 — every matched route needs the role-matrix codename for
         // its section and verb, not just admin access.
         .route_layer(axum::middleware::from_fn(route_perms::gate))
+        // #652 — the tenant's own translation overrides for this request.
+        .route_layer(axum::middleware::from_fn(i18n::tenant_overrides_layer))
         // #689 — outermost, so a tenant provisioned after boot is seeded
         // (roles included) before the gate above reads them.
         .route_layer(axum::middleware::from_fn(crate::seed::lazy_seed_layer))
@@ -1811,12 +1810,12 @@ pub fn register_templates(tera: &mut Tera) -> Result<(), tera::Error> {
     // own static assets (cms.css + editor JS), used in `_base.html`.
     tera.register_function("cms_asset_version", CmsAssetVersionFn);
     tera.register_filter("json_script", JsonScriptFilter);
-    // #524 — admin UI i18n: register the framework `translate` fn/filter
-    // backed by the embedded launch-language catalogs.
-    // Share the ONE cached translator with the Tera bindings so DB overrides
-    // (#532, applied via `i18n::maybe_refresh_overrides`) reach both the
-    // template `translate`/`translate_plural` filters and server-string `tr`.
+    // #524 — admin UI i18n. The framework registers the locale helpers;
+    // `translate`/`translate_plural` are then replaced with bindings that
+    // layer the request tenant's DB overrides (#532) over the shipped
+    // catalogs, since the framework's own read one process-wide map (#652).
     rustango::i18n::tera_tags::register(tera, i18n::cached_translator().clone());
+    i18n::register_tera_bindings(tera);
     // #641 — Tera registers `get_env` as a default builtin, and it reads
     // the process environment (`RUSTANGO_SECRET_KEY`, `DATABASE_URL`, SSO
     // secrets, …). Authored templates — written through `write_template`
@@ -2118,6 +2117,10 @@ pub fn register_templates(tera: &mut Tera) -> Result<(), tera::Error> {
         (
             "rcms_admin/users_list.html",
             include_str!("templates/users_list.html"),
+        ),
+        (
+            "rcms_admin/security_log.html",
+            include_str!("templates/security_log.html"),
         ),
         (
             "rcms_admin/user_form.html",
@@ -2497,10 +2500,12 @@ pub struct PageForm {
     /// admin).
     #[serde(default)]
     pub parent_id: Option<i64>,
-    /// Optional per-page theme override. Empty / 0 = inherit from
-    /// ancestors / site default / admin default.
-    #[serde(default, deserialize_with = "deserialize_optional_i64")]
-    pub theme_id: Option<i64>,
+    /// Optional per-page theme override: `None` when the form doesn't
+    /// carry the field (the editor has no theme input), so a save keeps
+    /// the stored theme; `Some(None)` when posted empty / 0, which means
+    /// inherit from ancestors / site default / admin default (#902).
+    #[serde(default, deserialize_with = "deserialize_present_optional_i64")]
+    pub theme_id: Option<Option<i64>>,
     /// Schedule — page auto-publishes at this moment when the chosen
     /// status is `scheduled`. Empty string from the datetime input
     /// → None. The admin's form script converts the editor's local time
@@ -2554,6 +2559,15 @@ where
         return Ok(None);
     }
     s.parse::<i64>().map(Some).map_err(serde::de::Error::custom)
+}
+
+/// [`deserialize_optional_i64`] for a field whose absence means "leave
+/// unchanged": present → `Some(..)`, absent → `None` via `default`.
+fn deserialize_present_optional_i64<'de, D>(deserializer: D) -> Result<Option<Option<i64>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserialize_optional_i64(deserializer).map(Some)
 }
 
 impl PageForm {

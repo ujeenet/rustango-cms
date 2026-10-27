@@ -6,6 +6,18 @@ is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Unreleased
 
+## 0.2.0
+
+### rustango 0.61
+
+Bump your `rustango` requirement to `0.61` (0.61.6 or later) and
+`rustango-cms` to `0.2`, then run `migrate`. Follow rustango's own
+UPGRADING notes from 0.60.12 on.
+
+### `no such table: cms_security_event`
+
+Run `migrate` (or `migrate-tenants`): migration 0016 adds the security log.
+
 ### An API client parses `extension.<stream field>` with `JSON.parse`
 
 Page detail now returns StreamField extension columns as arrays. Drop the

@@ -759,7 +759,7 @@ fn wcag_foreground(hex: &str) -> &'static str {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -844,7 +844,7 @@ mod tests {
     /// Build a minimal theme suitable for snapshotting the emitter
     /// without depending on a `Default` impl on the rustango `Auto<…>`
     /// columns. Only the columns `emit_css` reads matter.
-    fn fixture_theme() -> Theme {
+    pub(crate) fn fixture_theme() -> Theme {
         Theme {
             id: Auto::default(),
             name: "Fixture".into(),

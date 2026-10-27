@@ -96,7 +96,6 @@ Open the main address of your site (for example `www.example.com`). You see:
 
 | Problem | What to do |
 |---|---|
-| You do not see the boxes **Big photo** and **Big heading**. | They show after the first save. Click **Create & keep editing**, not **Create page**. If you clicked **Create page**, click the page in the list to edit it. |
 | The main address shows "Page not found". | The slug is not empty, or the status is **Draft**. Edit the page: delete the slug text, choose **Published** and save. |
 | The heading on the photo is hard to read. | Choose a darker photo, or a photo with a quiet part on the left. |
 

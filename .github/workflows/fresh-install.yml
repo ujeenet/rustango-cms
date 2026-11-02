@@ -3,12 +3,19 @@ name: fresh install
 # Builds a brand-new project against the newest rustango-cms on crates.io,
 # with no lockfile, the way a new user starts. The repo's own CI builds from
 # Cargo.lock, so it cannot see a framework patch release that breaks the
-# published crate (rustango 0.60.7 and 0.61.14 both did).
+# published crate (rustango 0.60.7 and 0.61.14 both did). The `windows` job
+# runs a new user's whole first session on Windows, in PowerShell.
 
 on:
   schedule:
     - cron: '17 6 * * *'
   workflow_dispatch:
+    inputs:
+      source:
+        description: "crates (the published crate) or checkout (this repo, unpublished)"
+        default: crates
+        type: choice
+        options: [crates, checkout]
 
 permissions:
   contents: read
@@ -37,3 +44,62 @@ jobs:
           cargo generate-lockfile
           grep -A1 -E '^name = "rustango(-cms)?"$' Cargo.lock
           cargo check
+
+  windows:
+    # A new user's first run on Windows, in PowerShell: generate a project,
+    # build it with SQLite, run the setup commands from the docs, start the
+    # server and sign in. From crates.io on the schedule; dispatch with
+    # source=checkout to try this repo's code before it is published.
+    name: windows first run (${{ inputs.source || 'crates' }})
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: generate a project
+        shell: pwsh
+        run: |
+          $scaffold = "new", "site_web", "--dir", $env:RUNNER_TEMP
+          if ("${{ inputs.source }}" -eq "checkout") { $scaffold += "--local" }
+          cargo run -q -p rcms-scaffold -- @scaffold
+          Get-Content "$env:RUNNER_TEMP\site_web\Cargo.toml" | Select-String "rustango"
+      - name: build and set up (the getting-started commands)
+        shell: pwsh
+        working-directory: ${{ runner.temp }}\site_web
+        env:
+          RUSTANGO_PASSWORD: windows-smoke-test-password
+        run: |
+          $env:DATABASE_URL = "sqlite:./var/registry.db?mode=rwc"
+          $f = "--no-default-features", "--features", "sqlite"
+          New-Item -ItemType Directory -Force var | Out-Null
+          cargo build @f
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cargo run @f -- migrate-registry
+          cargo run @f -- create-tenant demo --mode database --database-url "sqlite:./var/demo.db?mode=rwc" --host-pattern demo.localhost
+          cargo run @f -- create-superuser demo admin
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: run the server and sign in
+        shell: pwsh
+        working-directory: ${{ runner.temp }}\site_web
+        run: |
+          $env:DATABASE_URL = "sqlite:./var/registry.db?mode=rwc"
+          $env:RUSTANGO_BIND = "127.0.0.1:8080"
+          $server = Start-Process -FilePath "target\debug\site_web.exe" -ArgumentList "runserver" `
+            -RedirectStandardOutput server.log -RedirectStandardError server.err -PassThru
+          $h = "Host: demo.localhost:8080"
+          $ok = $false
+          foreach ($i in 1..60) {
+            $code = curl.exe -s -o NUL -w "%{http_code}" -H $h http://127.0.0.1:8080/login
+            if ($code -eq "200") { $ok = $true; break }
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ok) { Get-Content server.log, server.err; throw "server never answered /login" }
+          $page = curl.exe -s -c jar.txt -b jar.txt -H $h http://127.0.0.1:8080/login
+          $csrf = [regex]::Match($page, 'name="_csrf" value="([^"]*)"').Groups[1].Value
+          $login = curl.exe -s -o NUL -w "%{http_code} %{redirect_url}" -c jar.txt -b jar.txt -H $h `
+            --data-urlencode "_csrf=$csrf" --data-urlencode "username=admin" `
+            --data-urlencode "password=windows-smoke-test-password" `
+            --data-urlencode "next=/cms-admin/pages" http://127.0.0.1:8080/login
+          $admin = curl.exe -s -o NUL -w "%{http_code}" -b jar.txt -H $h http://127.0.0.1:8080/cms-admin/pages
+          "login: $login  admin: $admin"
+          Stop-Process -Id $server.Id
+          if (-not $login.StartsWith("303") -or $admin -ne "200") { Get-Content server.log, server.err; throw "sign-in failed" }

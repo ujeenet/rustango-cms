@@ -41,32 +41,30 @@ It prints exactly what to run next:
 ```
 Created rustango-cms project `myblog` (blog template) at /Users/you/projects/myblog
 
-Next — SQLite, no database server needed:
+Next:
   cd /Users/you/projects/myblog
-  export DATABASE_URL="sqlite:./var/registry.db?mode=rwc"
-  cargo run --no-default-features --features sqlite -- migrate-registry
-  cargo run --no-default-features --features sqlite -- create-tenant demo \
-      --mode database \
-      --database-url "sqlite:./var/demo.db?mode=rwc" \
-      --host-pattern demo.localhost
-  cargo run --no-default-features --features sqlite -- create-superuser demo admin
-  cargo run --no-default-features --features sqlite -- makemigrations   # emits cms_article_page
-  cargo run --no-default-features --features sqlite -- migrate-tenants
-  cargo run --no-default-features --features sqlite -- runserver
+  cargo run -- makemigrations   # emits cms_article_page
+  cargo run -- quickstart
 ```
+
+Every command in this guide is the same in bash, zsh and Windows PowerShell. The project carries its database location in a `.env` file and builds for SQLite by default, so there is nothing to export and no flags to pass.
+
+> **On Windows** use `$HOME` instead of `~` in paths: `--dir $HOME\projects`. PowerShell does not always expand `~`, and you would get a folder literally named `~`.
 
 Here's what it wrote:
 
 ```
 myblog/
 ├── Cargo.toml              # depends on rustango-cms + rustango
-├── .env.example
+├── .env                    # DATABASE_URL for the local SQLite database
+├── .env.example            # every setting, documented
 ├── .gitignore
 ├── README.md               # the same commands, kept for later
 ├── migrations/             # the CMS baseline — don't hand-edit these
 ├── src/
 │   ├── main.rs             # wires the admin + public router together
-│   └── models.rs           # your page types
+│   ├── models.rs           # your page types
+│   └── quickstart.rs       # the one-command local setup
 └── templates/
     ├── _site.css.html      # starter styles, included by both templates
     ├── home_page.html
@@ -77,100 +75,50 @@ Two files are yours to change; the rest you can mostly ignore at first. `src/mod
 
 ---
 
-## Step 2: Set up the database
+## Step 2: Generate your own migration
 
 Everything from here runs inside the project:
 
 ```bash
 cd ~/projects/myblog
-export DATABASE_URL="sqlite:./var/registry.db?mode=rwc"
-export RUSTANGO_SECRET_KEY="change-me-to-a-long-random-string"
 ```
 
-`RUSTANGO_SECRET_KEY` encrypts the secrets the site stores, such as notification tokens. Without it, forms can't send email notifications. Use a long random value and keep it the same between restarts.
+The two page types in `src/models.rs` are yours, not the CMS's, so their tables aren't in the shipped migrations. `ArticlePage` stores its body in a table called `cms_article_page`, and this writes the migration that creates it:
+
+```bash
+cargo run -- makemigrations
+```
 
 The first build takes a few minutes. Later commands reuse it.
 
-### Create the registry
-
-rustango-cms is multi-tenant: one **registry** database knows about your sites, and each site gets its own storage. Even a single-site blog goes through this, so you can add a second site later without restructuring anything.
-
-```bash
-cargo run --no-default-features --features sqlite -- migrate-registry
-```
-
-```
-registry: applied 1 migration(s)
-  + 0001_create_rustango_audit_log_and_rustango_content_types_and_rustango_operators_etc
-```
-
-### Create the site
-
-SQLite has no schemas, so each site lives in its own file. That's what `--mode database` means; `--host-pattern` is the hostname that routes to it.
-
-```bash
-cargo run --no-default-features --features sqlite -- create-tenant demo \
-    --mode database \
-    --database-url "sqlite:./var/demo.db?mode=rwc" \
-    --host-pattern demo.localhost
-```
-
-```
-created tenant `demo` (id 1, mode database)
-  applying tenant migrations…
-  applied 4 migration(s)
-    + 0002_create_rustango_admin_users_and_rustango_api_keys_and_rustango_audit_log_etc
-    + 0001_cms_initial
-    + 0002_page_builder
-    + 0003_framework_snapshot_sync
-```
-
-`create-tenant` applies the site's migrations for you, so there's no separate step on a fresh install.
-
-### Create a user
-
-Without this you'll reach a login page you can't get past.
-
-```bash
-cargo run --no-default-features --features sqlite -- create-superuser demo admin
-```
-
-It prompts for a password. Anything you'll remember is fine locally.
-
-```
-created user `admin` in tenant `demo` (id 1, superuser=true)
-```
-
-### Generate your own migration
-
-The two page types in `src/models.rs` are yours, not the CMS's — so their tables aren't in the shipped migrations. `ArticlePage` stores its body in a table called `cms_article_page`, and this is what creates it:
-
-```bash
-cargo run --no-default-features --features sqlite -- makemigrations
-cargo run --no-default-features --features sqlite -- migrate-tenants
-```
-
 ```
 no changes for registry scope
-wrote migrations/0004_create_cms_article_page.json (tenant scope)
+wrote migrations/0017_create_cms_article_page.json (tenant scope)
     + CreateTable("cms_article_page")
     + CreateIndex { name: "cms_article_page_page_id_idx", ... }
-
-ran tenant migrations against 1 tenant(s); 0 failure(s)
-  ✓ demo: 1 migration(s)
 ```
 
-Never write those JSON files by hand — `makemigrations` compares your models against the last snapshot and writes the difference. Run it again any time you change a model.
+Never write those JSON files by hand: `makemigrations` compares your models against the last snapshot and writes the difference. Run it again any time you change a model, followed by `cargo run -- migrate-tenants` to apply it.
 
 ---
 
-## Step 3: Start the server
+## Step 3: Create the site and start it
 
 ```bash
-cargo run --no-default-features --features sqlite -- runserver
+cargo run -- quickstart
 ```
 
-Leave it running and open <http://demo.localhost:8080/login>. The hostname matters: it's the `--host-pattern` from earlier, and that's how the server knows which site you're asking for. `demo.localhost` resolves to your own machine without any `/etc/hosts` editing.
+It asks for a password for the `admin` user (at least 12 characters), then starts the server. On the first run it does three things before that:
+
+1. **Creates the registry.** rustango-cms is multi-tenant: one registry database knows about your sites, and each site gets its own storage. Even a single-site blog goes through this, so you can add a second site later without restructuring anything.
+2. **Creates the site `demo`** in its own SQLite file, `var/demo.db`, reached at the hostname `demo.localhost`. This applies every migration, including the one from Step 2.
+3. **Creates the user `admin`**, so you can sign in.
+
+Run it again later and it skips what already exists and just starts the server; `cargo run -- runserver` does the same. To do these steps by hand (another site name, another host), see the project's README.
+
+> **Email from forms** needs one more setting. Add a long random `RUSTANGO_SECRET_KEY=...` line to `.env`: it encrypts the secrets the site stores, such as notification tokens. Keep it the same between restarts.
+
+Leave it running and open <http://demo.localhost:8080/login>. The hostname matters: it's how the server knows which site you're asking for. `demo.localhost` resolves to your own machine without any `/etc/hosts` editing.
 
 ![The CMS sign-in page: a centred card with username and password fields](img/gs-01-login.png)
 

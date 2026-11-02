@@ -1,8 +1,8 @@
 //! `rcms new <project>` — scaffold a new rustango-cms project.
 //!
 //! Emits a self-contained,
-//! runnable CMS app (Cargo.toml, src/main.rs + models.rs, public
-//! templates, the CMS baseline migrations, README, .env.example,
+//! runnable CMS app (Cargo.toml, src/main.rs + models.rs + quickstart.rs, public
+//! templates, the CMS baseline migrations, README, .env + .env.example,
 //! .gitignore, .cargo/config.toml). The skeleton + migrations are embedded at compile time,
 //! so this tool has no runtime dependency on the rustango-cms build tree.
 //!
@@ -22,6 +22,8 @@ use std::process::ExitCode;
 // ---- embedded skeleton assets ----
 const CARGO_TMPL: &str = include_str!("../assets/Cargo.toml.tmpl");
 const MAIN_RS: &str = include_str!("../assets/main.rs");
+// `cargo run -- quickstart`: set up a local SQLite site and start it.
+const QUICKSTART_RS: &str = include_str!("../assets/quickstart.rs");
 const MODELS_RS: &str = include_str!("../assets/models.rs");
 const HOME_HTML: &str = include_str!("../assets/home_page.html");
 const ARTICLE_HTML: &str = include_str!("../assets/article_page.html");
@@ -152,6 +154,7 @@ fn run(args: &[String]) -> Result<(), String> {
         &MAIN_RS.replace("__NAME__", &name),
     )?;
     write(&target.join("src/models.rs"), models_rs)?;
+    write(&target.join("src/quickstart.rs"), QUICKSTART_RS)?;
     write(&target.join("templates/_site.css.html"), SITE_CSS_HTML)?;
     write(&target.join("templates/home_page.html"), HOME_HTML)?;
     write(&target.join("templates/article_page.html"), article_html)?;
@@ -168,6 +171,12 @@ fn run(args: &[String]) -> Result<(), String> {
         &target.join(".env.example"),
         &ENV_EXAMPLE.replace("__NAME__", &name),
     )?;
+    // A ready `.env` (SQLite), so no shell has to export DATABASE_URL.
+    // Ignored by git; `.env.example` stays the documented template.
+    write(
+        &target.join(".env"),
+        "DATABASE_URL=sqlite:./var/registry.db?mode=rwc\n",
+    )?;
     write(&target.join(".gitignore"), GITIGNORE)?;
     write(&target.join(".cargo/config.toml"), CARGO_CONFIG)?;
 
@@ -175,34 +184,23 @@ fn run(args: &[String]) -> Result<(), String> {
         "Created rustango-cms project `{name}` ({template} template) at {}\n",
         target.display()
     );
-    // Keep these in step with assets/README.md.tmpl — and only print commands
-    // that have actually been run. The previous version led with
-    // `init-tenancy` (a no-op since rustango 0.47), used a bare
-    // `create-tenant` (which fails on sqlite: schema mode needs postgres), and
-    // never created a user — so following it left you at a login page you
-    // could not get past (#613).
-    let sqlite_args = "--no-default-features --features sqlite";
-    println!("Next — SQLite, no database server needed:");
+    // Keep these in step with assets/README.md.tmpl. Every command here is
+    // the same in bash, zsh and PowerShell (#37): `.env` carries the
+    // database URL and SQLite is the default feature, so there is nothing
+    // to export and no flags to pass.
+    println!("Next:");
     println!("  cd {}", target.display());
-    println!("  export DATABASE_URL=\"sqlite:./var/registry.db?mode=rwc\"");
-    println!("  cargo run {sqlite_args} -- migrate-registry");
-    println!("  cargo run {sqlite_args} -- create-tenant demo \\");
-    println!("      --mode database \\");
-    println!("      --database-url \"sqlite:./var/demo.db?mode=rwc\" \\");
-    println!("      --host-pattern demo.localhost");
-    println!("  cargo run {sqlite_args} -- create-superuser demo admin");
     // The blog template's ArticlePage has a typed extension table that no
-    // shipped migration creates — it's the app's own model, so the app has to
-    // generate its migration. Without these two lines `cms_article_page`
-    // doesn't exist and saving an article body fails.
+    // shipped migration creates — it's the app's own model, so the app has
+    // to generate its migration before the site is created.
     if template == "blog" {
-        println!("  cargo run {sqlite_args} -- makemigrations   # emits cms_article_page");
-        println!("  cargo run {sqlite_args} -- migrate-tenants");
+        println!("  cargo run -- makemigrations   # emits cms_article_page");
     }
-    println!("  cargo run {sqlite_args} -- runserver");
-    println!("\nThen sign in at http://demo.localhost:8080/login");
-    println!("and manage pages at http://demo.localhost:8080/cms-admin/pages");
-    println!("\n(Postgres instead: see the generated README.)");
+    println!("  cargo run -- quickstart");
+    println!("\nThe first run creates the database, a `demo` site and an `admin` user");
+    println!("(it asks for the password), then starts the server.");
+    println!("Sign in at http://demo.localhost:8080/login");
+    println!("\n(PostgreSQL instead: see the generated README.)");
     Ok(())
 }
 
@@ -244,7 +242,7 @@ fn print_usage() {
            rcms new <project-name> [--dir <parent>] [--template <minimal|blog>] [--local]\n\n\
          Creates <parent>/<project-name>/ (default parent: current directory)\n\
          with a runnable CMS app: Cargo.toml, src/, templates/, migrations/,\n\
-         README.md, .env.example, .gitignore, .cargo/config.toml.\n\n\
+         README.md, .env, .env.example, .gitignore, .cargo/config.toml.\n\n\
          Templates:\n  \
            minimal (default) — HomePage + ArticlePage, no typed extension\n  \
            blog              — ArticlePage with a typed cms_article_page\n                      \

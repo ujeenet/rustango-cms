@@ -17,9 +17,12 @@
 Build once, on your computer or in CI:
 
 ```sh
-cargo build --release                                            # PostgreSQL
-cargo build --release --no-default-features --features sqlite   # SQLite
+cargo build --release                                              # the default backend
+cargo build --release --no-default-features --features sqlite     # SQLite
+cargo build --release --no-default-features --features postgres   # PostgreSQL
 ```
+
+A project made with `rcms new` 0.3 or later builds SQLite by default; older ones build PostgreSQL by default.
 
 On the server, put three things in one folder:
 

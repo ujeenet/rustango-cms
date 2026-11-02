@@ -292,7 +292,7 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream> {
         None => quote! {},
     };
 
-    let field_exprs: Vec<TokenStream> = field_configs.iter().map(|f| build_field_expr(f)).collect();
+    let field_exprs: Vec<TokenStream> = field_configs.iter().map(build_field_expr).collect();
 
     Ok(quote! {
         impl ::rustango_cms::Block for #struct_ident {

@@ -2,46 +2,58 @@
 
 A [rustango-cms](https://github.com/ujeenet/rustango-cms) site, generated with `rcms new`.
 
-## Run (SQLite — no database server)
-
-SQLite has no schemas, so each tenant lives in its own file: use
-**database-mode** tenancy (`--mode database`) with an explicit
-`--host-pattern` so requests can be routed to the tenant.
+## Run
 
 ```sh
-export DATABASE_URL="sqlite:./var/registry.db?mode=rwc"
-ARGS="--no-default-features --features sqlite"
-
-cargo run $ARGS -- migrate-registry     # create the registry (orgs, …)
-cargo run $ARGS -- create-tenant demo \
-    --mode database \
-    --database-url "sqlite:./var/demo.db?mode=rwc" \
-    --host-pattern demo.localhost       # database mode needs an explicit host
-cargo run $ARGS -- create-superuser demo admin   # you need this to sign in
-cargo run $ARGS -- runserver
+cargo run -- quickstart
 ```
+
+The first run creates a local SQLite database in `./var`, a site called
+`demo`, and an `admin` user (it asks you for a password of at least 12
+characters), then starts the server. After that, `cargo run -- runserver`
+is all you need. The commands are the same in bash, zsh and Windows
+PowerShell; the database location comes from `.env`.
 
 - Sign in: <http://demo.localhost:8080/login>
 - Admin: <http://demo.localhost:8080/cms-admin/pages>
 - Public pages: `http://demo.localhost:8080/<slug>/`
-- Sitemap: <http://demo.localhost:8080/sitemap.xml>
 
-`create-tenant` applies the tenant migrations for you, so there's no separate
-`migrate-tenants` step on a fresh install.
+### What quickstart runs
 
-## Run (PostgreSQL)
-
-Same order, minus the SQLite-specific flags:
+The same steps by hand, if you want to name the site or its host yourself:
 
 ```sh
+cargo run -- migrate-registry
+cargo run -- create-tenant demo --mode database --database-url "sqlite:./var/demo.db?mode=rwc" --host-pattern demo.localhost
+cargo run -- create-superuser demo admin
+cargo run -- runserver
+```
+
+## Run on PostgreSQL
+
+Build with the `postgres` feature and point `DATABASE_URL` at your
+database: in `.env`, or in the shell.
+
+```sh
+# bash / zsh
 createdb __NAME__
 export DATABASE_URL=postgres://localhost/__NAME__
 export RUSTANGO_APEX_DOMAIN=localtest.me   # tenant host = demo.localtest.me
+```
 
-cargo run -- migrate-registry
-cargo run -- create-tenant demo
-cargo run -- create-superuser demo admin
-cargo run -- runserver
+```powershell
+# Windows PowerShell
+$env:DATABASE_URL = "postgres://localhost/__NAME__"
+$env:RUSTANGO_APEX_DOMAIN = "localtest.me"
+```
+
+Then, in either shell:
+
+```sh
+cargo run --no-default-features --features postgres -- migrate-registry
+cargo run --no-default-features --features postgres -- create-tenant demo
+cargo run --no-default-features --features postgres -- create-superuser demo admin
+cargo run --no-default-features --features postgres -- runserver
 ```
 
 - Sign in: <http://demo.localtest.me:8080/login>
@@ -49,7 +61,7 @@ cargo run -- runserver
 __TEMPLATE_NOTE__
 ## Deploy
 
-Build once with `cargo build --release` (add `--no-default-features --features sqlite` for SQLite), then on the server:
+Build once with `cargo build --release` (SQLite; add `--no-default-features --features postgres` for PostgreSQL), then on the server:
 
 1. Copy the binary, `templates/` and `migrations/` to one folder, and set `RCMS_SITE_DIR` to it.
 2. Set the production variables from `.env.example`: `RUSTANGO_ENV=prod`, `RUSTANGO_SESSION_SECRET`, `RUSTANGO_SECRET_KEY`, `RCMS_SECRET_KEY`, `RUSTANGO_APEX_DOMAIN`, `DATABASE_URL`.

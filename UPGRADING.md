@@ -6,6 +6,27 @@ is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Unreleased
 
+## 0.3.0
+
+### Nothing to change in an existing site
+
+0.3.0 changes only what `rcms new` generates. Bump `rustango-cms` to
+`0.3` and keep `rustango` at `0.61.14` or later.
+
+To give a project made earlier the one-command start, copy
+`crates/rcms-scaffold/assets/quickstart.rs` to `src/quickstart.rs`, add
+`dotenvy = "0.15"` to its dependencies, and add at the top of `main`:
+
+```rust
+let _ = dotenvy::dotenv();
+if std::env::args().nth(1).as_deref() == Some(quickstart::COMMAND) {
+    return quickstart::run();
+}
+```
+
+with `mod quickstart;` next to `mod models;`. Put
+`DATABASE_URL=sqlite:./var/registry.db?mode=rwc` in `.env`.
+
 ## 0.2.0
 
 ### rustango 0.61

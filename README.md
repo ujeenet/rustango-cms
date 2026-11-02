@@ -49,7 +49,7 @@ Pick the database with a feature: `postgres` is the default, and `default-featur
 
 Use the same `rustango` minor version as the CMS (0.61 today). Two semver-incompatible copies give you two different `Tenant` and `Pool` types that do not unify. [UPGRADING.md](UPGRADING.md) has the notes for each version.
 
-The fastest start is the scaffolder, which writes a ready project for you — see [Getting started](docs/getting-started.md).
+The fastest start is the scaffolder, which writes a ready project for you; then `cargo run -- quickstart` creates a local SQLite site and starts it, the same in bash and Windows PowerShell. See [Getting started](docs/getting-started.md).
 
 ## Quick start
 
@@ -159,6 +159,19 @@ cargo run $ARGS -- create-tenant demo \
     --host-pattern demo.localhost
 cargo run $ARGS -- create-user demo admin --password 'change-me-please' --superuser
 RUSTANGO_APEX_DOMAIN=localhost cargo run $ARGS -- runserver
+```
+
+In Windows PowerShell, set the variables with `$env:` and pass the flags as an array:
+
+```powershell
+$env:DATABASE_URL = "sqlite:./var/registry.db?mode=rwc"
+$env:RUSTANGO_APEX_DOMAIN = "localhost"
+$a = "--no-default-features", "--features", "sqlite", "--example", "cms_demo"
+
+cargo run @a -- migrate-registry
+cargo run @a -- create-tenant demo --mode database --database-url "sqlite:./var/demo.db?mode=rwc" --host-pattern demo.localhost
+cargo run @a -- create-user demo admin --password 'change-me-please' --superuser
+cargo run @a -- runserver
 ```
 
 Sign in at <http://demo.localhost:8080/login> as `admin`, then open <http://demo.localhost:8080/cms-admin/>. Browsers resolve `*.localhost` to your own machine; for `curl`, pass `-H 'Host: demo.localhost'`. `RUSTANGO_BIND` changes the default `0.0.0.0:8080`.

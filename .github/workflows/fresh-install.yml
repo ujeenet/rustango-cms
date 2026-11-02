@@ -46,9 +46,9 @@ jobs:
           cargo check
 
   windows:
-    # A new user's first run on Windows, in PowerShell: generate a project,
-    # build it with SQLite, run the setup commands from the docs, start the
-    # server and sign in. From crates.io on the schedule; dispatch with
+    # A new user's first run on Windows, in PowerShell, exactly as the docs
+    # say: generate a project, `cargo build`, `quickstart` (no variables to
+    # set, no flags), then sign in. From crates.io on the schedule; dispatch with
     # source=checkout to try this repo's code before it is published.
     name: windows first run (${{ inputs.source || 'crates' }})
     runs-on: windows-latest
@@ -62,34 +62,26 @@ jobs:
           if ("${{ inputs.source }}" -eq "checkout") { $scaffold += "--local" }
           cargo run -q -p rcms-scaffold -- @scaffold
           Get-Content "$env:RUNNER_TEMP\site_web\Cargo.toml" | Select-String "rustango"
-      - name: build and set up (the getting-started commands)
+      - name: build
+        shell: pwsh
+        working-directory: ${{ runner.temp }}\site_web
+        run: cargo build
+      - name: quickstart and sign in
         shell: pwsh
         working-directory: ${{ runner.temp }}\site_web
         env:
+          # create-superuser reads the password from here instead of asking.
           RUSTANGO_PASSWORD: windows-smoke-test-password
+          RUSTANGO_BIND: 127.0.0.1:8080
         run: |
-          $env:DATABASE_URL = "sqlite:./var/registry.db?mode=rwc"
-          $f = "--no-default-features", "--features", "sqlite"
-          New-Item -ItemType Directory -Force var | Out-Null
-          cargo build @f
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          cargo run @f -- migrate-registry
-          cargo run @f -- create-tenant demo --mode database --database-url "sqlite:./var/demo.db?mode=rwc" --host-pattern demo.localhost
-          cargo run @f -- create-superuser demo admin
-          if ($LASTEXITCODE) { exit $LASTEXITCODE }
-      - name: run the server and sign in
-        shell: pwsh
-        working-directory: ${{ runner.temp }}\site_web
-        run: |
-          $env:DATABASE_URL = "sqlite:./var/registry.db?mode=rwc"
-          $env:RUSTANGO_BIND = "127.0.0.1:8080"
-          $server = Start-Process -FilePath "target\debug\site_web.exe" -ArgumentList "runserver" `
+          $server = Start-Process -FilePath "target\debug\site_web.exe" -ArgumentList "quickstart" `
             -RedirectStandardOutput server.log -RedirectStandardError server.err -PassThru
           $h = "Host: demo.localhost:8080"
           $ok = $false
           foreach ($i in 1..60) {
             $code = curl.exe -s -o NUL -w "%{http_code}" -H $h http://127.0.0.1:8080/login
             if ($code -eq "200") { $ok = $true; break }
+            if ($server.HasExited) { break }
             Start-Sleep -Seconds 2
           }
           if (-not $ok) { Get-Content server.log, server.err; throw "server never answered /login" }
@@ -101,5 +93,6 @@ jobs:
             --data-urlencode "next=/cms-admin/pages" http://127.0.0.1:8080/login
           $admin = curl.exe -s -o NUL -w "%{http_code}" -b jar.txt -H $h http://127.0.0.1:8080/cms-admin/pages
           "login: $login  admin: $admin"
-          Stop-Process -Id $server.Id
+          # quickstart runs the server as a child process; stop both.
+          taskkill /T /F /PID $server.Id | Out-Null
           if (-not $login.StartsWith("303") -or $admin -ne "200") { Get-Content server.log, server.err; throw "sign-in failed" }

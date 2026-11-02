@@ -7,8 +7,10 @@ edition = "2021"
 # project by accident.
 [workspace]
 
+# SQLite needs no database server, so it is the default. For PostgreSQL or
+# MySQL, build with `--no-default-features --features postgres` (or mysql).
 [features]
-default = ["postgres"]
+default = ["sqlite"]
 postgres = ["rustango-cms/postgres", "rustango/postgres"]
 sqlite = ["rustango-cms/sqlite", "rustango/sqlite"]
 mysql = ["rustango-cms/mysql", "rustango/mysql"]
@@ -24,6 +26,8 @@ async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
+# Reads `.env` at startup, so no shell has to export DATABASE_URL.
+dotenvy = "0.15"
 
 # Non-incremental dev/test builds: smaller, deterministic target/ trees
 # that match what CI / Docker layer caches want (mirrors the rustango-cms

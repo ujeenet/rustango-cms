@@ -10,6 +10,32 @@ repository.
 
 ## Unreleased
 
+## 0.3.0 — 2026-11-02
+
+A first run in two commands, the same on Linux, macOS and Windows (#37).
+
+### Changed
+
+- `rcms new` projects build SQLite by default (PostgreSQL and MySQL stay
+  available with `--no-default-features --features postgres` or
+  `mysql`), and come with a `.env` holding the SQLite `DATABASE_URL`,
+  which `main` loads at startup. No `export`, no `$env:`, no feature
+  flags.
+- `rcms new` prints two commands instead of seven.
+
+### Added
+
+- `cargo run -- quickstart` in generated projects: creates the registry,
+  a `demo` site at demo.localhost and an `admin` user (asking for the
+  password) on the first run, then starts the server. Re-running skips
+  what exists.
+
+### Docs
+
+- Getting started follows the new path. The README and the generated
+  README show PowerShell next to bash where the commands differ.
+- The Windows first-run check in CI runs exactly the documented steps.
+
 ## 0.2.1 — 2026-11-02
 
 ### Fixed

@@ -10,6 +10,16 @@ repository.
 
 ## Unreleased
 
+## 0.2.1 — 2026-11-02
+
+### Fixed
+
+- Builds again on a fresh install. rustango 0.61.14 added an `apex`
+  argument to `tenancy::add_host`, so 0.2.0 stopped compiling for anyone
+  whose lockfile picked up 0.61.14. Requires rustango 0.61.14 now.
+- Adding a site hostname refuses the apex (where the operator console
+  lives) on the approval path too, not only through `add_host`.
+
 ## 0.2.0 — 2026-10-27
 
 ### Breaking

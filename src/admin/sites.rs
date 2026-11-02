@@ -250,6 +250,26 @@ fn self_service_host(host: &str) -> bool {
     host_under_suffixes(host, &suffixes)
 }
 
+/// The server's apex host, resolved as rustango does (its own helper is
+/// crate-private): `RUSTANGO_APEX_DOMAIN`, else `[tenancy] apex_domain`,
+/// else `localhost`.
+fn apex_domain() -> String {
+    std::env::var("RUSTANGO_APEX_DOMAIN")
+        .ok()
+        .or_else(|| {
+            rustango::config::Settings::load_from_env()
+                .ok()
+                .and_then(|s| s.tenancy.apex_domain)
+        })
+        .unwrap_or_else(|| "localhost".to_owned())
+}
+
+/// Whether `host` is the apex, as `add_host` compares them: ignoring case
+/// and a trailing dot on the configured apex.
+fn is_apex(host: &str, apex: &str) -> bool {
+    host.eq_ignore_ascii_case(apex.strip_suffix('.').unwrap_or(apex))
+}
+
 fn host_under_suffixes(host: &str, suffixes: &str) -> bool {
     suffixes
         .split(',')
@@ -314,8 +334,14 @@ pub(crate) async fn add(
     // mapping. `add_host` would reject it as taken, which is true but
     // unhelpful: what was asked for is the mapping.
     if !known.iter().any(|h| h.hostname == host) {
+        // The apex serves the operator console; no tenant may claim it, on
+        // either path below.
+        let apex = apex_domain();
+        if is_apex(&host, &apex) {
+            return Err(host_err(HostError::IsApex(host)));
+        }
         if self_service_host(&host) {
-            rustango::tenancy::add_host(&registry, &tenant.org.slug, &host)
+            rustango::tenancy::add_host(&registry, &tenant.org.slug, &host, &apex)
                 .await
                 .map_err(host_err)?;
         } else {
@@ -446,7 +472,15 @@ mod tests {
 
 #[cfg(test)]
 mod host_approval_tests {
-    use super::host_under_suffixes;
+    use super::{host_under_suffixes, is_apex};
+
+    #[test]
+    fn the_apex_is_never_a_tenant_host() {
+        assert!(is_apex("example.org", "example.org"));
+        assert!(is_apex("example.org", "Example.ORG."));
+        assert!(!is_apex("blog.example.org", "example.org"));
+        assert!(!is_apex("example.org.evil", "example.org"));
+    }
 
     #[test]
     fn only_the_operators_domains_are_self_service() {

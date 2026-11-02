@@ -1,0 +1,39 @@
+name: fresh install
+
+# Builds a brand-new project against the newest rustango-cms on crates.io,
+# with no lockfile, the way a new user starts. The repo's own CI builds from
+# Cargo.lock, so it cannot see a framework patch release that breaks the
+# published crate (rustango 0.60.7 and 0.61.14 both did).
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  fresh:
+    name: fresh install (${{ matrix.backend }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend: [sqlite, postgres, mysql]
+    steps:
+      - uses: dtolnay/rust-toolchain@stable
+      - name: new project depending on the published crate
+        run: |
+          cargo new --bin fresh && cd fresh
+          cargo add rustango-cms --no-default-features --features ${{ matrix.backend }}
+      - name: build with whatever crates.io resolves today
+        working-directory: fresh
+        run: |
+          cargo generate-lockfile
+          grep -A1 -E '^name = "rustango(-cms)?"$' Cargo.lock
+          cargo check

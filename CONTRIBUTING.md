@@ -62,3 +62,5 @@ any additional terms or conditions.
 
 Everyone taking part is expected to follow the
 [code of conduct](CODE_OF_CONDUCT.md).
+
+Everyone who has contributed is listed in [CONTRIBUTORS.md](CONTRIBUTORS.md).

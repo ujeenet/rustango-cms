@@ -6,7 +6,7 @@
 # empty library and exactly one tenant/user:
 #
 #   tenant  demo   → http://demo.localhost:${E2E_PORT}
-#   user    admin  / TestPw123!  (superuser)
+#   user    admin  / TestPw123!long  (superuser)
 #
 # Invoked by playwright.config.ts's webServer; run manually for debugging:
 #   bash e2e/serve.sh
@@ -36,7 +36,7 @@ echo "[e2e] provisioning tenant + user…" >&2
     --mode database \
     --database-url "sqlite:$STATE/demo.db?mode=rwc" \
     --host-pattern demo.localhost >&2
-"$BIN" create-user demo admin --password 'TestPw123!' --superuser >&2
+"$BIN" create-user demo admin --password 'TestPw123!long' --superuser >&2
 "$BIN" migrate-tenants >&2
 
 echo "[e2e] serving on 127.0.0.1:$PORT (Host demo.localhost)" >&2

@@ -22,7 +22,7 @@ test.describe("authentication", () => {
   test("valid credentials land in the admin, sign-out gates again", async ({ page }) => {
     await page.goto("/login");
     await page.locator('input[name="username"]').fill("admin");
-    await page.locator('input[type="password"]').fill("TestPw123!");
+    await page.locator('input[type="password"]').fill("TestPw123!long");
     await page.locator('button[type="submit"]').click();
     await page.waitForURL("**/cms-admin/**");
     await expect(page.locator(".rcms-sidebar-brand, aside, nav").first()).toBeVisible();

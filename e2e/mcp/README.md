@@ -17,7 +17,7 @@ BIN=../../target/debug/examples/cms_demo
 $BIN migrate-registry
 $BIN create-tenant demo --mode database \
     --database-url "sqlite:$PWD/demo.db?mode=rwc" --host-pattern demo.localhost
-$BIN create-user demo admin --password 'TestPw123!' --superuser
+$BIN create-user demo admin --password 'TestPw123!long' --superuser
 $BIN migrate-tenants
 # optional extra locales for the translation checks:
 python3 - <<'PY'

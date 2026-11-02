@@ -36,7 +36,7 @@ test.describe("admin authorization", () => {
   });
 
   test("an Editor reaches the admin but not roles or SSO providers", async ({ page: admin, browser, baseURL }) => {
-    await signIn(admin, "admin", "TestPw123!");
+    await signIn(admin, "admin", "TestPw123!long");
     const page = await userWithRole(admin, browser, baseURL, "Editor");
 
     // Staff keep the admin: the #671 gate must not lock out seeded roles.
@@ -61,7 +61,7 @@ test.describe("admin authorization", () => {
   });
 
   test("page rights follow the role matrix, not just admin access", async ({ page: admin, browser, baseURL }) => {
-    await signIn(admin, "admin", "TestPw123!");
+    await signIn(admin, "admin", "TestPw123!long");
     const stamp = Date.now();
     await admin.goto("/cms-admin/pages");
     await admin.getByRole("link", { name: /new root page/i }).click();
@@ -120,7 +120,7 @@ test.describe("admin authorization", () => {
   // notifications and the page-type builder, and (#646) the superuser gate
   // on another user's MCP keys: denied without the codename, open with it.
   test("codename gates send a user without the codename to no-access", async ({ page: admin, browser, baseURL }) => {
-    await signIn(admin, "admin", "TestPw123!");
+    await signIn(admin, "admin", "TestPw123!long");
     const gated = ["/cms-admin/templates", "/cms-admin/sites", "/cms-admin/notifications", "/cms-admin/page-types/1/build"];
 
     const editor = await userWithRole(admin, browser, baseURL, "Editor");
@@ -159,7 +159,7 @@ test.describe("admin authorization", () => {
   // role is refused on each route, and its attempt to mint a superuser
   // leaves no account behind.
   test("user management refuses a signed-in non-superuser on every route", async ({ page: admin, browser, baseURL }) => {
-    await signIn(admin, "admin", "TestPw123!");
+    await signIn(admin, "admin", "TestPw123!long");
     const developer = await userWithRole(admin, browser, baseURL, "Developer");
 
     for (const path of ["/cms-admin/users", "/cms-admin/users/new", "/cms-admin/users/1/edit"]) {

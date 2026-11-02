@@ -16,7 +16,7 @@ npm run report         # open the HTML report
 ```
 
 - Server: `serve.sh` provisions tenant `demo` (host `demo.localhost`, user
-  `admin` / `TestPw123!`, superuser) and serves on `127.0.0.1:${E2E_PORT:-8210}`.
+  `admin` / `TestPw123!long`, superuser) and serves on `127.0.0.1:${E2E_PORT:-8210}`.
   Chromium resolves `*.localhost` to loopback — no /etc/hosts edits.
 - Sessions: `tests/auth.setup.ts` logs in once and saves
   `.state/admin.json`; auth.spec runs with a clean context instead.

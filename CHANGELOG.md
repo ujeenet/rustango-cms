@@ -20,6 +20,11 @@ repository.
 - Adding a site hostname refuses the apex (where the operator console
   lives) on the approval path too, not only through `add_host`.
 
+### Security
+
+- Requires pulldown-cmark 0.13.6 (RUSTSEC-2026-0414, RUSTSEC-2026-0433).
+  Both affect only the wikilinks extension, which the CMS does not enable.
+
 ## 0.2.0 — 2026-10-27
 
 ### Breaking

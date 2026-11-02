@@ -97,7 +97,7 @@ rustango = { version = "0.61.14", default-features = false, features = [
 rustango-cms-macros = { path = "crates/rustango-cms-macros", version = "0.2.1" }
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json", "form", "query", "multipart", "ws"] }
 tera = { version = "1.20", default-features = false, features = ["builtins"] }
-pulldown-cmark = { version = "0.13.3", default-features = false, features = ["html"] }
+pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
 ammonia = { version = "4", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_urlencoded = "0.7"

@@ -19,6 +19,13 @@ repository.
   whose lockfile picked up 0.61.14. Requires rustango 0.61.14 now.
 - Adding a site hostname refuses the apex (where the operator console
   lives) on the approval path too, not only through `add_host`.
+- Scaffolded projects run on Windows. `rcms new` now writes a
+  `.cargo/config.toml` that gives the main thread an 8 MiB stack on
+  Windows (the default is 1 MiB, and a debug build stopped with "thread
+  'main' has overflowed its stack" on its first command). For a project
+  made earlier, copy
+  [`crates/rcms-scaffold/assets/cargo_config.toml`](crates/rcms-scaffold/assets/cargo_config.toml)
+  to `.cargo/config.toml` in the project and rebuild.
 
 ### Security
 

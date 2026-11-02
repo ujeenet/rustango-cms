@@ -1,0 +1,9 @@
+# Windows gives the main thread a 1 MiB stack (Linux and macOS: 8 MiB).
+# The server's async setup needs more than that in a debug build, so the
+# binary would stop with "thread 'main' has overflowed its stack". Reserve
+# 8 MiB on Windows too.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "link-arg=/STACK:8388608"]
+
+[target.'cfg(all(windows, target_env = "gnu"))']
+rustflags = ["-C", "link-arg=-Wl,--stack,8388608"]

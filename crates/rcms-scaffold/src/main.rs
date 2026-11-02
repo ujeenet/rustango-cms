@@ -3,7 +3,7 @@
 //! Emits a self-contained,
 //! runnable CMS app (Cargo.toml, src/main.rs + models.rs, public
 //! templates, the CMS baseline migrations, README, .env.example,
-//! .gitignore). The skeleton + migrations are embedded at compile time,
+//! .gitignore, .cargo/config.toml). The skeleton + migrations are embedded at compile time,
 //! so this tool has no runtime dependency on the rustango-cms build tree.
 //!
 //! ```sh
@@ -35,6 +35,8 @@ const README_TMPL: &str = include_str!("../assets/README.md.tmpl");
 const ENV_EXAMPLE: &str = include_str!("../assets/env.example");
 const GITIGNORE: &str = include_str!("../assets/gitignore");
 const BLOG_NOTE: &str = include_str!("../assets/blog_note.md");
+// Raises the main-thread stack on Windows (1 MiB by default).
+const CARGO_CONFIG: &str = include_str!("../assets/cargo_config.toml");
 
 // ---- embedded CMS baseline migrations ----
 // The current set is embedded so a freshly-generated app's `migrations/` dir
@@ -167,6 +169,7 @@ fn run(args: &[String]) -> Result<(), String> {
         &ENV_EXAMPLE.replace("__NAME__", &name),
     )?;
     write(&target.join(".gitignore"), GITIGNORE)?;
+    write(&target.join(".cargo/config.toml"), CARGO_CONFIG)?;
 
     println!(
         "Created rustango-cms project `{name}` ({template} template) at {}\n",
@@ -241,7 +244,7 @@ fn print_usage() {
            rcms new <project-name> [--dir <parent>] [--template <minimal|blog>] [--local]\n\n\
          Creates <parent>/<project-name>/ (default parent: current directory)\n\
          with a runnable CMS app: Cargo.toml, src/, templates/, migrations/,\n\
-         README.md, .env.example, .gitignore.\n\n\
+         README.md, .env.example, .gitignore, .cargo/config.toml.\n\n\
          Templates:\n  \
            minimal (default) — HomePage + ArticlePage, no typed extension\n  \
            blog              — ArticlePage with a typed cms_article_page\n                      \

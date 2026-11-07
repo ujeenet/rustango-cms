@@ -113,9 +113,9 @@ pub fn scan(haystack: &str, field_path: &str) -> Vec<Reference> {
     out
 }
 
-/// Replace every (from_kind, from_id) row in the index with `refs`.
-/// Atomic per-source — readers see either the old set or the new
-/// set, never an intermediate state.
+/// Replace every (from_kind, from_id) row in the index with `refs`,
+/// writing only the difference: rows no longer referenced are deleted,
+/// new references inserted, and an unchanged set writes nothing.
 ///
 /// # Errors
 /// Driver / query failures.
@@ -132,10 +132,29 @@ pub async fn reindex_source(
         .where_(ReferenceIndex::from_id.eq(from_id))
         .fetch(pool)
         .await?;
+    // A multiset: one field can reference the same target twice.
+    let mut wanted: std::collections::HashMap<(String, i64, String), usize> =
+        std::collections::HashMap::new();
+    for r in &refs {
+        *wanted
+            .entry((r.to_kind.to_owned(), r.to_id, r.field_path.clone()))
+            .or_default() += 1;
+    }
     for row in existing {
-        row.delete_pool(pool).await?;
+        let key = (row.to_kind.clone(), row.to_id, row.field_path.clone());
+        match wanted.get_mut(&key) {
+            Some(n) if *n > 0 => *n -= 1,
+            _ => {
+                row.delete(pool).await?;
+            }
+        }
     }
     for r in refs {
+        let key = (r.to_kind.to_owned(), r.to_id, r.field_path.clone());
+        match wanted.get_mut(&key) {
+            Some(n) if *n > 0 => *n -= 1,
+            _ => continue,
+        }
         let mut row = ReferenceIndex {
             id: Auto::Unset,
             from_kind: from_kind.to_owned(),
@@ -145,7 +164,7 @@ pub async fn reindex_source(
             field_path: r.field_path,
             created_at: Auto::Unset,
         };
-        row.insert_pool(pool).await?;
+        row.insert(pool).await?;
     }
     Ok(())
 }

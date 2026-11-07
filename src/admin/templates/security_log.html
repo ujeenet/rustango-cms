@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "Security log" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block title %}{{ "Security log" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Security log" | translate(locale=LANG) }}{% endblock %}
 
 {% macro event_label(event, lang) %}{% if event == "login" %}{{ "Signed in" | translate(locale=lang) }}{% elif event == "login_failed" %}{{ "Sign-in failed" | translate(locale=lang) }}{% elif event == "lockout" %}{{ "Account locked" | translate(locale=lang) }}{% elif event == "logout" %}{{ "Signed out" | translate(locale=lang) }}{% elif event == "password_reset_requested" %}{{ "Password reset requested" | translate(locale=lang) }}{% elif event == "password_reset" %}{{ "Password reset" | translate(locale=lang) }}{% elif event == "permissions_changed" %}{{ "Permissions changed" | translate(locale=lang) }}{% else %}{{ event }}{% endif %}{% endmacro event_label %}

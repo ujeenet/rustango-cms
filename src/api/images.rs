@@ -58,66 +58,28 @@ async fn list_inner(
         Err(msg) => return Ok(crate::api::error::ApiError::bad_request(msg).into_response()),
     };
 
-    let mut rows: Vec<Media> = Media::objects()
-        .where_(Media::kind.eq("image".to_owned()))
-        .fetch(pool)
-        .await?;
-
-    // #members — a collection can be login/group/permission gated, and
-    // `/__media__/` refuses to serve bytes from a gated one. This listing
-    // did no such check, so the catalogue (titles, filenames, dimensions,
-    // alt text) leaked even though the files themselves were protected.
-    let collection_ids: Vec<i64> = rows.iter().filter_map(|m| m.collection_id).collect();
-    let denied_collections = crate::collection_view_restriction::denied_collection_ids(
-        tenant.pool(),
-        viewer,
-        &collection_ids,
-    )
-    .await;
-    if !denied_collections.is_empty() {
-        rows.retain(|m| {
-            m.collection_id
-                .is_none_or(|c| !denied_collections.contains(&c))
-        });
-    }
-
-    if let Some(col_id) = qs.collection {
-        rows.retain(|m| m.collection_id == Some(col_id));
-    }
-
-    if let Some(needle) = qs.list.search.as_deref().filter(|s| !s.trim().is_empty()) {
-        let n = crate::api::search::fold(needle);
-        rows.retain(|m| {
-            crate::api::search::contains_folded(&m.title, &n)
-                || crate::api::search::contains_folded(&m.filename, &n)
-                || crate::api::search::contains_folded(&m.alt_text, &n)
-        });
-    }
-
-    if orderings.iter().any(|o| o.random) {
-        use rand::seq::SliceRandom as _;
-        rows.shuffle(&mut rand::rng());
-    } else if !orderings.is_empty() {
-        rows.sort_by(|a, b| compare_media(a, b, &orderings));
-    } else {
-        rows.sort_by(|a, b| b.uploaded_at.get().cmp(&a.uploaded_at.get()));
-    }
-
-    // #changes — `?updated_since=` so a polling client can ask for only
-    // what moved, instead of re-fetching the collection and diffing it.
     let updated_since = match crate::api::query::parse_updated_since(&qs.list) {
         Ok(v) => v,
         Err(msg) => return Ok(crate::api::error::ApiError::bad_request(msg).into_response()),
     };
-    if let Some(since) = updated_since {
-        rows.retain(|r| r.uploaded_at.get().copied().is_some_and(|t| t >= since));
-    }
-
-    let total_count = rows.len();
-    let window: Vec<&Media> = rows.iter().skip(offset).take(limit).collect();
+    let (window, total_count) = list_media(
+        pool,
+        viewer,
+        MediaFilter {
+            images: true,
+            collection: qs.collection,
+            search: qs.list.search.as_deref(),
+            search_alt_text: true,
+            updated_since,
+        },
+        &orderings,
+        limit,
+        offset,
+    )
+    .await?;
 
     let mut items = Vec::with_capacity(window.len());
-    for m in window {
+    for m in &window {
         let mut obj = serialize_image(m);
         // Validated against the first serialized row rather than a
         // hand-written list, so it cannot drift from what we return.
@@ -245,6 +207,116 @@ pub(super) fn serialize_image(m: &Media) -> serde_json::Map<String, serde_json::
         serde_json::json!(m.uploaded_at.get().copied()),
     );
     obj
+}
+
+/// What a media listing is narrowed by.
+pub(super) struct MediaFilter<'a> {
+    /// Images (`kind = image`) or documents (every other kind).
+    pub images: bool,
+    pub collection: Option<i64>,
+    pub search: Option<&'a str>,
+    /// Whether the search also reads `alt_text` (images only).
+    pub search_alt_text: bool,
+    pub updated_since: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// One page of the media the viewer may see, and the total match count
+/// (#655). Exact filters always run in SQL. Without a text search and
+/// with a date/size order, counting and paging run there too; a search
+/// (accent-folded, in Rust) or a text/random order reads the narrowed
+/// set and pages it in memory.
+pub(super) async fn list_media(
+    pool: &rustango::sql::Pool,
+    viewer: Option<&rustango::tenancy::auth::User>,
+    f: MediaFilter<'_>,
+    orderings: &[q::OrderSpec],
+    limit: usize,
+    offset: usize,
+) -> Result<(Vec<Media>, usize), rustango::sql::ExecError> {
+    // #members — a gated collection's catalogue (titles, filenames, alt
+    // text) is as private as its files. The collections table is small.
+    let collection_ids: Vec<i64> = crate::media::MediaCollection::objects()
+        .fetch(pool)
+        .await?
+        .iter()
+        .filter_map(|c| c.id.get().copied())
+        .collect();
+    let denied: Vec<i64> =
+        crate::collection_view_restriction::denied_collection_ids(pool, viewer, &collection_ids)
+            .await
+            .into_iter()
+            .collect();
+    let narrowed = || {
+        let mut qs = if f.images {
+            Media::objects().where_(Media::kind.eq("image".to_owned()))
+        } else {
+            Media::objects().where_(Media::kind.ne("image".to_owned()))
+        };
+        if !denied.is_empty() {
+            qs = qs.where_(
+                Media::collection_id
+                    .is_null()
+                    .or(Media::collection_id.not_in(denied.iter().copied())),
+            );
+        }
+        if let Some(cid) = f.collection {
+            qs = qs.where_(Media::collection_id.eq(cid));
+        }
+        if let Some(since) = f.updated_since {
+            qs = qs.where_(Media::uploaded_at.gte(since));
+        }
+        qs
+    };
+    let search = f.search.map(str::trim).filter(|s| !s.is_empty());
+    let sql_order: Option<Vec<(&'static str, bool)>> = if search.is_some() {
+        None
+    } else if orderings.is_empty() {
+        Some(vec![("uploaded_at", true)])
+    } else {
+        orderings
+            .iter()
+            .map(|o| match o.field.as_str() {
+                _ if o.random => None,
+                "uploaded_at" => Some(("uploaded_at", o.descending)),
+                "size" => Some(("size", o.descending)),
+                // Text orders stay in Rust: SQL collations differ per
+                // backend, Rust's byte order does not.
+                _ => None,
+            })
+            .collect()
+    };
+    if let Some(mut order) = sql_order {
+        use rustango::sql::CounterPool as _;
+        order.push(("id", true));
+        let total = usize::try_from(narrowed().count(pool).await?).unwrap_or_default();
+        let rows = narrowed()
+            .order_by(&order)
+            .limit(limit as i64)
+            // A huge `?offset=` must not wrap negative (backends differ).
+            .offset(i64::try_from(offset).unwrap_or(i64::MAX))
+            .fetch(pool)
+            .await?;
+        return Ok((rows, total));
+    }
+    let mut rows: Vec<Media> = narrowed().order_by(&[("id", true)]).fetch(pool).await?;
+    if let Some(needle) = search {
+        let n = crate::api::search::fold(needle);
+        rows.retain(|m| {
+            crate::api::search::contains_folded(&m.title, &n)
+                || crate::api::search::contains_folded(&m.filename, &n)
+                || (f.search_alt_text && crate::api::search::contains_folded(&m.alt_text, &n))
+        });
+    }
+    if orderings.iter().any(|o| o.random) {
+        use rand::seq::SliceRandom as _;
+        rows.shuffle(&mut rand::rng());
+    } else if !orderings.is_empty() {
+        rows.sort_by(|a, b| compare_media(a, b, orderings));
+    } else {
+        rows.sort_by(|a, b| b.uploaded_at.get().cmp(&a.uploaded_at.get()));
+    }
+    let total = rows.len();
+    Ok((rows.into_iter().skip(offset).take(limit).collect(), total))
 }
 
 /// Fields `?order=` accepts on the media endpoints. Must match the arms

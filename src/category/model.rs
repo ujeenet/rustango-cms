@@ -405,7 +405,7 @@ pub async fn update(
     cat.description = new.description;
     cat.featured_image_id = new.featured_image_id;
     cat.thumbnail_id = new.thumbnail_id;
-    cat.save_pool(pool).await?;
+    cat.save(pool).await?;
     Ok(cat)
 }
 
@@ -630,7 +630,7 @@ mod tests {
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         };
-        t.insert_pool(pool).await.expect("insert taxonomy");
+        t.insert(pool).await.expect("insert taxonomy");
         t.id.get().copied().unwrap()
     }
 

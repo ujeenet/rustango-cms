@@ -100,7 +100,7 @@ pub async fn capture(
             created_by,
             created_at: Auto::Unset,
         };
-        match row.insert_pool(pool).await {
+        match row.insert(pool).await {
             Ok(()) => return Ok(row),
             Err(e) if attempt < ATTEMPTS && is_unique_violation(&e) => continue,
             Err(e) => return Err(e),
@@ -178,7 +178,7 @@ async fn renumber_duplicate_sequences(
             let want = i32::try_from(n + 1).unwrap_or(i32::MAX);
             if row.sequence != want {
                 row.sequence = want;
-                row.save_pool(pool).await?;
+                row.save(pool).await?;
             }
         }
     }
@@ -255,7 +255,7 @@ pub async fn prune(
         {
             continue;
         }
-        row.delete_pool(pool).await?;
+        row.delete(pool).await?;
         deleted += 1;
     }
     Ok(PruneOutcome { total, deleted })
@@ -334,6 +334,87 @@ impl FieldDiff {
     #[must_use]
     pub fn is_change(&self) -> bool {
         !matches!(self, Self::Unchanged { .. })
+    }
+}
+
+/// `(id, page_id, sequence)` of every revision of the given pages — light
+/// columns only, never the snapshots. The history screen uses it for the
+/// "latest" flag and the Compare link, which have to be right for a row at
+/// the edge of a page.
+///
+/// # Errors
+/// Driver / query failures.
+pub async fn page_sequences(
+    pool: &rustango::sql::Pool,
+    page_ids: &[i64],
+) -> Result<Vec<(i64, i64, i32)>, rustango::sql::ExecError> {
+    use rustango::core::{Column as _, SqlValue};
+    let int = |v: &SqlValue| match v {
+        SqlValue::I64(n) => Some(*n),
+        SqlValue::I32(n) => Some(i64::from(*n)),
+        SqlValue::I16(n) => Some(i64::from(*n)),
+        _ => None,
+    };
+    let mut out = Vec::new();
+    for chunk in page_ids.chunks(500) {
+        let rows = Revision::objects()
+            .where_(Revision::page_id.is_in(chunk.to_vec()))
+            .values_list(&["id", "page_id", "sequence"])
+            .fetch(pool)
+            .await?;
+        for row in rows {
+            if let [id, page_id, sequence] = row.as_slice() {
+                if let (Some(id), Some(page_id), Some(seq)) = (int(id), int(page_id), int(sequence)) {
+                    out.push((id, page_id, i32::try_from(seq).unwrap_or_default()));
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
+#[cfg(all(test, feature = "sqlite"))]
+mod page_sequence_tests {
+    use super::*;
+    use rustango::core::Model as _;
+
+    #[tokio::test]
+    async fn sequences_of_the_asked_pages_come_back_without_snapshots() {
+        // A file, not `:memory:`: each pooled connection to `:memory:` is its own database.
+        let path = std::env::temp_dir().join(format!("rcms-revseq-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let pool = rustango::sql::Pool::connect(&format!("sqlite:{}?mode=rwc", path.display())).await.expect("pool");
+        // The columns `page_sequences` reads, without the page foreign key:
+        // only revisions are under test, and no `cms_page` rows exist.
+        let table = Revision::SCHEMA.table;
+        rustango::sql::raw_execute_pool(
+            &pool,
+            &format!(
+                "CREATE TABLE {table} (id INTEGER PRIMARY KEY AUTOINCREMENT, page_id INTEGER NOT NULL, \
+                 sequence INTEGER NOT NULL, snapshot TEXT NOT NULL, created_by INTEGER, created_at TEXT NOT NULL)"
+            ),
+            Vec::new(),
+        )
+        .await
+        .expect("ddl");
+        for (page_id, sequence) in [(1_i64, 1_i32), (1, 2), (2, 1), (3, 1)] {
+            rustango::sql::raw_execute_pool(
+                &pool,
+                &format!(
+                    "INSERT INTO {table} (page_id, sequence, snapshot, created_at) \
+                     VALUES ({page_id}, {sequence}, '{{\"big\":\"snapshot\"}}', '2026-11-07T00:00:00Z')"
+                ),
+                Vec::new(),
+            )
+            .await
+            .expect("revision");
+        }
+        let mut got = page_sequences(&pool, &[1, 2]).await.expect("sequences");
+        got.sort();
+        let pairs: Vec<(i64, i32)> = got.iter().map(|&(_, p, s)| (p, s)).collect();
+        assert_eq!(pairs, [(1, 1), (1, 2), (2, 1)], "page 3 was not asked for");
+        assert!(page_sequences(&pool, &[]).await.expect("empty").is_empty());
+        let _ = std::fs::remove_file(&path);
     }
 }
 

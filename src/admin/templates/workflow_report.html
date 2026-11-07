@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "Workflow report" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block title %}{{ "Workflow report" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Workflow report" | translate(locale=LANG) }}{% endblock %}
 
 {% block topbar_actions %}
@@ -62,5 +62,6 @@
         </tbody>
     </table>
     </div>
+    {% include "rcms_admin/_pagination.html" %}
 {% endif %}
 {% endblock %}

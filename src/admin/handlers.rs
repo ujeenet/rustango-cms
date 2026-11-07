@@ -15,7 +15,7 @@ use axum::Json;
 use rustango::core::Column as _;
 use rustango::extractors::Tenant;
 use rustango::messages::Level as MsgLevel;
-use rustango::sql::{transaction_pool, FetcherPool as _, FetcherTx as _};
+use rustango::sql::{transaction_pool, CounterPool as _, FetcherPool as _, FetcherTx as _};
 use serde::Deserialize;
 use std::sync::OnceLock;
 use tera::Context;
@@ -24,7 +24,7 @@ use crate::security_log::Entry as SecurityEntry;
 /// HMAC key for the flash-messages cookie, derived from the CMS signing
 /// secret so every replica — and the same server after a restart — reads
 /// the flash another one set.
-fn messages_secret() -> &'static [u8] {
+pub(crate) fn messages_secret() -> &'static [u8] {
     static SECRET: OnceLock<Vec<u8>> = OnceLock::new();
     SECRET.get_or_init(|| crate::signing::derived_key("rcms:flash"))
 }
@@ -82,6 +82,17 @@ pub(crate) fn render_with_csrf(
     template: &str,
     ctx: &mut Context,
 ) -> Result<Response, AdminError> {
+    render_tera(&state.tera, headers, template, ctx)
+}
+
+/// [`render_with_csrf`] for a caller that holds the Tera instance
+/// rather than the admin state (custom admin pages).
+pub(crate) fn render_tera(
+    tera: &tera::Tera,
+    headers: &HeaderMap,
+    template: &str,
+    ctx: &mut Context,
+) -> Result<Response, AdminError> {
     // #525/#526 — resolve the admin UI locale per request and expose it to the
     // template. Done here so every admin page picks it up without threading
     // through each handler. Precedence: sticky cookie → per-user preference
@@ -105,7 +116,7 @@ pub(crate) fn render_with_csrf(
     ctx.insert("LANG_DIR", lang_dir);
     let csrf_cookie = rustango::forms::csrf::stamp_into_context(headers, ctx);
     let msg_clear = rustango::messages::stamp_into_context(messages_secret(), headers, ctx);
-    let html = state.tera.render(template, ctx)?;
+    let html = tera.render(template, ctx)?;
     let mut resp = Html(html).into_response();
     if let Some(c) = csrf_cookie {
         if let Ok(v) = HeaderValue::from_str(&c) {
@@ -424,6 +435,18 @@ fn redirect_after_page_save(
     body: &str,
     headers: &HeaderMap,
 ) -> Result<Response, AdminError> {
+    redirect_after_page_save_with_level(action, page_id, parent_id, body, MsgLevel::Success, headers)
+}
+
+/// [`redirect_after_page_save`] with a flash of `level`.
+fn redirect_after_page_save_with_level(
+    action: &str,
+    page_id: i64,
+    parent_id: Option<i64>,
+    body: &str,
+    level: MsgLevel,
+    headers: &HeaderMap,
+) -> Result<Response, AdminError> {
     let url = match action {
         "continue" => rustango::urls::reverse_owned(
             "rcms-admin:pages:edit",
@@ -449,7 +472,7 @@ fn redirect_after_page_save(
     Ok(rustango::messages::redirect_with_message(
         messages_secret(),
         headers,
-        MsgLevel::Success,
+        level,
         body,
         &url,
     ))
@@ -490,12 +513,31 @@ pub async fn add_chrome(
     active_tab: &str,
     session_user: Option<&rustango::tenancy::auth::User>,
 ) {
-    add_chrome_sync(ctx, tenant, active_tab);
+    add_chrome_for(ctx, tenant.pool(), &tenant.org, active_tab, session_user).await;
+}
+
+/// [`add_chrome`] from the tenant's pool and org.
+async fn add_chrome_for(
+    ctx: &mut Context,
+    pool: &rustango::sql::Pool,
+    org: &rustango::tenancy::Org,
+    active_tab: &str,
+    session_user: Option<&rustango::tenancy::auth::User>,
+) {
+    add_chrome_sync_for(ctx, org, active_tab);
     if let Some(user) = session_user {
-        add_user_chrome(ctx, user, tenant.pool()).await;
+        add_user_chrome(ctx, user, pool).await;
     }
     // #199 — per-tenant logo + favicon URLs (see [`add_branding_urls`]).
+    add_branding_urls_for(ctx, pool, org).await;
+}
+
+/// What the pre-sign-in screens (sign-in, password reset, member sign-up)
+/// share with the admin: the tenant's branding and its admin theme, so
+/// their colours and font match the admin (#918).
+pub(crate) async fn add_auth_chrome(ctx: &mut Context, tenant: &Tenant) {
     add_branding_urls(ctx, tenant).await;
+    add_admin_theme(ctx, tenant.pool()).await;
 }
 
 /// Inject the per-tenant admin logo + favicon URLs from the `branding`
@@ -506,25 +548,19 @@ pub async fn add_chrome(
 /// tenant's branding too. The serve routes (`/__cms-branding/*`) live in
 /// `public_router` so the images load before sign-in.
 pub(crate) async fn add_branding_urls(ctx: &mut Context, tenant: &Tenant) {
-    // The site's name as visitors know it: the owner's Branding "Site
-    // name", else the tenant's display name (set by the operator).
-    let mut site_name = tenant.org.display_name.clone();
-    if let Ok(Some(row)) = crate::site_setting::get(tenant.pool(), "branding").await {
-        if let Some(n) = row.value_json.get("site_name").and_then(|v| v.as_str()).filter(|n| !n.trim().is_empty()) {
-            n.trim().clone_into(&mut site_name);
-        }
-        let is_set = |key: &str| {
-            row.value_json
-                .get(key)
-                .and_then(|v| v.as_str())
-                .is_some_and(|s| !s.is_empty())
-        };
-        if is_set("logo_storage_key") {
-            ctx.insert("branding_logo_url", "/__cms-branding/logo");
-        }
-        if is_set("favicon_storage_key") {
-            ctx.insert("branding_favicon_url", "/__cms-branding/favicon");
-        }
+    add_branding_urls_for(ctx, tenant.pool(), &tenant.org).await;
+}
+
+async fn add_branding_urls_for(ctx: &mut Context, pool: &rustango::sql::Pool, org: &rustango::tenancy::Org) {
+    // One name, logo and icon for the admin and the site: Settings →
+    // Branding (see `crate::branding`).
+    let branding = crate::branding::get(pool).await;
+    let site_name = crate::branding::site_name(&branding, org);
+    if crate::branding::has(&branding, crate::branding::Picture::Logo) {
+        ctx.insert("branding_logo_url", crate::branding::Picture::Logo.url());
+    }
+    if crate::branding::has(&branding, crate::branding::Picture::Favicon) {
+        ctx.insert("branding_favicon_url", crate::branding::Picture::Favicon.url());
     }
     ctx.insert("site_name", &site_name);
 }
@@ -533,9 +569,9 @@ pub(crate) async fn add_branding_urls(ctx: &mut Context, tenant: &Tenant) {
 /// re-using it, so it's broken out for clarity. Stuffs the static
 /// chrome bits (tab, tenant, brand, default tz, registered admin
 /// pages) into the context.
-fn add_chrome_sync(ctx: &mut Context, tenant: &Tenant, active_tab: &str) {
+fn add_chrome_sync_for(ctx: &mut Context, org: &rustango::tenancy::Org, active_tab: &str) {
     ctx.insert("active_tab", active_tab);
-    ctx.insert("tenant_slug", &tenant.org.slug);
+    ctx.insert("tenant_slug", &org.slug);
     // #524 — admin UI locale + text direction for `<html lang/dir>` and the
     // `translate(locale=LANG)` calls. The default here is overridden per
     // request by `render_with_csrf` (#525 negotiation).
@@ -549,13 +585,6 @@ fn add_chrome_sync(ctx: &mut Context, tenant: &Tenant, active_tab: &str) {
             .map(|(c, n)| serde_json::json!({ "code": c, "name": n }))
             .collect::<Vec<_>>(),
     );
-    let brand = tenant
-        .org
-        .brand_name
-        .clone()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| tenant.org.display_name.clone());
-    ctx.insert("brand_name", &brand);
     // user_timezone defaults to empty; PG-authenticated requests
     // get it filled in via `add_user_chrome` (called explicitly by
     // handlers that have a SessionUser extractor in scope).
@@ -745,7 +774,11 @@ pub async fn collections_list(
     tenant: Tenant,
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
+    Query(paging): Query<crate::admin::pagination::PageQuery>,
+    axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
 ) -> Result<Response, AdminError> {
+    // Every collection is read: the depth walk and the "Parent" picker
+    // need the whole tree, and the rows are small. The table is paged.
     let collections: Vec<crate::media::MediaCollection> = crate::media::MediaCollection::objects()
         .order_by(&[("parent_id", false), ("sort_order", false), ("name", false)])
         .fetch(tenant.pool())
@@ -775,14 +808,9 @@ pub async fn collections_list(
         cache.insert(id, d);
         d
     }
-    // Media counts per collection so editors see usage at a glance.
-    let media: Vec<Media> = Media::objects().fetch(tenant.pool()).await?;
-    let mut counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
-    for m in &media {
-        if let Some(cid) = m.collection_id {
-            *counts.entry(cid).or_insert(0) += 1;
-        }
-    }
+    // Media counts per collection so editors see usage at a glance —
+    // counted in SQL, not by loading the media library.
+    let counts = counts_by(tenant.pool(), Media::objects(), "collection_id").await?;
     let mut depth_cache: std::collections::HashMap<i64, i32> = std::collections::HashMap::new();
     let rows: Vec<serde_json::Value> = collections
         .iter()
@@ -803,10 +831,19 @@ pub async fn collections_list(
         })
         .collect();
 
+    let window = paging.window(rows.len());
+    let page_rows: Vec<&serde_json::Value> = rows
+        .iter()
+        .skip(usize::try_from(window.offset).unwrap_or_default())
+        .take(usize::try_from(window.limit).unwrap_or_default())
+        .collect();
     let mut ctx = Context::new();
     add_chrome(&mut ctx, &tenant, "media", session_user.as_ref()).await;
     add_admin_theme(&mut ctx, tenant.pool()).await;
     ctx.insert("collections", &rows);
+    ctx.insert("collection_rows", &page_rows);
+    ctx.insert("pagination", &window.context);
+    ctx.insert("query_string", &raw_query.unwrap_or_default());
     render_with_csrf(
         &state,
         &headers,
@@ -846,7 +883,7 @@ pub async fn collections_create(
         sort_order: form.sort_order.unwrap_or(100),
         created_at: rustango::sql::Auto::Unset,
     };
-    row.insert_pool(tenant.pool()).await?;
+    row.insert(tenant.pool()).await?;
     redirect_named_with_message_args(
         "rcms-admin:media:collections",
         MsgLevel::Success,
@@ -890,7 +927,7 @@ pub async fn collections_edit(
     if let Some(so) = form.sort_order {
         row.sort_order = so;
     }
-    row.save_pool(tenant.pool()).await?;
+    row.save(tenant.pool()).await?;
     redirect_named_with_message(
         "rcms-admin:media:collections",
         MsgLevel::Success,
@@ -924,7 +961,7 @@ pub async fn collections_delete(
         .await?
     {
         child.parent_id = parent;
-        child.save_pool(tenant.pool()).await?;
+        child.save(tenant.pool()).await?;
     }
     // Null out media references — media doesn't get deleted, just
     // moves to "uncategorized".
@@ -934,9 +971,9 @@ pub async fn collections_delete(
         .await?
     {
         m.collection_id = None;
-        m.save_pool(tenant.pool()).await?;
+        m.save(tenant.pool()).await?;
     }
-    row.delete_pool(tenant.pool()).await?;
+    row.delete(tenant.pool()).await?;
     redirect_named_with_message_args(
         "rcms-admin:media:collections",
         MsgLevel::Success,
@@ -1061,14 +1098,12 @@ pub async fn taxonomies_index(
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
 ) -> Result<Response, AdminError> {
+    // Not paged: one row per vocabulary a site defines (tags, topics,
+    // regions…), a handful. Their categories are counted in SQL.
     let taxes = crate::category::taxonomies(tenant.pool())
         .await
         .map_err(|e| AdminError::Validation(e.to_string()))?;
-    let all_cats: Vec<Category> = Category::objects().fetch(tenant.pool()).await?;
-    let mut counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
-    for c in &all_cats {
-        *counts.entry(c.taxonomy_id).or_insert(0) += 1;
-    }
+    let counts = counts_by(tenant.pool(), Category::objects(), "taxonomy_id").await?;
     let rows: Vec<serde_json::Value> = taxes
         .iter()
         .map(|t| {
@@ -1101,15 +1136,26 @@ pub async fn category_tree(
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
     Path(slug): Path<String>,
+    Query(paging): Query<crate::admin::pagination::PageQuery>,
+    axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
 ) -> Result<Response, AdminError> {
     let tax = crate::category::find_taxonomy(tenant.pool(), &slug)
         .await
         .map_err(|e| AdminError::Validation(e.to_string()))?
         .ok_or_else(|| AdminError::Validation(format!("unknown taxonomy `{slug}`")))?;
-    let cats =
-        category_model::all_in_taxonomy(tenant.pool(), tax.id.get().copied().unwrap_or_default())
-            .await
-            .map_err(|e| AdminError::Validation(e.to_string()))?;
+    // Paged in `path` order (#629): a vocabulary can grow to hundreds of
+    // categories. A page may start inside a branch; depth still indents.
+    let in_tax = || {
+        Category::objects().where_(Category::taxonomy_id.eq(tax.id.get().copied().unwrap_or_default()))
+    };
+    let total = in_tax().count(tenant.pool()).await?;
+    let window = paging.window(usize::try_from(total).unwrap_or_default());
+    let cats: Vec<Category> = in_tax()
+        .order_by(&[("path", false)])
+        .limit(window.limit)
+        .offset(window.offset)
+        .fetch(tenant.pool())
+        .await?;
     let rows: Vec<serde_json::Value> = cats
         .iter()
         .map(|c| {
@@ -1130,6 +1176,8 @@ pub async fn category_tree(
     ctx.insert("taxonomy_slug", &tax.slug);
     ctx.insert("taxonomy_name", &tax.verbose_name);
     ctx.insert("categories", &rows);
+    ctx.insert("pagination", &window.context);
+    ctx.insert("query_string", &raw_query.unwrap_or_default());
     render_with_csrf(&state, &headers, "rcms_admin/category_tree.html", &mut ctx)
 }
 
@@ -1527,12 +1575,13 @@ pub async fn page_type_build_form(
     // while no pages use the type.
     let is_ui_type = pt.app_label == "cms_ui";
     let page_count = if is_ui_type {
+        // Counted, not loaded. A failed count hides the Delete button
+        // (the delete itself re-checks and stops on an error).
         Page::objects()
             .where_(Page::page_type_id.eq(id))
-            .fetch(tenant.pool())
+            .count(tenant.pool())
             .await
-            .map(|v| v.len())
-            .unwrap_or(0)
+            .unwrap_or(1)
     } else {
         0
     };
@@ -1646,7 +1695,7 @@ pub async fn page_type_translate_submit(
     {
         let mut row = row;
         if crate::page_builder::choice_i18n::set_choice_labels(&mut row.document, &locale.code, &labels) > 0 {
-            row.save_pool(tenant.pool()).await?;
+            row.save(tenant.pool()).await?;
         }
     }
     let back = format!("/cms-admin/page-types/{id}/translate?locale={}", locale.code);
@@ -1822,7 +1871,11 @@ async fn save_type_content(
         // posted `inline__<panel>__<idx>__<field>` keys and hand
         // them to the handler. Handler is responsible for the
         // upsert / delete-removed semantics.
-        for spec in handler.inline_panels() {
+        for spec in handler.inline_panels(pool, page_id).await? {
+            if spec.per_row {
+                // Per-row panels save card by card, never with the page.
+                continue;
+            }
             let rows = extract_inline_panel_rows(form_map, &spec);
             handler.save_inline_panel(pool, page_id, &spec.name, &rows).await?;
         }
@@ -1927,18 +1980,35 @@ async fn insert_type_fields(
     // section with N rows; per-row fields come from the spec.
     let mut inline_panels: Vec<serde_json::Value> = Vec::new();
     if let Some(h) = handler {
-        for spec in h.inline_panels() {
+        for spec in h.inline_panels(pool, page_id).await.unwrap_or_default() {
+            if spec.per_row {
+                // Titles only: each card's fields load when it is opened.
+                let rows = if page_id > 0 { h.inline_rows(pool, page_id, &spec.name).await.unwrap_or_default() } else { Vec::new() };
+                inline_panels.push(inline_panel_lazy_ctx(&spec, &rows, page_id));
+                continue;
+            }
             let rows = h
                 .load_inline_panel(pool, page_id, &spec.name)
                 .await
                 .unwrap_or_default();
-            inline_panels.push(serde_json::json!({
-                "spec": spec,
-                "rows": rows,
+            inline_panels.push(inline_panel_ctx(&spec, &rows));
+        }
+    }
+    // Panels that asked for a tab of their own, one tab per label, in
+    // the order the panels were declared.
+    let mut inline_tabs: Vec<serde_json::Value> = Vec::new();
+    for p in &inline_panels {
+        let Some(slug) = p["tab_slug"].as_str() else { continue };
+        if !inline_tabs.iter().any(|t| t["slug"] == slug) {
+            inline_tabs.push(serde_json::json!({
+                "slug": slug,
+                "label": p["spec"]["tab"],
+                "icon": p["spec"]["icon"],
             }));
         }
     }
     ctx.insert("inline_panels", &inline_panels);
+    ctx.insert("inline_tabs", &inline_tabs);
 }
 
 /// GET-side: build the editor HTML + rules island + upgrade flag for a
@@ -1991,12 +2061,16 @@ pub async fn components_index(
     if let Some(r) = ensure_builder_access(&tenant, session_user.as_ref()).await {
         return Ok(r);
     }
+    // Not paged: one row per component a developer defined. The page-type
+    // schemas are scanned once for every component's references, not
+    // once per component.
     let comps = crate::page_builder::model::all_components(tenant.pool()).await?;
+    let slugs: Vec<&str> = comps.iter().map(|c| c.slug.as_str()).collect();
+    let ref_counts = crate::page_builder::model::component_reference_counts(tenant.pool(), &slugs)
+        .await
+        .unwrap_or_default();
     let mut rows = Vec::with_capacity(comps.len());
     for c in &comps {
-        let refs = crate::page_builder::model::component_references(tenant.pool(), &c.slug)
-            .await
-            .unwrap_or_default();
         rows.push(serde_json::json!({
             "id": c.id.get().copied(),
             "slug": c.slug,
@@ -2004,7 +2078,7 @@ pub async fn components_index(
             "icon": if c.icon.is_empty() { "extension".to_owned() } else { c.icon.clone() },
             "description": c.description,
             "version": c.version,
-            "ref_count": refs.len(),
+            "ref_count": ref_counts.get(c.slug.as_str()).copied().unwrap_or(0),
         }));
     }
     let mut ctx = Context::new();
@@ -2436,7 +2510,7 @@ pub async fn page_type_update(
     pt.allowed_parent_types = type_list_json(&form.allowed_parents);
     pt.allowed_child_types = type_list_json(&form.allowed_children);
     pt.workflow = form.workflow.trim().to_owned();
-    pt.save_pool(tenant.pool()).await?;
+    pt.save(tenant.pool()).await?;
     redirect_named_with_message(
         "rcms-admin:page-types",
         MsgLevel::Success,
@@ -2525,7 +2599,7 @@ pub async fn page_type_create(
         created_at: rustango::sql::Auto::Unset,
         updated_at: rustango::sql::Auto::Unset,
     };
-    row.insert_pool(tenant.pool()).await?;
+    row.insert(tenant.pool()).await?;
     let new_id = row.id.get().copied().unwrap_or_default();
     // Seed an empty draft schema so the builder opens cleanly.
     let created_by = session_user.as_ref().and_then(|u| u.id.get().copied());
@@ -2572,12 +2646,8 @@ pub async fn page_type_delete(
             &headers,
         );
     }
-    let page_count = Page::objects()
-        .where_(Page::page_type_id.eq(id))
-        .fetch(tenant.pool())
-        .await
-        .map(|v| v.len())
-        .unwrap_or(0);
+    // A failed count must stop the delete, not read as "no pages" (#769).
+    let page_count = Page::objects().where_(Page::page_type_id.eq(id)).count(tenant.pool()).await?;
     if page_count > 0 {
         return redirect_named_with_message(
             "rcms-admin:page-types",
@@ -2591,9 +2661,9 @@ pub async fn page_type_delete(
         .await
         .unwrap_or_default()
     {
-        row.delete_pool(tenant.pool()).await.log_warn("page-builder schema version not deleted");
+        row.delete(tenant.pool()).await.log_warn("page-builder schema version not deleted");
     }
-    pt.delete_pool(tenant.pool()).await?;
+    pt.delete(tenant.pool()).await?;
     redirect_named_with_message(
         "rcms-admin:page-types",
         MsgLevel::Success,
@@ -2619,25 +2689,25 @@ fn translation_canonical_html(widget_tag: &str, canonical: &str) -> String {
 /// its existing per-locale override. Returns `[]` when the type has no
 /// published schema. Paths are `builder.<…>` (see `values::…leaves`).
 async fn builder_translation_groups(
-    tenant: &Tenant,
+    pool: &rustango::sql::Pool,
     page_id: i64,
     page_type_id: i64,
     existing: &std::collections::HashMap<String, String>,
 ) -> (Vec<serde_json::Value>, std::collections::HashSet<String>) {
     let mut paths = std::collections::HashSet::new();
     let Ok(Some(row)) =
-        crate::page_builder::model::published_for(tenant.pool(), page_type_id).await
+        crate::page_builder::model::published_for(pool, page_type_id).await
     else {
         return (Vec::new(), paths);
     };
     let Ok(doc) = crate::page_builder::parse_schema(&row.document) else {
         return (Vec::new(), paths);
     };
-    let components = crate::page_builder::model::component_map(tenant.pool())
+    let components = crate::page_builder::model::component_map(pool)
         .await
         .unwrap_or_default();
     let compiled = crate::page_builder::compile(&doc, &components, row.version.max(1) as u32);
-    let (values, _) = crate::page_builder::values::load_upgraded(tenant.pool(), page_id, &compiled)
+    let (values, _) = crate::page_builder::values::load_upgraded(pool, page_id, &compiled)
         .await
         .unwrap_or_else(|_| (serde_json::json!({}), Default::default()));
     let leaves = crate::page_builder::values::builder_translatable_leaves(&compiled, &values);
@@ -2699,17 +2769,17 @@ pub async fn media_bulk_move_collection(
         .find(|(k, _)| k == "kind")
         .map(|(_, v)| v.clone())
         .unwrap_or_else(|| "image".to_owned());
-    let mut touched = 0;
-    for id in ids {
-        if let Some(mut m) = Media::objects()
-            .where_(Media::id.eq(id))
-            .first(tenant.pool())
-            .await?
-        {
-            m.collection_id = target;
-            m.save_pool(tenant.pool()).await?;
-            touched += 1;
-        }
+    // One UPDATE per chunk of the selection (#631), not a read and a
+    // write per row; the count is what the database actually changed.
+    // The count is of matched rows: MySQL reports only rows it changed,
+    // so items already in the target would read as "Moved 0".
+    let mut touched: i64 = 0;
+    for chunk in ids.chunks(500) {
+        use rustango::sql::UpdaterPool as _;
+        let selected = || Media::objects().where_(Media::id.is_in(chunk.to_vec()));
+        touched += selected().count(tenant.pool()).await?;
+        let value = target.map_or(rustango::core::SqlValue::Null, rustango::core::SqlValue::I64);
+        selected().update().set("collection_id", value).execute_pool(tenant.pool()).await?;
     }
     let redirect_url = if kind == "document" {
         "rcms-admin:documents:list"
@@ -2881,7 +2951,7 @@ pub async fn collection_privacy_submit(
         crate::collection_view_restriction::direct_for_collection(tenant.pool(), id).await?;
     if form.kind == "none" {
         if let Some(row) = existing {
-            row.delete_pool(tenant.pool()).await?;
+            row.delete(tenant.pool()).await?;
             return redirect_named_with_params_and_message(
                 "rcms-admin:media:collection-permissions",
                 &[("id", id.to_string())],
@@ -2967,7 +3037,7 @@ pub async fn collection_privacy_submit(
             row.password_hash = password_hash;
             row.group_ids = group_json;
             row.codenames = codenames_json;
-            row.save_pool(tenant.pool()).await?;
+            row.save(tenant.pool()).await?;
         }
         None => {
             let mut row = crate::collection_view_restriction::CollectionViewRestriction {
@@ -2980,7 +3050,7 @@ pub async fn collection_privacy_submit(
                 created_at: Auto::Unset,
                 updated_at: Auto::Unset,
             };
-            row.insert_pool(tenant.pool()).await?;
+            row.insert(tenant.pool()).await?;
         }
     }
     redirect_named_with_params_and_message(
@@ -3027,7 +3097,7 @@ pub async fn collection_permissions_submit(
     for p in &existing {
         let key = (p.role_id, p.permission.clone());
         if !want.contains(&key) {
-            p.clone().delete_pool(tenant.pool()).await?;
+            p.clone().delete(tenant.pool()).await?;
         }
     }
     for (role_id, action) in &want {
@@ -3039,7 +3109,7 @@ pub async fn collection_permissions_submit(
                 permission: action.clone(),
                 created_at: Auto::Unset,
             };
-            row.insert_pool(tenant.pool()).await?;
+            row.insert(tenant.pool()).await?;
         }
     }
     Ok(axum::http::StatusCode::NO_CONTENT.into_response())
@@ -3094,7 +3164,7 @@ pub async fn page_permissions_submit(
     for p in &existing {
         let key = (p.role_id, p.permission.clone());
         if !want.contains(&key) {
-            p.clone().delete_pool(tenant.pool()).await?;
+            p.clone().delete(tenant.pool()).await?;
         }
     }
     // Insert rows that don't exist yet.
@@ -3107,7 +3177,7 @@ pub async fn page_permissions_submit(
                 permission: action.clone(),
                 created_at: Auto::Unset,
             };
-            row.insert_pool(tenant.pool()).await?;
+            row.insert(tenant.pool()).await?;
         }
     }
 
@@ -3220,28 +3290,40 @@ fn render_extra_tabs(
         .collect()
 }
 
-/// GET /cms-admin/x/{slug} — custom admin page dispatcher. Looks up the
-/// registered [`AdminPageHandler`](super::admin_page::AdminPageHandler)
-/// matching `slug` and forwards to its `render`. Unknown slugs map
-/// to 404.
+/// `/cms-admin/x/{slug}` and `/cms-admin/x/{slug}/{action}`: the custom
+/// admin page dispatcher. Finds the
+/// [`AdminPageHandler`](super::admin_page::AdminPageHandler) registered
+/// for `slug` and hands a `GET` to its `render`, a `POST` to its `post`
+/// with the parsed form. The route gate has already checked the page's
+/// codename; the host's CSRF layer has checked the token. Unknown slugs
+/// are 404.
 pub async fn admin_page_dispatch(
     State(state): State<super::AdminState>,
     tenant: Tenant,
+    method: axum::http::Method,
+    uri: axum::http::Uri,
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
-    Path(slug): Path<String>,
+    Path(params): Path<std::collections::HashMap<String, String>>,
+    body: axum::body::Bytes,
 ) -> Result<Response, AdminError> {
-    match super::admin_page::find_admin_page(&slug) {
-        Some(handler) => Ok(handler
-            .render(super::admin_page::AdminPageCtx {
-                tera: &state.tera,
-                tenant: &tenant,
-                headers: &headers,
-                user: session_user.as_ref(),
-            })
-            .await),
-        None => Err(AdminError::NotFound(0)),
-    }
+    let slug = params.get("slug").map(String::as_str).unwrap_or_default();
+    let Some(handler) = super::admin_page::find_admin_page(slug) else {
+        return Err(AdminError::NotFound(0));
+    };
+    let ctx = super::admin_page::AdminPageCtx {
+        tera: &state.tera,
+        tenant: &tenant,
+        headers: &headers,
+        user: session_user.as_ref(),
+        uri: &uri,
+        action: params.get("action").map(String::as_str),
+    };
+    Ok(if method == axum::http::Method::POST {
+        handler.post(ctx, super::admin_page::AdminForm::parse(&body)).await
+    } else {
+        handler.render(ctx).await
+    })
 }
 
 /// Load the active admin theme + its brand colors and stuff the
@@ -3354,7 +3436,7 @@ pub async fn page_list(
         Ok(result) if !result.changed_urls.is_empty() => {
             crate::task_queue::purge_urls(
                 state.cache_invalidator.clone(),
-                tenant.org.slug.clone(),
+                tenant_key(&tenant.org)?,
                 result.changed_urls,
             )
             .await;
@@ -3721,6 +3803,234 @@ pub async fn page_list(
 /// that index. The optional `inline__<panel>__<row_idx>____deleted`
 /// sentinel hides a row entirely (so the editor can remove rows
 /// without re-numbering everything).
+/// The index placeholder in an inline panel's blank row template; the
+/// editor's add button swaps it for the next free row index.
+const INLINE_ROW_PLACEHOLDER: &str = "__IDX__";
+
+/// A loaded row value as the text an input shows.
+fn inline_value_text(v: &serde_json::Value) -> String {
+    match v {
+        serde_json::Value::Null => String::new(),
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Bool(b) => if *b { "true".to_owned() } else { String::new() },
+        other => other.to_string(),
+    }
+}
+
+/// One row's widgets, named `inline__<panel>__<idx>__<field>` and filled
+/// from `row` (blank for the add template).
+fn inline_row_widgets(
+    spec: &crate::page_type::InlinePanelSpec,
+    idx: &str,
+    row: Option<&serde_json::Map<String, serde_json::Value>>,
+) -> Vec<crate::widget::Widget> {
+    spec.row_widgets()
+        .into_iter()
+        .map(|mut w| {
+            if let Some(v) = row.and_then(|r| r.get(&w.name)) {
+                w.value = inline_value_text(v);
+            }
+            w.name = format!("inline__{}__{idx}__{}", spec.name, w.name);
+            w
+        })
+        .collect()
+}
+
+/// Template context for one inline panel: its spec, each loaded row as
+/// named widgets (with the row's `id` and `__title`), and a blank row
+/// the add button clones.
+fn inline_panel_ctx(
+    spec: &crate::page_type::InlinePanelSpec,
+    rows: &[serde_json::Map<String, serde_json::Value>],
+) -> serde_json::Value {
+    // The blank row the add button clones comes first, flagged
+    // `template`, so the editor renders every card from one loop.
+    let mut cards: Vec<serde_json::Value> = vec![serde_json::json!({
+        "template": true,
+        "idx": INLINE_ROW_PLACEHOLDER,
+        "id": "",
+        "title": "",
+        "widgets": inline_row_widgets(spec, INLINE_ROW_PLACEHOLDER, None),
+    })];
+    cards.extend(rows.iter().enumerate().map(|(i, row)| {
+        serde_json::json!({
+            "template": false,
+            "idx": i,
+            "id": row.get("id").map(inline_value_text).unwrap_or_default(),
+            "title": row.get("__title").map(inline_value_text).unwrap_or_default(),
+            "widgets": inline_row_widgets(spec, &i.to_string(), Some(row)),
+        })
+    }));
+    let tab_slug = spec.tab.as_deref().map(|t| format!("inline-{}", slugify(t)));
+    serde_json::json!({
+        "spec": spec,
+        "cards": cards,
+        "row_count": rows.len(),
+        "placeholder": INLINE_ROW_PLACEHOLDER,
+        "tab_slug": tab_slug,
+    })
+}
+
+/// Template context for a per-row panel: only each row's id and title.
+fn inline_panel_lazy_ctx(
+    spec: &crate::page_type::InlinePanelSpec,
+    rows: &[crate::page_type::InlineRowSummary],
+    page_id: i64,
+) -> serde_json::Value {
+    let tab_slug = spec.tab.as_deref().map(|t| format!("inline-{}", slugify(t)));
+    let cards: Vec<serde_json::Value> = rows
+        .iter()
+        .map(|r| serde_json::json!({ "template": false, "id": r.id.to_string(), "title": r.title }))
+        .collect();
+    serde_json::json!({
+        "spec": spec,
+        "cards": cards,
+        "row_count": rows.len(),
+        "tab_slug": tab_slug,
+        // A page not saved yet has no rows to attach cards to.
+        "endpoint": (page_id > 0).then(|| format!("/cms-admin/pages/{page_id}/inline/{}", spec.name)),
+    })
+}
+
+/// The page's type handler and the per-row panel named `panel`, or 404.
+async fn per_row_panel(
+    pool: &rustango::sql::Pool,
+    page_id: i64,
+    panel: &str,
+) -> Result<(Box<dyn crate::page_type::PageTypeHandler>, crate::page_type::InlinePanelSpec), AdminError> {
+    let page = Page::objects()
+        .where_(Page::id.eq(page_id))
+        .first(pool)
+        .await?
+        .ok_or(AdminError::NotFound(page_id))?;
+    let pt = PageType::objects()
+        .where_(PageType::id.eq(page.page_type_id))
+        .first(pool)
+        .await?
+        .ok_or(AdminError::NotFound(page_id))?;
+    let handler = find_handler(&pt.type_name).ok_or(AdminError::NotFound(page_id))?;
+    let spec = handler
+        .inline_panels(pool, page_id)
+        .await?
+        .into_iter()
+        .find(|s| s.name == panel && s.per_row)
+        .ok_or(AdminError::NotFound(page_id))?;
+    Ok((handler, spec))
+}
+
+/// `new-row` or a row id from the URL (not `new`: the route gate reads a POST ending in `/new` as adding a page).
+fn inline_row_id(raw: &str) -> Result<Option<i64>, AdminError> {
+    if raw == "new-row" {
+        return Ok(None);
+    }
+    raw.parse::<i64>().map(Some).map_err(|_| AdminError::Validation(format!("bad row id `{raw}`")))
+}
+
+#[derive(serde::Deserialize, Default)]
+pub struct InlineCardQuery {
+    /// The DOM prefix the card's field names carry (unique per open card).
+    #[serde(default)]
+    pub prefix: String,
+}
+
+/// GET /cms-admin/pages/{id}/inline/{panel}/{row} — one card's fields
+/// (`row` = `new-row` for a blank one), as an HTML fragment. Field names
+/// carry `?prefix=` so two open cards never share an element id; the
+/// editor strips it again when it saves.
+pub async fn inline_card_body(
+    State(state): State<super::AdminState>,
+    tenant: Tenant,
+    headers: HeaderMap,
+    Path((page_id, panel, row)): Path<(i64, String, String)>,
+    Query(q): Query<InlineCardQuery>,
+) -> Result<Response, AdminError> {
+    let pool = tenant.pool();
+    let row_id = inline_row_id(&row)?;
+    let (handler, spec) = per_row_panel(pool, page_id, &panel).await?;
+    let Some(values) = handler.inline_row(pool, page_id, &panel, row_id).await? else {
+        return Err(AdminError::NotFound(page_id));
+    };
+    let prefix: String = q.prefix.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').collect();
+    let widgets: Vec<crate::widget::Widget> = spec
+        .row_widgets()
+        .into_iter()
+        .map(|mut w| {
+            if let Some(v) = values.get(&w.name) {
+                w.value = inline_value_text(v);
+            }
+            w.name = format!("{prefix}{}", w.name);
+            w
+        })
+        .collect();
+    let mut ctx = Context::new();
+    ctx.insert("widgets", &widgets);
+    ctx.insert("can_save", &(row_id.is_some() || spec.can_add));
+    render_with_csrf(&state, &headers, "rcms_admin/_inline_card.html", &mut ctx)
+}
+
+/// POST /cms-admin/pages/{id}/inline/{panel}/{row} — save one card.
+/// JSON: `{ok, id, title}` or `{ok: false, errors: [{field, message}]}`.
+pub async fn inline_card_save(
+    tenant: Tenant,
+    Path((page_id, panel, row)): Path<(i64, String, String)>,
+    body: axum::body::Bytes,
+) -> Result<Response, AdminError> {
+    let pool = tenant.pool();
+    let row_id = inline_row_id(&row)?;
+    let (handler, spec) = per_row_panel(pool, page_id, &panel).await?;
+    if row_id.is_none() && !spec.can_add {
+        return Ok((axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({ "ok": false }))).into_response());
+    }
+    let values: serde_json::Map<String, serde_json::Value> = super::admin_page::AdminForm::parse(&body)
+        .to_map()
+        .into_iter()
+        .filter(|(k, _)| k != "_csrf")
+        .map(|(k, v)| (k, serde_json::Value::String(v)))
+        .collect();
+    let out = match handler.save_inline_row(pool, page_id, &panel, row_id, &values).await? {
+        crate::page_type::InlineRowSaved::Saved { id, title } => serde_json::json!({ "ok": true, "id": id, "title": title }),
+        crate::page_type::InlineRowSaved::Invalid(errors) => serde_json::json!({
+            "ok": false,
+            "errors": errors.iter().map(|e| serde_json::json!({ "field": e.field, "message": e.message })).collect::<Vec<_>>(),
+        }),
+    };
+    let status = if out["ok"] == true { axum::http::StatusCode::OK } else { axum::http::StatusCode::UNPROCESSABLE_ENTITY };
+    Ok((status, axum::Json(out)).into_response())
+}
+
+/// POST /cms-admin/pages/{id}/inline/{panel}/{row}/remove — remove one row.
+pub async fn inline_card_remove(
+    tenant: Tenant,
+    Path((page_id, panel, row)): Path<(i64, String, String)>,
+) -> Result<Response, AdminError> {
+    let pool = tenant.pool();
+    let Some(row_id) = inline_row_id(&row)? else {
+        return Err(AdminError::NotFound(page_id));
+    };
+    let (handler, spec) = per_row_panel(pool, page_id, &panel).await?;
+    let removed = spec.can_delete && handler.delete_inline_row(pool, page_id, &panel, row_id).await?;
+    let status = if removed { axum::http::StatusCode::OK } else { axum::http::StatusCode::FORBIDDEN };
+    Ok((status, axum::Json(serde_json::json!({ "ok": removed }))).into_response())
+}
+
+/// POST /cms-admin/pages/{id}/inline/{panel}/order — `ids` is a JSON
+/// array of row ids, first to last.
+pub async fn inline_cards_order(
+    tenant: Tenant,
+    Path((page_id, panel)): Path<(i64, String)>,
+    body: axum::body::Bytes,
+) -> Result<Response, AdminError> {
+    let pool = tenant.pool();
+    let (handler, spec) = per_row_panel(pool, page_id, &panel).await?;
+    if !spec.can_order {
+        return Ok((axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({ "ok": false }))).into_response());
+    }
+    let form = super::admin_page::AdminForm::parse(&body);
+    let ids: Vec<i64> = serde_json::from_str(&form.text("ids")).unwrap_or_default();
+    handler.reorder_inline_rows(pool, page_id, &panel, &ids).await?;
+    Ok(axum::Json(serde_json::json!({ "ok": true })).into_response())
+}
+
 fn extract_inline_panel_rows(
     form: &std::collections::HashMap<String, String>,
     spec: &crate::page_type::InlinePanelSpec,
@@ -3728,6 +4038,7 @@ fn extract_inline_panel_rows(
     let mut by_idx: std::collections::BTreeMap<usize, serde_json::Map<String, serde_json::Value>> =
         std::collections::BTreeMap::new();
     let prefix = format!("inline__{}__", spec.name);
+    let names: Vec<String> = spec.row_widgets().into_iter().map(|w| w.name).collect();
     for (key, value) in form {
         let Some(rest) = key.strip_prefix(&prefix) else {
             continue;
@@ -3748,7 +4059,7 @@ fn extract_inline_panel_rows(
             by_idx.insert(idx, row);
             continue;
         }
-        if !spec.fields.iter().any(|f| f.name == field_name) {
+        if field_name != "id" && !names.iter().any(|n| n == field_name) {
             continue;
         }
         let row = by_idx.entry(idx).or_default();
@@ -3944,7 +4255,7 @@ pub async fn page_new_form(
     ctx.insert("page_tags", &Vec::<String>::new());
     ctx.insert("page_tags_csv", "");
     ctx.insert("all_tags", &Vec::<serde_json::Value>::new());
-    insert_category_choices(&mut ctx, tenant.pool(), None).await;
+    insert_category_choices(&mut ctx, tenant.pool(), None, None).await;
     render_with_csrf(&state, &headers, "rcms_admin/page_form.html", &mut ctx)
 }
 
@@ -4023,7 +4334,6 @@ pub(crate) async fn dedup_slug_under_parent(
 
 /// Whether a root page already has the empty slug, i.e. serves "/".
 async fn front_page_taken(pool: &rustango::sql::Pool) -> Result<bool, AdminError> {
-    use rustango::sql::CounterPool as _;
     let n = Page::objects()
         .where_(Page::parent_id.is_null())
         .where_(Page::slug.eq(String::new()))
@@ -4033,15 +4343,32 @@ async fn front_page_taken(pool: &rustango::sql::Pool) -> Result<bool, AdminError
 }
 
 /// The page editor's Categories field. A failed lookup leaves the
-/// field out rather than failing the form.
-async fn insert_category_choices(ctx: &mut tera::Context, pool: &rustango::sql::Pool, page_id: Option<i64>) {
-    let (groups, checked) = match crate::category::assign::editor_groups(pool, page_id).await {
+/// field out rather than failing the form. `posted` (the form's raw
+/// value, after a refused save) checks those ids instead of the stored.
+async fn insert_category_choices(
+    ctx: &mut tera::Context,
+    pool: &rustango::sql::Pool,
+    page_id: Option<i64>,
+    posted: Option<&str>,
+) {
+    let (mut groups, mut checked) = match crate::category::assign::editor_groups(pool, page_id).await {
         Ok(v) => v,
         Err(e) => {
             tracing::warn!(error = %e, "category choices not loaded; the field is hidden");
             Default::default()
         }
     };
+    if let Some(raw) = posted {
+        let ids = crate::category::assign::parse_id_list(raw);
+        let mut ticked = Vec::new();
+        for o in groups.iter_mut().flat_map(|g| g.options.iter_mut()) {
+            o.checked = ids.contains(&o.id);
+            if o.checked {
+                ticked.push(o.id.to_string());
+            }
+        }
+        checked = serde_json::to_string(&ticked).unwrap_or_else(|_| "[]".to_owned());
+    }
     ctx.insert("category_groups", &groups);
     ctx.insert("page_category_ids", &checked);
 }
@@ -4171,7 +4498,7 @@ pub async fn page_new_submit(
             page.twitter_card = tc.to_owned();
         }
     }
-    page.save_pool(tenant.pool()).await?;
+    page.save(tenant.pool()).await?;
     let new_id = page.id.get().copied().unwrap_or_default();
     // Tags and categories are on the new-page form too; they used to be
     // dropped here, and only an edit saved them.
@@ -4225,9 +4552,33 @@ pub async fn page_edit_form(
     Path(id): Path<i64>,
     Query(q): Query<EditQuery>,
 ) -> Result<Response, AdminError> {
+    render_page_edit_form(&state, tenant.pool(), &tenant.org, &headers, session_user, id, q, None).await
+}
+
+/// A save refused because another editor changed the same fields
+/// (#903): the form is shown again with the editor's values, the
+/// conflicts listed, and a baseline of the row as it is now.
+struct EditConflict {
+    conflicts: Vec<crate::page_baseline::FieldConflict>,
+    /// The stored row with the editor's changes on top.
+    page: Page,
+    /// The posted form, for the tags and the type's own fields.
+    form: std::collections::HashMap<String, String>,
+}
+
+async fn render_page_edit_form(
+    state: &super::AdminState,
+    pool: &rustango::sql::Pool,
+    org: &rustango::tenancy::Org,
+    headers: &HeaderMap,
+    session_user: Option<rustango::tenancy::auth::User>,
+    id: i64,
+    q: EditQuery,
+    conflict: Option<EditConflict>,
+) -> Result<Response, AdminError> {
     let page = Page::objects()
         .where_(Page::id.eq(id))
-        .first(tenant.pool())
+        .first(pool)
         .await?
         .ok_or(AdminError::NotFound(id))?;
 
@@ -4250,7 +4601,7 @@ pub async fn page_edit_form(
     let locales: Vec<Locale> = Locale::objects()
         .where_(Locale::active.eq(true))
         .order_by(&[("is_default", false), ("code", false)])
-        .fetch(tenant.pool())
+        .fetch(pool)
         .await?;
     let editing_locale: Option<Locale> = match q.locale.as_deref() {
         Some(code) if !code.is_empty() => locales.iter().find(|l| l.code == code).cloned(),
@@ -4260,13 +4611,13 @@ pub async fn page_edit_form(
         .as_ref()
         .map(|l| !l.is_default)
         .unwrap_or(false);
-    let pending = crate::pending_change::for_page(tenant.pool(), id).await?;
+    let pending = crate::pending_change::for_page(pool, id).await?;
     let existing_translations = if translation_mode {
         let lid = editing_locale
             .as_ref()
             .and_then(|l| l.id.get().copied())
             .unwrap_or(0);
-        crate::translation::fetch_for(tenant.pool(), id, lid)
+        crate::translation::fetch_for(pool, id, lid)
             .await
             .unwrap_or_default()
     } else {
@@ -4276,7 +4627,7 @@ pub async fn page_edit_form(
     // Theme picker dropdown options.
     let themes_for_picker: Vec<crate::theme::Theme> = crate::theme::Theme::objects()
         .order_by(&[("name", false)])
-        .fetch(tenant.pool())
+        .fetch(pool)
         .await?;
 
     // Page type is permanent — assigned once at create-time, never
@@ -4286,7 +4637,7 @@ pub async fn page_edit_form(
     // keys as a defense-in-depth measure.
     let chosen_type: PageType = PageType::objects()
         .where_(PageType::id.eq(page.page_type_id))
-        .first(tenant.pool())
+        .first(pool)
         .await?
         .ok_or_else(|| {
             AdminError::Validation(format!(
@@ -4296,7 +4647,7 @@ pub async fn page_edit_form(
         })?;
 
     // Public URL for the "View live" link in the edit form chrome.
-    let ancestors = page.ancestors(tenant.pool()).await.unwrap_or_default();
+    let ancestors = page.ancestors(pool).await.unwrap_or_default();
     let mut segments: Vec<&str> = ancestors
         .iter()
         .filter(|a| !a.slug.is_empty())
@@ -4323,7 +4674,7 @@ pub async fn page_edit_form(
         .where_(crate::revision::Revision::page_id.eq(id))
         .order_by(&[("sequence", true)]) // desc
         .limit(20)
-        .fetch(tenant.pool())
+        .fetch(pool)
         .await?;
 
     // Sort existing translations into "core" (title / seo_title /
@@ -4348,8 +4699,8 @@ pub async fn page_edit_form(
     extra_translations.sort_by(|a, b| a.0.cmp(&b.0));
 
     let mut ctx = Context::new();
-    add_chrome(&mut ctx, &tenant, "pages", session_user.as_ref()).await;
-    add_admin_theme(&mut ctx, tenant.pool()).await;
+    add_chrome_for(&mut ctx, pool, org, "pages", session_user.as_ref()).await;
+    add_admin_theme(&mut ctx, pool).await;
     ctx.insert("mode", "edit");
     ctx.insert("parent", &Option::<Page>::None);
     ctx.insert("chosen_type", &chosen_type);
@@ -4367,7 +4718,7 @@ pub async fn page_edit_form(
     // hides the action.
     // The site-wide template, which the page may override. A lookup
     // failure is not fatal — it costs the preview action, not the editor.
-    let site_preview_base = match crate::preview_url::configured_base(tenant.pool()).await {
+    let site_preview_base = match crate::preview_url::configured_base(pool).await {
         Ok(base) => base,
         Err(e) => {
             tracing::warn!(
@@ -4383,7 +4734,7 @@ pub async fn page_edit_form(
     let headless_preview_url = if site_preview_base.is_some() || !page.preview_path.trim().is_empty()
     {
         let token = crate::preview_token::mint(
-            &tenant.org.slug,
+            &tenant_key(org)?,
             id,
             chrono::Utc::now().timestamp() + PREVIEW_TOKEN_TTL_SECS,
         );
@@ -4426,14 +4777,14 @@ pub async fn page_edit_form(
     // this page? Drives the Subscribe / Unsubscribe toggle on the
     // Status field.
     let is_subscribed = match session_user.as_ref().and_then(|u| u.id.get().copied()) {
-        Some(uid) => crate::page_subscription::is_subscribed(tenant.pool(), id, uid)
+        Some(uid) => crate::page_subscription::is_subscribed(pool, id, uid)
             .await
             .unwrap_or(false),
         None => false,
     };
     ctx.insert("is_subscribed", &is_subscribed);
     // #189 — page tags.
-    let page_tags: Vec<String> = crate::page_tag::tags_for_page(tenant.pool(), id)
+    let page_tags: Vec<String> = crate::page_tag::tags_for_page(pool, id)
         .await
         .unwrap_or_default()
         .into_iter()
@@ -4441,20 +4792,38 @@ pub async fn page_edit_form(
         .collect();
     let page_tags_csv = page_tags.join(", ");
     ctx.insert("page_tags", &page_tags);
-    ctx.insert("page_tags_csv", &page_tags_csv);
-    let all_tags = crate::page_tag::all_tags(tenant.pool())
+    ctx.insert(
+        "page_tags_csv",
+        conflict.as_ref().and_then(|c| c.form.get("tags")).unwrap_or(&page_tags_csv),
+    );
+    // #903 — what this form loaded, so its save can tell this editor's
+    // changes from anyone else's.
+    ctx.insert(
+        "page_baseline",
+        &crate::page_baseline::Baseline::of(&org.slug, &page).token(),
+    );
+    let all_tags = crate::page_tag::all_tags(pool)
         .await
         .unwrap_or_default()
         .into_iter()
         .map(|(name, count)| serde_json::json!({ "name": name, "count": count }))
         .collect::<Vec<_>>();
     ctx.insert("all_tags", &all_tags);
-    insert_category_choices(&mut ctx, tenant.pool(), Some(id)).await;
+    insert_category_choices(
+        &mut ctx,
+        pool,
+        Some(id),
+        conflict
+            .as_ref()
+            .and_then(|c| c.form.get(crate::category::assign::FORM_KEY))
+            .map(String::as_str),
+    )
+    .await;
     // #146/#419 — inbound usage ("what links here"), aggregated per
     // referrer with resolved titles + a "used in N places" count.
     // Best-effort; failure leaves the panel empty.
     let usage =
-        crate::reference_index::usage_summary(tenant.pool(), crate::reference_index::KIND_PAGE, id)
+        crate::reference_index::usage_summary(pool, crate::reference_index::KIND_PAGE, id)
             .await;
     ctx.insert("usage", &usage);
 
@@ -4475,7 +4844,7 @@ pub async fn page_edit_form(
     // No share image chosen is fine when the page has a photo: the public
     // page uses it (see `meta_tags::fallback_share_image`).
     if content_findings.iter().any(|f| f.code == "missing_og_image")
-        && crate::meta_tags::fallback_share_image(tenant.pool(), &page).await.is_some()
+        && crate::meta_tags::fallback_share_image(pool, &page).await.is_some()
     {
         content_findings.retain(|f| f.code != "missing_og_image");
     }
@@ -4490,7 +4859,7 @@ pub async fn page_edit_form(
     // #192 — audit-log timeline for this page. Capped at 100 entries
     // for the inline table; the full set is downloadable via the CSV
     // export endpoint linked alongside the table.
-    let log_entries = crate::page_log::for_page(tenant.pool(), id, Some(100))
+    let log_entries = crate::page_log::for_page(pool, id, Some(100))
         .await
         .unwrap_or_default();
     let log_user_ids: std::collections::BTreeSet<i64> =
@@ -4503,7 +4872,7 @@ pub async fn page_edit_form(
                 rustango::tenancy::auth::User::id
                     .is_in(log_user_ids.into_iter().collect::<Vec<_>>()),
             )
-            .fetch(tenant.pool())
+            .fetch(pool)
             .await
             .unwrap_or_default()
             .into_iter()
@@ -4574,7 +4943,7 @@ pub async fn page_edit_form(
     // directly so new handlers can use the full 26-kind catalog
     // (Date, Color, Radio, Checkboxes, MultiSelect, Custom, …).
     let raw_widgets: Vec<crate::widget::Widget> = match &resolved_handler {
-        Some(h) => h.widgets(tenant.pool(), id).await.unwrap_or_default(),
+        Some(h) => h.widgets(pool, id).await.unwrap_or_default(),
         None => Vec::new(),
     };
 
@@ -4680,7 +5049,7 @@ pub async fn page_edit_form(
         // repeater/flex zone blocks). Listed as one more translatable
         // "field" alongside the StreamField leaves, keyed `builder.<…>`.
         let (builder_groups, builder_paths) =
-            builder_translation_groups(&tenant, id, page.page_type_id, &existing_translations)
+            builder_translation_groups(pool, id, page.page_type_id, &existing_translations)
                 .await;
         if !builder_groups.is_empty() {
             leaf_paths.extend(builder_paths);
@@ -4705,7 +5074,7 @@ pub async fn page_edit_form(
     // previews without subclassing a panel.
     let display_fields: Vec<crate::page_type::DisplayField> = match &resolved_handler {
         Some(h) => h
-            .display_fields(tenant.pool(), id)
+            .display_fields(pool, id)
             .await
             .unwrap_or_default(),
         None => Vec::new(),
@@ -4716,7 +5085,7 @@ pub async fn page_edit_form(
     // (Content / Promote / Theme / Revisions). See
     // `PageTypeHandler::extra_tabs`.
     let mut raw_extra_tabs: Vec<crate::page_type::TabSpec> = match &resolved_handler {
-        Some(h) => h.extra_tabs(tenant.pool(), id).await.unwrap_or_default(),
+        Some(h) => h.extra_tabs(pool, id).await.unwrap_or_default(),
         None => Vec::new(),
     };
 
@@ -4726,7 +5095,7 @@ pub async fn page_edit_form(
     let all_roles: Vec<rustango::tenancy::permissions::Role> =
         rustango::tenancy::permissions::Role::objects()
             .order_by(&[("name", false)])
-            .fetch(tenant.pool())
+            .fetch(pool)
             .await
             .unwrap_or_default();
 
@@ -4737,7 +5106,7 @@ pub async fn page_edit_form(
         let grants: Vec<crate::permissions::PagePermission> =
             crate::permissions::PagePermission::objects()
                 .where_(crate::permissions::PagePermission::page_id.eq(id))
-                .fetch(tenant.pool())
+                .fetch(pool)
                 .await
                 .unwrap_or_default();
         // (role_id, action) → granted?
@@ -4799,11 +5168,15 @@ pub async fn page_edit_form(
     ctx.insert("extra_tabs", &extra_tabs);
 
     // A change held for review shows in place of the live values.
-    let pending_form = pending.as_ref().filter(|_| !translation_mode).map(crate::pending_change::PendingChange::form_map);
+    // After a conflict, the editor's own values.
+    let pending_form = match conflict.as_ref() {
+        Some(c) => Some(c.form.clone()),
+        None => pending.as_ref().filter(|_| !translation_mode).map(crate::pending_change::PendingChange::form_map),
+    };
     insert_type_fields(
         &mut ctx,
         &state.tera,
-        tenant.pool(),
+        pool,
         resolved_handler.as_deref(),
         raw_widgets,
         id,
@@ -4829,7 +5202,7 @@ pub async fn page_edit_form(
     let mut lock_banner: Option<serde_json::Value> = None;
     let mut lock_owned_by_me = false;
     let reviewing_elsewhere = match session_user.as_ref() {
-        Some(u) => read_only_under_review(tenant.pool(), id, u).await?,
+        Some(u) => read_only_under_review(pool, id, u).await?,
         None => false,
     };
     if let Some(viewer_id) = session_user
@@ -4837,14 +5210,14 @@ pub async fn page_edit_form(
         .and_then(|u| u.id.get().copied())
         .filter(|_| !reviewing_elsewhere)
     {
-        match crate::lock::acquire(tenant.pool(), id, viewer_id, false).await {
+        match crate::lock::acquire(pool, id, viewer_id, false).await {
             Ok(crate::lock::AcquireOutcome::Acquired(_)) => {
                 lock_owned_by_me = true;
             }
             Ok(crate::lock::AcquireOutcome::Held(other)) => {
                 let holder_name = rustango::tenancy::auth::User::objects()
                     .where_(rustango::tenancy::auth::User::id.eq(other.user_id))
-                    .fetch(tenant.pool())
+                    .fetch(pool)
                     .await
                     .ok()
                     .and_then(|v| v.into_iter().next())
@@ -4881,12 +5254,12 @@ pub async fn page_edit_form(
     let mut workflow_history_ctx: Vec<serde_json::Value> = Vec::new();
     let mut workflow_viewer_can_decide = false;
     if let Some(slug) = workflow_slug.as_deref() {
-        let workflow = crate::workflow::find_by_name(tenant.pool(), slug)
+        let workflow = crate::workflow::find_by_name(pool, slug)
             .await
             .unwrap_or(None);
         if let Some(wf) = workflow {
             let wf_id = wf.id.get().copied().unwrap_or_default();
-            let tasks = crate::workflow::tasks_for(tenant.pool(), wf_id)
+            let tasks = crate::workflow::tasks_for(pool, wf_id)
                 .await
                 .unwrap_or_default();
             workflow_ctx = Some(serde_json::json!({
@@ -4898,7 +5271,7 @@ pub async fn page_edit_form(
             // The latest round, whatever its outcome: an approved page says
             // so (and can go through review again), not what an earlier
             // round ended with.
-            if let Some(state_row) = crate::workflow::latest_state_for_page(tenant.pool(), id)
+            if let Some(state_row) = crate::workflow::latest_state_for_page(pool, id)
                 .await
                 .unwrap_or(None)
             {
@@ -4916,7 +5289,7 @@ pub async fn page_edit_form(
                     if let Some(viewer) = session_user.as_ref() {
                         let viewer_id = viewer.id.get().copied().unwrap_or_default();
                         workflow_viewer_can_decide = viewer.is_superuser
-                            || user_is_in_role(tenant.pool(), viewer_id, current.role_id)
+                            || user_is_in_role(pool, viewer_id, current.role_id)
                                 .await
                                 .unwrap_or(false);
                     }
@@ -4929,7 +5302,7 @@ pub async fn page_edit_form(
                     "finished_at": state_row.finished_at,
                 }));
                 // Decision history — flatten task name + reviewer username.
-                if let Ok(history) = crate::workflow::history_for_page(tenant.pool(), id).await {
+                if let Ok(history) = crate::workflow::history_for_page(pool, id).await {
                     // Pre-resolve user ids to usernames in one batch.
                     let reviewer_ids: Vec<i64> =
                         history.iter().filter_map(|h| h.decided_by).collect();
@@ -4939,7 +5312,7 @@ pub async fn page_edit_form(
                         } else {
                             rustango::tenancy::auth::User::objects()
                                 .where_(rustango::tenancy::auth::User::id.is_in(reviewer_ids))
-                                .fetch(tenant.pool())
+                                .fetch(pool)
                                 .await
                                 .unwrap_or_default()
                                 .into_iter()
@@ -4991,14 +5364,17 @@ pub async fn page_edit_form(
     ctx.insert("workflow_viewer_can_decide", &workflow_viewer_can_decide);
     ctx.insert("workflow_locked", &workflow_locked);
     let review_required = !session_user.as_ref().is_some_and(|u| u.is_superuser)
-        && crate::workflow::review_workflow_for_type(tenant.pool(), page.page_type_id).await?.is_some();
+        && crate::workflow::review_workflow_for_type(pool, page.page_type_id).await?.is_some();
     ctx.insert("review_required", &review_required);
-    if let (Some(held), Some(form)) = (pending.as_ref(), pending_form.as_ref()) {
+    if let Some(c) = conflict.as_ref() {
+        ctx.insert("page", &c.page);
+        ctx.insert("edit_conflicts", &c.conflicts);
+    } else if let (Some(held), Some(form)) = (pending.as_ref(), pending_form.as_ref()) {
         ctx.insert("page", &overlay_pending_page(&page, form));
         let by = match held.created_by {
             Some(uid) => rustango::tenancy::auth::User::objects()
                 .where_(rustango::tenancy::auth::User::id.eq(uid))
-                .first(tenant.pool())
+                .first(pool)
                 .await?
                 .map(|u| u.username),
             None => None,
@@ -5010,7 +5386,7 @@ pub async fn page_edit_form(
     }
 
     // #76 — view-restriction context for the Privacy widget.
-    let view_restriction = crate::view_restriction::direct_for_page(tenant.pool(), id)
+    let view_restriction = crate::view_restriction::direct_for_page(pool, id)
         .await
         .unwrap_or(None);
     let restriction_kind = view_restriction
@@ -5072,11 +5448,11 @@ pub async fn page_edit_form(
     // resolve author usernames, and surface as JSON for the panel
     // template. Threads with `resolved_at` set render in a
     // collapsed "Resolved" bucket client-side.
-    let threads = crate::comment::threads_for_page(tenant.pool(), id)
+    let threads = crate::comment::threads_for_page(pool, id)
         .await
         .unwrap_or_default();
     let thread_ids: Vec<i64> = threads.iter().filter_map(|c| c.id.get().copied()).collect();
-    let replies_by_thread = crate::comment::replies_for_threads(tenant.pool(), &thread_ids)
+    let replies_by_thread = crate::comment::replies_for_threads(pool, &thread_ids)
         .await
         .unwrap_or_default();
     let mut comment_user_ids: std::collections::BTreeSet<i64> =
@@ -5091,7 +5467,7 @@ pub async fn page_edit_form(
     } else {
         rustango::tenancy::auth::User::objects()
             .where_(rustango::tenancy::auth::User::id.is_in(comment_user_ids.iter().copied()))
-            .fetch(tenant.pool())
+            .fetch(pool)
             .await
             .unwrap_or_default()
             .into_iter()
@@ -5154,7 +5530,11 @@ pub async fn page_edit_form(
         ]),
     );
 
-    render_with_csrf(&state, &headers, "rcms_admin/page_form.html", &mut ctx)
+    let mut response = render_with_csrf(state, headers, "rcms_admin/page_form.html", &mut ctx)?;
+    if conflict.is_some() {
+        *response.status_mut() = axum::http::StatusCode::CONFLICT;
+    }
+    Ok(response)
 }
 
 /// POST /cms-admin/pages/{id}/edit — apply edits.
@@ -5177,18 +5557,29 @@ pub async fn page_autosave_submit(
     Path(id): Path<i64>,
     Form(form_map): Form<std::collections::HashMap<String, String>>,
 ) -> Result<Response, AdminError> {
+    autosave_page(tenant.pool(), &tenant.org.slug, session_user.as_ref(), id, &form_map).await
+}
+
+/// [`page_autosave_submit`] from the tenant's pool and slug.
+async fn autosave_page(
+    pool: &rustango::sql::Pool,
+    tenant_slug: &str,
+    session_user: Option<&rustango::tenancy::auth::User>,
+    id: i64,
+    form_map: &std::collections::HashMap<String, String>,
+) -> Result<Response, AdminError> {
     use rustango::sql::FetcherPool as _;
     let mut page = Page::objects()
         .where_(Page::id.eq(id))
-        .first(tenant.pool())
+        .first(pool)
         .await?
         .ok_or(AdminError::NotFound(id))?;
     // Lock-respect — same as the regular save path. Refuse the
     // autosave when someone else holds the lock; the editor JS
     // surfaces this by suspending future autosaves until the user
     // reloads.
-    if let Some(viewer_id) = session_user.as_ref().and_then(|u| u.id.get().copied()) {
-        if let Ok(Some(lock)) = crate::lock::current(tenant.pool(), id).await {
+    if let Some(viewer_id) = session_user.and_then(|u| u.id.get().copied()) {
+        if let Ok(Some(lock)) = crate::lock::current(pool, id).await {
             if lock.user_id != viewer_id {
                 return Ok((axum::http::StatusCode::CONFLICT, "locked").into_response());
             }
@@ -5197,12 +5588,13 @@ pub async fn page_autosave_submit(
     // Autosave writes the page row itself, so it only touches drafts:
     // on a live (or scheduled) page it would publish half-typed edits,
     // skipping the publish right and any review. The real Save handles
-    // those pages; here nothing is written.
+    // those pages; here nothing is written. 202, not 204, so the editor
+    // doesn't report "Auto-saved" for a save that didn't happen (#903).
     if page.status != crate::page::PageStatus::Draft.as_str() {
-        return Ok((axum::http::StatusCode::NO_CONTENT, "").into_response());
+        return Ok((axum::http::StatusCode::ACCEPTED, "not saved: use Save on a live or scheduled page").into_response());
     }
-    if let Some(u) = session_user.as_ref() {
-        if read_only_under_review(tenant.pool(), id, u).await? {
+    if let Some(u) = session_user {
+        if read_only_under_review(pool, id, u).await? {
             return Ok((axum::http::StatusCode::CONFLICT, "under review").into_response());
         }
     }
@@ -5212,38 +5604,52 @@ pub async fn page_autosave_submit(
     // here without url_path made the next real save see "no slug change",
     // so the rename never cascaded to url_path, children or a 301 (#679).
     // The edited slug stays in the form and the real save applies it.
-    if let Some(v) = form_map.get("title") {
-        page.title = v.clone();
-    }
-    if let Some(v) = form_map.get("seo_title") {
-        page.seo_title = v.clone();
-    }
-    if let Some(v) = form_map.get("seo_description") {
-        page.seo_description = v.clone();
+    //
+    // #903 — with a baseline, a field is written only when this editor
+    // changed it and nobody else did; one changed on both sides waits for
+    // the real save's conflict screen. The written fields join the
+    // baseline returned in `x-rcms-baseline`, or the next save would take
+    // the editor's own autosave for someone else's change.
+    let mut baseline = crate::page_baseline::Baseline::from_form(form_map, tenant_slug, id);
+    let mut written: Vec<&'static str> = Vec::new();
+    for field in ["title", "seo_title", "seo_description"] {
+        let Some(v) = form_map.get(field) else { continue };
+        if let Some(b) = baseline.as_ref() {
+            let current = crate::page_baseline::value(&page, field);
+            if b.matches(field, v) || (!b.matches(field, &current) && *v != current) {
+                continue;
+            }
+        }
+        match field {
+            "title" => page.title.clone_from(v),
+            "seo_title" => page.seo_title.clone_from(v),
+            _ => page.seo_description.clone_from(v),
+        }
+        written.push(field);
     }
     // Skip status promotion. If the editor changed status, we
     // record it for the diff but don't fire any publish-side
     // effects.
     let posted_status = form_map.get("status").cloned();
-    page.save_pool(tenant.pool()).await?;
+    page.save(pool).await?;
     // Persist extension fields via handler (idempotent upserts).
     let pts: Vec<PageType> = PageType::objects()
         .where_(PageType::id.eq(page.page_type_id))
-        .fetch(tenant.pool())
+        .fetch(pool)
         .await?;
     if let Some(pt) = pts.into_iter().next() {
         if let Some(handler) = find_handler(&pt.type_name) {
             let ext_form =
-                sanitized_extension_form(handler.as_ref(), tenant.pool(), id, &form_map).await;
-            handler.save_extension(tenant.pool(), id, &ext_form).await?;
+                sanitized_extension_form(handler.as_ref(), pool, id, form_map).await;
+            handler.save_extension(pool, id, &ext_form).await?;
         }
     }
     // #564 — page-builder body values (additive to any code handler).
-    save_page_builder_values(tenant.pool(), page.page_type_id, id, &form_map).await?;
+    save_page_builder_values(pool, page.page_type_id, id, form_map).await?;
     // Capture an autosave-flagged revision. Failure here is
     // best-effort.
-    let by = session_user.as_ref().and_then(|u| u.id.get().copied());
-    if let Ok(mut rev) = crate::revision::capture(tenant.pool(), &page, by).await {
+    let by = session_user.and_then(|u| u.id.get().copied());
+    if let Ok(mut rev) = crate::revision::capture(pool, &page, by).await {
         // Inject the autosave marker into the snapshot before
         // re-saving the row. The snapshot column is a plain
         // serde_json::Value so we can mutate + re-persist.
@@ -5255,10 +5661,19 @@ pub async fn page_autosave_submit(
                     serde_json::Value::String(status),
                 );
             }
-            rev.save_pool(tenant.pool()).await.log_warn("autosave revision not stored");
+            rev.save(pool).await.log_warn("autosave revision not stored");
         }
     }
-    Ok((axum::http::StatusCode::NO_CONTENT, "").into_response())
+    let mut response = (axum::http::StatusCode::NO_CONTENT, "").into_response();
+    if let Some(b) = baseline.as_mut() {
+        b.rebase(&page, &written);
+        if let Ok(v) = axum::http::HeaderValue::from_str(&b.token()) {
+            response
+                .headers_mut()
+                .insert(crate::page_baseline::BASELINE_HEADER, v);
+        }
+    }
+    Ok(response)
 }
 
 /// Allow-list of POST keys that `page_edit_submit` re-feeds into
@@ -5341,6 +5756,154 @@ const PAGE_FORM_CANONICAL_KEYS: &[&str] = &[
     "tags",
 ];
 
+/// `posted`, unless it names the same moment as `stored` at the
+/// precision it was posted with: then the stored value, so an untouched
+/// input changes nothing. `minutes` is set when the posted text carried
+/// no seconds (the admin's schedule inputs); otherwise the comparison is
+/// to the second, so a script moving a time by seconds is not ignored.
+fn same_instant_or(
+    stored: Option<chrono::DateTime<chrono::Utc>>,
+    posted: Option<chrono::DateTime<chrono::Utc>>,
+    minutes: bool,
+) -> Option<chrono::DateTime<chrono::Utc>> {
+    use chrono::{SubsecRound as _, Timelike as _};
+    match (stored, posted) {
+        (Some(s), Some(p)) => {
+            let s_at_precision = if minutes {
+                s.trunc_subsecs(0).with_second(0).unwrap_or(s)
+            } else if p.nanosecond() == 0 {
+                s.trunc_subsecs(0)
+            } else {
+                s
+            };
+            if s_at_precision == p {
+                stored
+            } else {
+                posted
+            }
+        }
+        _ => posted,
+    }
+}
+
+/// The form-owned `cms_page` columns that differ between `stored` and
+/// the edited `page`, with their new values. Never a tree column
+/// (`path`, `depth`, `parent_id`, `sort_order`, `locale_variant_of`,
+/// `alias_of`) or a publish timestamp; `url_path` only moves with the
+/// slug.
+fn page_form_changes(stored: &Page, page: &Page) -> Vec<(&'static str, rustango::core::SqlValue)> {
+    let mut out: Vec<(&'static str, rustango::core::SqlValue)> = Vec::new();
+    macro_rules! diff {
+        ($($field:ident),+ $(,)?) => {$(
+            if stored.$field != page.$field {
+                out.push((stringify!($field), page.$field.clone().into()));
+            }
+        )+};
+    }
+    diff!(
+        title,
+        slug,
+        url_path,
+        status,
+        seo_title,
+        seo_description,
+        robots_index,
+        theme_id,
+        go_live_at,
+        expire_at,
+        show_in_menus,
+        preview_path,
+        template_override,
+        og_title,
+        og_description,
+        og_image_media_id,
+        twitter_card,
+        notification_pre_published_sent,
+    );
+    // An f32 read back from the database need not equal the posted one
+    // to the last bit.
+    if (stored.sitemap_priority - page.sitemap_priority).abs() > 1e-4 {
+        out.push(("sitemap_priority", page.sitemap_priority.into()));
+    }
+    out
+}
+
+/// Stamp a save that changed something: `updated_at`, and on a published
+/// page `last_published_at` (the sitemap and fragment cache read it as
+/// "public content changed") plus `published_at` on the first publish.
+fn stamp_page_change(
+    page: &mut Page,
+    set: &mut Vec<(&'static str, rustango::core::SqlValue)>,
+    now: chrono::DateTime<chrono::Utc>,
+) {
+    if page.status == crate::page::PageStatus::Published.as_str() {
+        if page.published_at.is_none() {
+            page.published_at = Some(now);
+            set.push(("published_at", now.into()));
+        }
+        page.last_published_at = Some(now);
+        set.push(("last_published_at", now.into()));
+    }
+    page.updated_at = rustango::sql::Auto::Set(now);
+    set.push(("updated_at", now.into()));
+}
+
+/// A page's type-specific content as stored — extension row, inline
+/// panels saved with the page, page-builder values — for telling whether
+/// a save changed it. `None` when it can't be read: treated as changed.
+async fn type_content_snapshot(
+    pool: &rustango::sql::Pool,
+    page_type: Option<&PageType>,
+    page_id: i64,
+) -> Option<serde_json::Value> {
+    let mut panels = serde_json::Map::new();
+    let mut extension = serde_json::Value::Null;
+    if let Some(handler) = page_type.and_then(|pt| find_handler(&pt.type_name)) {
+        extension = handler.load_extension(pool, page_id).await.ok()?;
+        for spec in handler.inline_panels(pool, page_id).await.ok()? {
+            if spec.per_row {
+                continue;
+            }
+            let rows = handler.load_inline_panel(pool, page_id, &spec.name).await.ok()?;
+            panels.insert(spec.name.clone(), serde_json::to_value(rows).ok()?);
+        }
+    }
+    let builder = crate::page_builder::model::data_for_page(pool, page_id)
+        .await
+        .ok()?
+        .map(|row| serde_json::json!([row.schema_version, row.component_versions, row.data]));
+    Some(serde_json::json!({ "extension": extension, "panels": panels, "builder": builder }))
+}
+
+/// Whether a save held for review would change the page's tags,
+/// categories or type content — judged without writing, since a held
+/// save writes none of them. Content is compared as posted (see
+/// [`crate::page_form::content_matches`]): a field the save would
+/// normalise counts as changed, and the save is held as before.
+async fn held_save_changes(
+    pool: &rustango::sql::Pool,
+    page: &Page,
+    form_map: &std::collections::HashMap<String, String>,
+) -> Result<bool, AdminError> {
+    let id = page.id.get().copied().unwrap_or_default();
+    if let Some(raw) = form_map.get("tags") {
+        let names: Vec<String> = if raw.is_empty() {
+            Vec::new()
+        } else {
+            raw.split(',').map(str::to_owned).collect()
+        };
+        if crate::page_tag::tags_differ(pool, id, &names).await? {
+            return Ok(true);
+        }
+    }
+    if let Some(raw) = form_map.get(crate::category::assign::FORM_KEY) {
+        if crate::category::assign::form_differs(pool, id, raw).await? {
+            return Ok(true);
+        }
+    }
+    Ok(!crate::page_form::content_matches(pool, page, form_map).await)
+}
+
 /// The acting user for [`apply_page_edit`] — carries exactly what the
 /// lock / workflow / attribution logic needs, decoupled from the HTTP
 /// session type so the MCP tools can act as a key's owner.
@@ -5366,6 +5929,13 @@ pub(crate) enum PageEditRefusal {
     /// The save would put the page live, but pages of its type go live
     /// through the named review workflow.
     ReviewRequired { workflow: String },
+    /// Fields this editor changed were changed by someone else too since
+    /// the form loaded (#903). Nothing was written; `page` is the stored
+    /// row with this editor's changes on top, for showing the form again.
+    Conflict {
+        conflicts: Vec<crate::page_baseline::FieldConflict>,
+        page: Box<Page>,
+    },
 }
 
 /// What a successful [`apply_page_edit`] produced, for caller messaging.
@@ -5375,6 +5945,8 @@ pub(crate) struct PageEditOutcome {
     pub reapproval_kicked: bool,
     /// The save was kept for review; the live page is unchanged.
     pub held_for_review: bool,
+    /// The posted form matched the stored page: nothing was written.
+    pub unchanged: bool,
 }
 
 /// Apply one page edit end-to-end from a canonical+extension form map —
@@ -5389,10 +5961,16 @@ pub(crate) struct PageEditOutcome {
 /// unpublish, and reapproval-on-edit. `notify = false` skips the
 /// publish subscription mail (MCP v1). Flash/redirect rendering stays
 /// with the HTTP handler.
+/// The request tenant as the page cache keys it; resolved orgs always have an id.
+pub(crate) fn tenant_key(org: &rustango::tenancy::Org) -> Result<rustango::tenancy::TenantSlug, AdminError> {
+    rustango::tenancy::TenantSlug::of(org)
+        .ok_or_else(|| AdminError::Validation(format!("tenant `{}` has no id", org.slug)))
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn apply_page_edit(
     pool: &rustango::sql::Pool,
-    org_slug: &str,
+    tenant: &rustango::tenancy::TenantSlug,
     invalidator: &std::sync::Arc<dyn crate::cache_invalidate::PageCacheInvalidator>,
     mailer: Option<&dyn rustango::email::Mailer>,
     mailer_from: &str,
@@ -5487,73 +6065,19 @@ pub(crate) async fn apply_page_edit(
     )
     .map_err(|e| AdminError::Validation(format!("canonical form: {e}")))?;
 
-    // A live page of a type whose review workflow asks for re-approval
-    // on edit: a non-superuser's save waits for that review instead of
-    // changing what visitors see. The final approval applies it (a save
-    // with no actor, so it isn't held again).
-    if let Some(actor) = actor.filter(|a| !a.is_superuser) {
-        if page.status == crate::page::PageStatus::Published.as_str() {
-            if let Some(wf) = crate::workflow::review_workflow_for_type(pool, page.page_type_id)
-                .await?
-                .filter(|wf| wf.require_reapproval_on_edit)
-            {
-                crate::pending_change::hold(pool, id, form_map, Some(actor.id)).await?;
-                let mut started = false;
-                if crate::workflow::active_state_for_page(pool, id).await?.is_none() {
-                    let tasks =
-                        crate::workflow::tasks_for(pool, wf.id.get().copied().unwrap_or_default())
-                            .await?;
-                    crate::workflow::submit_for_review(pool, id, &wf, &tasks, actor.id).await?;
-                    started = true;
-                }
-                return Ok(Ok(PageEditOutcome {
-                    page,
-                    redirects_created: 0,
-                    reapproval_kicked: started,
-                    held_for_review: true,
-                }));
-            }
-        }
-    }
-
+    // #903 — the row as stored: only the columns this save changes are
+    // written, and a save that changes nothing writes nothing.
+    let stored = page.clone();
     page.title = form.title.clone();
     // #703 — the same normalisation a new page gets, and no two siblings
-    // on one slug: they would share a URL and serve whichever row the
-    // driver returned. The pattern attribute alone is bypassed by any
-    // direct POST (and by MCP update_page, which lands here).
-    let new_slug = if form.slug.trim().is_empty() {
+    // on one slug (checked below): they would share a URL and serve
+    // whichever row the driver returned. The pattern attribute alone is
+    // bypassed by any direct POST (and by MCP update_page).
+    page.slug = if form.slug.trim().is_empty() {
         String::new()
     } else {
         slugify(&form.slug)
     };
-    let slug_changed = page.slug != new_slug;
-    if slug_changed && !new_slug.is_empty() {
-        let sibling = Page::objects()
-            .where_(Page::slug.eq(new_slug.clone()))
-            .where_(Page::id.ne(id));
-        let sibling = match page.parent_id {
-            Some(pid) => sibling.where_(Page::parent_id.eq(pid)),
-            None => sibling.where_(Page::parent_id.is_null()),
-        };
-        if sibling.first(pool).await?.is_some() {
-            return Err(AdminError::Validation(format!(
-                "another page under the same parent already uses the slug “{new_slug}”"
-            )));
-        }
-    }
-    // Capture the OLD url_path BEFORE the recomputation block below
-    // overwrites it. Used after commit to evict the now-stale cache
-    // entry under the page's previous URL.
-    let old_url_path = page.url_path.clone();
-    page.slug = new_slug;
-    // #553 — remember whether this save takes the page out of
-    // Published, so linked redirect rules can be auto-disabled below.
-    let was_published = page.status == crate::page::PageStatus::Published.as_str();
-    // #556 — remember whether it was archived, to block an unpublish
-    // (archived → draft) below. Archived → published is the unarchive
-    // path and stays allowed.
-    let was_archived = page.status == crate::page::PageStatus::Archived.as_str();
-    let old_status = page.status.clone();
     // page.page_type_id stays as-is — see comment on `canonical_keys`.
     page.status = form.parsed_status().as_str().to_owned();
     page.seo_title = form.seo_title.clone();
@@ -5565,33 +6089,77 @@ pub(crate) async fn apply_page_edit(
     if let Some(theme_id) = form.theme_id {
         page.theme_id = theme_id;
     }
+    page.go_live_at = same_instant_or(stored.go_live_at, form.parsed_go_live_at(), form.go_live_at_in_minutes());
+    page.expire_at = same_instant_or(stored.expire_at, form.parsed_expire_at(), form.expire_at_in_minutes());
+    page.show_in_menus = form.parsed_show_in_menus();
+    page.preview_path = form.preview_path.trim().to_owned();
+    page.template_override = form.template_override.trim().to_owned();
+    // #183 — social sharing fields.
+    page.og_title = form.og_title.clone();
+    page.og_description = form.og_description.clone();
+    page.og_image_media_id = form.og_image_media_id;
+    if let Some(tc) = form.twitter_card.as_deref() {
+        if matches!(tc, "summary" | "summary_large_image") {
+            page.twitter_card = tc.to_owned();
+        }
+    }
+    // #903 phase 2 — the form says what it loaded: a field this editor
+    // left alone keeps what is stored now (another editor's save, the
+    // scheduler's publish), and a field both changed is refused rather
+    // than overwritten. A save with no actor (an approved held change)
+    // has nobody to ask, so its values win.
+    if let Some(baseline) = crate::page_baseline::Baseline::from_form(form_map, &tenant.slug, id) {
+        let conflicts = baseline.merge(&stored, &mut page, &form.status);
+        if !conflicts.is_empty() && actor.is_some() {
+            return Ok(Err(PageEditRefusal::Conflict { conflicts, page: Box::new(page) }));
+        }
+    }
+    let slug_changed = page.slug != stored.slug;
+    if slug_changed && !page.slug.is_empty() {
+        let sibling = Page::objects()
+            .where_(Page::slug.eq(page.slug.clone()))
+            .where_(Page::id.ne(id));
+        let sibling = match page.parent_id {
+            Some(pid) => sibling.where_(Page::parent_id.eq(pid)),
+            None => sibling.where_(Page::parent_id.is_null()),
+        };
+        if sibling.first(pool).await?.is_some() {
+            return Err(AdminError::Validation(format!(
+                "another page under the same parent already uses the slug “{}”",
+                page.slug
+            )));
+        }
+    }
+    // Capture the OLD url_path BEFORE the recomputation block below
+    // overwrites it. Used after commit to evict the now-stale cache
+    // entry under the page's previous URL.
+    let old_url_path = page.url_path.clone();
+    // #553 — remember whether this save takes the page out of
+    // Published, so linked redirect rules can be auto-disabled below.
+    let was_published = stored.status == crate::page::PageStatus::Published.as_str();
+    // #556 — remember whether it was archived, to block an unpublish
+    // (archived → draft) below. Archived → published is the unarchive
+    // path and stays allowed.
+    let was_archived = stored.status == crate::page::PageStatus::Archived.as_str();
+    let old_status = stored.status.clone();
     // #207 — clear the pre-publish reminder flag when go_live_at
     // moves so a fresh schedule horizon gets a fresh reminder.
-    let new_go_live = form.parsed_go_live_at();
-    if page.go_live_at != new_go_live {
+    if page.go_live_at != stored.go_live_at {
         page.notification_pre_published_sent = false;
     }
-    page.go_live_at = new_go_live;
-    page.expire_at = form.parsed_expire_at();
     // #264 — derive scheduled state from go_live_at AFTER the form's
     // chosen status has been applied above, so picking "Draft" +
     // setting a future go-live still parks the row in the sweep's
     // pickup queue.
     page.status = derive_scheduled_status(&page.status, page.go_live_at);
-    page.show_in_menus = form.parsed_show_in_menus();
-    page.preview_path = form.preview_path.trim().to_owned();
-    page.template_override = form.template_override.trim().to_owned();
-    // #251 — first/last publish timestamps. `published_at` is set
-    // once on the first published transition (still the
-    // chronological-ordering anchor). `last_published_at` bumps on
-    // every save while status=published — sitemap / cache use it
-    // for freshness.
-    if page.status == crate::page::PageStatus::Published.as_str() {
-        let now = chrono::Utc::now();
-        if page.published_at.is_none() {
-            page.published_at = Some(now);
-        }
-        page.last_published_at = Some(now);
+    // #903 — the scheduler published this page while the editor had it
+    // open, so the form still says "scheduled" with a go-live in the
+    // past: keep it published rather than step it back.
+    if old_status == crate::page::PageStatus::Published.as_str()
+        && page.status == crate::page::PageStatus::Scheduled.as_str()
+        && !page.go_live_at.is_some_and(|t| t > chrono::Utc::now())
+    {
+        page.status = old_status.clone();
     }
     // #556 — an archived page can't be unpublished to Draft in place;
     // it must be revived (→ Published) or explicitly unarchived first.
@@ -5624,15 +6192,6 @@ pub(crate) async fn apply_page_edit(
             }
         }
     }
-    // #183 — social sharing fields.
-    page.og_title = form.og_title.clone();
-    page.og_description = form.og_description.clone();
-    page.og_image_media_id = form.og_image_media_id;
-    if let Some(tc) = form.twitter_card.as_deref() {
-        if matches!(tc, "summary" | "summary_large_image") {
-            page.twitter_card = tc.to_owned();
-        }
-    }
 
     // Recompute the materialized `url_path` when the
     // slug changes, and cascade the recomputation to
@@ -5649,7 +6208,58 @@ pub(crate) async fn apply_page_edit(
         };
         page.url_path = crate::tree_ops::compute_url_path(parent_url_path.as_deref(), &page.slug);
     }
-    let new_url_path = page.url_path.clone();
+
+    // #903 — the columns the form owns that this save changes. The tree
+    // columns (path, depth, parent, order, locale/alias links) are never
+    // written here, so a move made while the page was open survives.
+    let mut changes = page_form_changes(&stored, &page);
+    let core_changed = !changes.is_empty();
+
+    // A live page of a type whose review workflow asks for re-approval
+    // on edit: a non-superuser's save waits for that review instead of
+    // changing what visitors see. The final approval applies it (a save
+    // with no actor, so it isn't held again). Nothing is written above
+    // this point.
+    if let Some(actor) = actor.filter(|a| !a.is_superuser) {
+        if stored.status == crate::page::PageStatus::Published.as_str() {
+            if let Some(wf) = crate::workflow::review_workflow_for_type(pool, stored.page_type_id)
+                .await?
+                .filter(|wf| wf.require_reapproval_on_edit)
+            {
+                // #903 — a save that changes nothing starts no review of
+                // nothing. Judged without writing; see `held_save_changes`.
+                if !core_changed && !held_save_changes(pool, &stored, form_map).await? {
+                    return Ok(Ok(PageEditOutcome {
+                        page: stored,
+                        redirects_created: 0,
+                        reapproval_kicked: false,
+                        held_for_review: false,
+                        unchanged: true,
+                    }));
+                }
+                crate::pending_change::hold(pool, id, form_map, Some(actor.id)).await?;
+                let mut started = false;
+                if crate::workflow::active_state_for_page(pool, id).await?.is_none() {
+                    let tasks =
+                        crate::workflow::tasks_for(pool, wf.id.get().copied().unwrap_or_default())
+                            .await?;
+                    crate::workflow::submit_for_review(pool, id, &wf, &tasks, actor.id).await?;
+                    started = true;
+                }
+                return Ok(Ok(PageEditOutcome {
+                    page: stored,
+                    redirects_created: 0,
+                    reapproval_kicked: started,
+                    held_for_review: true,
+                    unchanged: false,
+                }));
+            }
+        }
+    }
+    let now = chrono::Utc::now();
+    if core_changed {
+        stamp_page_change(&mut page, &mut changes, now);
+    }
 
     // Wrap self-save + cascade in one atomic_tree block so the tree
     // never observes a mixed state (own page updated but children
@@ -5657,51 +6267,114 @@ pub(crate) async fn apply_page_edit(
     // URL, plus (on a slug change) its old URL and every descendant —
     // is registered via on_commit, so it fires only once the save
     // commits (never on rollback) and runs detached. #317.
-    let invalidator = invalidator.clone();
-    let tenant_slug = org_slug.to_owned();
-    let purge_new = new_url_path.clone();
-    let purge_old = old_url_path.clone();
-    let (page, descendant_urls) = crate::tree_ops::atomic_tree(pool, move |tx| {
-        Box::pin(async move {
-            page.save_tx(tx).await?;
-            let descendants: Vec<Page> = if slug_changed {
-                crate::tree_ops::cascade_url_path_to_descendants(tx, &page).await?;
-                Page::objects()
-                    .where_(Page::path.like(crate::tree::descendants_like(&page.path)))
-                    .where_(Page::path.ne(page.path.clone()))
-                    .fetch_tx(tx)
-                    .await?
-            } else {
-                Vec::new()
-            };
-            // A rename moves this page and everything under it: keep the
-            // old addresses of the public ones working (redirects that
-            // follow the page).
-            if slug_changed {
-                let public = |p: &Page| matches!(p.status.as_str(), "published" | "archived");
-                let mut moves = Vec::with_capacity(1 + descendants.len());
-                if public(&page) {
-                    moves.push((page.id.get().copied().unwrap_or_default(), purge_old.clone(), purge_new.clone()));
-                }
-                for d in descendants.iter().filter(|d| public(d)) {
-                    if let Some(old) = crate::redirect::rebase_path(&d.url_path, &purge_new, &purge_old) {
-                        moves.push((d.id.get().copied().unwrap_or_default(), old, d.url_path.clone()));
+    let purge_invalidator = invalidator.clone();
+    let purge_tenant = tenant.clone();
+    let mut purge_new = page.url_path.clone();
+    let mut purge_old = old_url_path.clone();
+    let renamed = if !core_changed {
+        Ok((page, Vec::new(), old_url_path))
+    } else {
+        crate::tree_ops::atomic_tree(pool, move |tx| {
+            Box::pin(async move {
+                let mut changes = changes;
+                if slug_changed {
+                    // The page may have moved since it was read: rename it
+                    // where it is now, under its current parent.
+                    let current = Page::objects()
+                        .where_(Page::id.eq(id))
+                        .select_for_update()
+                        .silent_on_sqlite()
+                        .fetch_tx(tx)
+                        .await?
+                        .into_iter()
+                        .next()
+                        .ok_or(crate::tree_ops::TreeError::NotFound(id))?;
+                    page.parent_id = current.parent_id;
+                    page.path = current.path;
+                    page.depth = current.depth;
+                    purge_old = current.url_path;
+                    if !page.slug.is_empty() {
+                        let sibling = Page::objects()
+                            .where_(Page::slug.eq(page.slug.clone()))
+                            .where_(Page::id.ne(id));
+                        let sibling = match page.parent_id {
+                            Some(pid) => sibling.where_(Page::parent_id.eq(pid)),
+                            None => sibling.where_(Page::parent_id.is_null()),
+                        };
+                        if !sibling.fetch_tx(tx).await?.is_empty() {
+                            return Ok(Err(page.slug.clone()));
+                        }
+                    }
+                    let parent_url_path = match page.parent_id {
+                        None => None,
+                        Some(pid) => Page::objects()
+                            .where_(Page::id.eq(pid))
+                            .fetch_tx(tx)
+                            .await?
+                            .into_iter()
+                            .next()
+                            .map(|p| p.url_path),
+                    };
+                    page.url_path = crate::tree_ops::compute_url_path(parent_url_path.as_deref(), &page.slug);
+                    purge_new = page.url_path.clone();
+                    changes.retain(|(column, _)| *column != "url_path");
+                    if page.url_path != purge_old {
+                        changes.push(("url_path", page.url_path.clone().into()));
                     }
                 }
-                crate::redirect::record_renames_tx(tx, &moves).await?;
-            }
-            let descendant_urls: Vec<String> = descendants.into_iter().map(|d| d.url_path).collect();
-            let mut urls = Vec::with_capacity(2 + descendant_urls.len());
-            urls.push(purge_new.clone());
-            if slug_changed && purge_old != purge_new && !purge_old.is_empty() {
-                urls.push(purge_old);
-            }
-            urls.extend(descendant_urls.iter().cloned());
-            crate::cache_invalidate::invalidate_urls_on_commit(invalidator, tenant_slug, urls);
-            Ok((page, descendant_urls))
+                let mut update = Page::objects().where_(Page::id.eq(id)).update();
+                for (column, value) in changes {
+                    update = update.set(column, value);
+                }
+                rustango::sql::update_tx(tx, &update.compile()?).await?;
+                let descendants: Vec<Page> = if slug_changed {
+                    crate::tree_ops::cascade_url_path_to_descendants(tx, &page).await?;
+                    Page::objects()
+                        .where_(Page::path.like(crate::tree::descendants_like(&page.path)))
+                        .where_(Page::path.ne(page.path.clone()))
+                        .fetch_tx(tx)
+                        .await?
+                } else {
+                    Vec::new()
+                };
+                // A rename moves this page and everything under it: keep the
+                // old addresses of the public ones working (redirects that
+                // follow the page).
+                if slug_changed {
+                    let public = |p: &Page| matches!(p.status.as_str(), "published" | "archived");
+                    let mut moves = Vec::with_capacity(1 + descendants.len());
+                    if public(&page) {
+                        moves.push((page.id.get().copied().unwrap_or_default(), purge_old.clone(), purge_new.clone()));
+                    }
+                    for d in descendants.iter().filter(|d| public(d)) {
+                        if let Some(old) = crate::redirect::rebase_path(&d.url_path, &purge_new, &purge_old) {
+                            moves.push((d.id.get().copied().unwrap_or_default(), old, d.url_path.clone()));
+                        }
+                    }
+                    crate::redirect::record_renames_tx(tx, &moves).await?;
+                }
+                let descendant_urls: Vec<String> = descendants.into_iter().map(|d| d.url_path).collect();
+                let mut urls = Vec::with_capacity(2 + descendant_urls.len());
+                urls.push(purge_new.clone());
+                if slug_changed && purge_old != purge_new && !purge_old.is_empty() {
+                    urls.push(purge_old.clone());
+                }
+                urls.extend(descendant_urls.iter().cloned());
+                crate::cache_invalidate::invalidate_urls_on_commit(purge_invalidator, purge_tenant, urls);
+                Ok(Ok((page, descendant_urls, purge_old)))
+            })
         })
-    })
-    .await?;
+        .await?
+    };
+    let (mut page, descendant_urls, old_url_path) = match renamed {
+        Ok(saved) => saved,
+        Err(slug) => {
+            return Err(AdminError::Validation(format!(
+                "another page under the same parent already uses the slug “{slug}”"
+            )));
+        }
+    };
+    let new_url_path = page.url_path.clone();
     // #705 — the page's content goes in straight after the core row, and
     // before anything announces the save: the revision, the reference
     // index, search, publish hooks, subscriber mail and the page log all
@@ -5713,16 +6386,17 @@ pub(crate) async fn apply_page_edit(
     //
     // #189 — tags from the comma-separated `tags` field. Missing → left
     // alone; posted empty → cleared.
+    let mut tags_changed = false;
     if let Some(tags_raw) = form_map.get("tags") {
         let names: Vec<String> = if tags_raw.is_empty() {
             Vec::new()
         } else {
             tags_raw.split(',').map(|s| s.to_owned()).collect()
         };
-        crate::page_tag::replace_tags(pool, id, &names).await?;
+        tags_changed = crate::page_tag::replace_tags(pool, id, &names).await?;
     }
     // #842 — categories, same missing/empty rule as tags.
-    crate::category::assign::save_from_form(
+    let categories_changed = crate::category::assign::save_from_form(
         pool,
         id,
         form_map.get(crate::category::assign::FORM_KEY).map(String::as_str),
@@ -5732,7 +6406,44 @@ pub(crate) async fn apply_page_edit(
         .where_(PageType::id.eq(page.page_type_id))
         .first(pool)
         .await?;
+    // #903 — the type's content as stored before and after its write:
+    // the same reads on both sides, so the comparison needs no
+    // knowledge of how each field normalises what was posted.
+    let content_before = type_content_snapshot(pool, pt_opt.as_ref(), id).await;
     save_type_content(pool, pt_opt.as_ref(), page.page_type_id, id, form_map).await?;
+    let content_changed = match content_before {
+        Some(before) => {
+            type_content_snapshot(pool, pt_opt.as_ref(), id).await != Some(before)
+        }
+        None => true,
+    };
+
+    // #903 — nothing changed: no revision, page-log entry, hooks, mail,
+    // cache purge or review restart, and the row keeps its timestamps.
+    if !(core_changed || tags_changed || categories_changed || content_changed) {
+        if actor.is_some() {
+            crate::pending_change::discard(pool, id).await?;
+        }
+        return Ok(Ok(PageEditOutcome {
+            page,
+            redirects_created: 0,
+            reapproval_kicked: false,
+            held_for_review: false,
+            unchanged: true,
+        }));
+    }
+    if !core_changed {
+        // Only the tags, categories or the type's content changed: the
+        // row still records when, and the cached page goes.
+        let mut stamp = Vec::new();
+        stamp_page_change(&mut page, &mut stamp, now);
+        let mut update = Page::objects().where_(Page::id.eq(id)).update();
+        for (column, value) in stamp {
+            update = update.set(column, value);
+        }
+        rustango::sql::UpdaterPool::execute_pool(update, pool).await?;
+        crate::task_queue::purge_urls(invalidator.clone(), tenant.clone(), vec![new_url_path.clone()]).await;
+    }
 
     // Capture revision after commit so the committed
     // page row is visible to the sequence SELECT inside capture.
@@ -5740,17 +6451,19 @@ pub(crate) async fn apply_page_edit(
         .await
         .log_warn("revision not captured; the history has a gap");
 
-    reindex_from_form(pool, org_slug, id, form_map).await;
+    reindex_from_form(pool, &tenant.slug, id, form_map).await;
 
     // #408 — keep an external search index (Elasticsearch) in sync:
     // published → indexed, otherwise removed. No-op when no backend is
     // installed (the Postgres FTS path needs no maintained index).
-    crate::task_queue::sync_page_search(org_slug, &page).await;
+    crate::task_queue::sync_page_search(&tenant.slug, &page).await;
 
-    // #107 — fan out to plugin `after_publish_page` hooks.
+    // #107 — fan out to plugin `after_publish_page` hooks. Only when this
+    // save takes the page live (#903): re-saving a live page used to log
+    // "Published", re-email every subscriber and re-fire the hooks.
     let actor_id = actor.map(|a| a.id);
-    if page.status == crate::page::PageStatus::Published.as_str() {
-        crate::hooks::fire_after_publish_page(&page);
+    if page.status == crate::page::PageStatus::Published.as_str() && !was_published {
+        crate::hooks::fire_after_publish_page(crate::hooks::HookCtx::new(pool, &tenant.slug, actor_id), &page).await;
         // #115 — notify-on-publish subscribers.
         if notify {
             let actor_name = actor.map(|a| a.username.as_str());
@@ -5758,7 +6471,7 @@ pub(crate) async fn apply_page_edit(
                 mailer,
                 mailer_from,
                 pool,
-                org_slug,
+                &tenant.slug,
                 page.id.get().copied().unwrap_or_default(),
                 &page.title,
                 &page.url_path,
@@ -5846,7 +6559,7 @@ pub(crate) async fn apply_page_edit(
                     if r.from_page_id.is_none() {
                         r.from_page_id = Some(id);
                     }
-                    r.save_pool(pool).await.log_warn("redirect not linked to its source page");
+                    r.save(pool).await.log_warn("redirect not linked to its source page");
                 }
                 continue;
             }
@@ -5863,14 +6576,14 @@ pub(crate) async fn apply_page_edit(
                 // A → B into A → A. The page lives at A again, so the
                 // rule has nothing left to do.
                 if r.from_path == new_path {
-                    r.delete_pool(pool)
+                    r.delete(pool)
                         .await
                         .log_warn("self-redirect left after a rename back not deleted");
                     continue;
                 }
                 r.to_path = new_path.clone();
                 r.note = format!("auto-chained on page rename at {now}");
-                r.save_pool(pool).await.log_warn("redirect chain not updated after a rename");
+                r.save(pool).await.log_warn("redirect chain not updated after a rename");
             }
             // Insert the fresh old → new row.
             let mut row = crate::redirect::Redirect {
@@ -5891,7 +6604,7 @@ pub(crate) async fn apply_page_edit(
                 created_at: rustango::sql::Auto::Unset,
                 updated_at: rustango::sql::Auto::Unset,
             };
-            if row.insert_pool(pool).await.is_ok() {
+            if row.insert(pool).await.is_ok() {
                 redirects_created += 1;
             }
         }
@@ -5977,6 +6690,7 @@ pub(crate) async fn apply_page_edit(
         redirects_created,
         reapproval_kicked,
         held_for_review: false,
+        unchanged: false,
     }))
 }
 
@@ -5995,7 +6709,7 @@ pub async fn page_edit_submit(
     });
     let outcome = apply_page_edit(
         tenant.pool(),
-        &tenant.org.slug,
+        &tenant_key(&tenant.org)?,
         &_state.cache_invalidator,
         _state.mailer.as_deref(),
         &_state.mailer_from,
@@ -6010,6 +6724,7 @@ pub async fn page_edit_submit(
         redirects_created,
         reapproval_kicked,
         held_for_review,
+        unchanged,
     } = match outcome {
         Ok(o) => o,
         Err(PageEditRefusal::WorkflowReview { task_name }) => {
@@ -6061,7 +6776,31 @@ pub async fn page_edit_submit(
                 &headers,
             );
         }
+        Err(PageEditRefusal::Conflict { conflicts, page }) => {
+            let conflict = EditConflict { conflicts, page: *page, form: form_map };
+            return render_page_edit_form(
+                &_state,
+                tenant.pool(),
+                &tenant.org,
+                &headers,
+                session_user,
+                id,
+                EditQuery::default(),
+                Some(conflict),
+            )
+            .await;
+        }
     };
+    if unchanged {
+        return redirect_after_page_save_with_level(
+            form_map.get("_action").map_or("save", String::as_str),
+            id,
+            page.parent_id,
+            &super::i18n::tr(&headers, "No changes to save.", &[]),
+            MsgLevel::Info,
+            &headers,
+        );
+    }
     if held_for_review {
         return redirect_after_page_save(
             form_map.get("_action").map_or("save", String::as_str),
@@ -6334,7 +7073,7 @@ pub async fn page_delete_submit(
     // visitor sees a 404, not a stale 200, without blocking this
     // response on the cache round-trip.
     let invalidator = _state.cache_invalidator.clone();
-    let tenant_slug = tenant.org.slug.clone();
+    let tenant_slug = tenant_key(&tenant.org)?;
     let purge_url = url_path.clone();
     rustango::atomic!(tenant.pool(), |tx| {
         let mut guard = tx.lock().await?;
@@ -6449,7 +7188,7 @@ pub async fn page_move_submit(
     urls.push(new_url_path.clone());
     urls.extend(page.descendants(tenant.pool()).await?.into_iter().map(|d| d.url_path));
     let invalidator = _state.cache_invalidator.clone();
-    let tenant_slug = tenant.org.slug.clone();
+    let tenant_slug = tenant_key(&tenant.org)?;
     rustango::__private_runtime::tokio::spawn(async move {
         crate::task_queue::purge_urls(invalidator, tenant_slug, urls).await;
     });
@@ -6552,7 +7291,7 @@ pub async fn page_clone_submit(
     });
     let saved = apply_page_edit(
         tenant.pool(),
-        &tenant.org.slug,
+        &tenant_key(&tenant.org)?,
         &state.cache_invalidator,
         None,
         "",
@@ -6562,11 +7301,21 @@ pub async fn page_clone_submit(
         actor.as_ref(),
     )
     .await?;
-    if saved.is_err() {
+    match saved {
+        // A copy with nothing beyond its title and slug wrote nothing;
+        // it still starts its history with a revision.
+        Ok(o) if o.unchanged => {
+            crate::revision::capture(tenant.pool(), &o.page, actor.as_ref().map(|a| a.id))
+                .await
+                .log_warn("revision not captured; the history has a gap");
+        }
+        Ok(_) => {}
         // A page created a moment ago has no workflow or editor lock.
-        return Err(AdminError::Validation(
-            "the copy was created but its content could not be saved".to_owned(),
-        ));
+        Err(_) => {
+            return Err(AdminError::Validation(
+                "the copy was created but its content could not be saved".to_owned(),
+            ));
+        }
     }
     // #192 — audit-log the clone on BOTH the new row (so the new
     // page's history shows where it came from) and the source (so
@@ -6630,7 +7379,7 @@ pub async fn page_privacy_submit(
     let existing = crate::view_restriction::direct_for_page(tenant.pool(), id).await?;
     if form.kind == "none" {
         if let Some(row) = existing {
-            row.delete_pool(tenant.pool()).await?;
+            row.delete(tenant.pool()).await?;
             return redirect_named_with_params_and_message(
                 "rcms-admin:pages:edit",
                 &[("id", id.to_string())],
@@ -6715,7 +7464,7 @@ pub async fn page_privacy_submit(
             row.password_hash = password_hash;
             row.group_ids = group_json;
             row.codenames = codenames_json;
-            row.save_pool(tenant.pool()).await?;
+            row.save(tenant.pool()).await?;
         }
         None => {
             let mut row = crate::view_restriction::PageViewRestriction {
@@ -6728,7 +7477,7 @@ pub async fn page_privacy_submit(
                 created_at: Auto::Unset,
                 updated_at: Auto::Unset,
             };
-            row.insert_pool(tenant.pool()).await?;
+            row.insert(tenant.pool()).await?;
         }
     }
     redirect_named_with_params_and_message_args(
@@ -6788,7 +7537,7 @@ pub async fn comment_new_submit(
         resolved_by: None,
         created_at: rustango::sql::Auto::Unset,
     };
-    row.insert_pool(tenant.pool()).await?;
+    row.insert(tenant.pool()).await?;
     redirect_named_with_params_and_message(
         "rcms-admin:pages:edit",
         &[("id", id.to_string())],
@@ -6831,7 +7580,7 @@ pub async fn comment_reply_submit(
         body: body.to_owned(),
         created_at: rustango::sql::Auto::Unset,
     };
-    row.insert_pool(tenant.pool()).await?;
+    row.insert(tenant.pool()).await?;
     redirect_named_with_params_and_message(
         "rcms-admin:pages:edit",
         &[("id", id.to_string())],
@@ -6859,7 +7608,7 @@ pub async fn comment_resolve_submit(
         .ok_or(AdminError::NotFound(comment_id))?;
     row.resolved_at = Some(chrono::Utc::now());
     row.resolved_by = Some(viewer_id);
-    row.save_pool(tenant.pool()).await?;
+    row.save(tenant.pool()).await?;
     redirect_named_with_params_and_message(
         "rcms-admin:pages:edit",
         &[("id", id.to_string())],
@@ -6884,7 +7633,7 @@ pub async fn comment_reopen_submit(
         .ok_or(AdminError::NotFound(comment_id))?;
     row.resolved_at = None;
     row.resolved_by = None;
-    row.save_pool(tenant.pool()).await?;
+    row.save(tenant.pool()).await?;
     redirect_named_with_params_and_message(
         "rcms-admin:pages:edit",
         &[("id", id.to_string())],
@@ -6975,7 +7724,7 @@ pub async fn page_alias_submit(
     alias.last_published_at = source.last_published_at;
     alias.theme_id = source.theme_id;
     alias.show_in_menus = source.show_in_menus;
-    alias.save_pool(tenant.pool()).await?;
+    alias.save(tenant.pool()).await?;
 
     crate::revision::capture(tenant.pool(), &alias, None)
         .await
@@ -7099,19 +7848,19 @@ pub async fn page_bulk_submit(
         );
     }
 
-    // Load the selected rows in one shot so per-id validation can run
-    // before any mutation. The IN-list is small (page list pagination
-    // caps the visible set; even an unbounded multi-select is dwarfed
-    // by site-wide page counts).
+    // Load the selected rows up front (one read per chunk, #631) so
+    // per-id validation runs before any mutation; keep the posted order.
     let pool = tenant.pool();
     let pages: Vec<Page> = {
-        let mut out = Vec::with_capacity(ids.len());
-        for id in &ids {
-            if let Some(p) = Page::objects().where_(Page::id.eq(*id)).first(pool).await? {
-                out.push(p);
+        let mut by_id: std::collections::HashMap<i64, Page> = std::collections::HashMap::new();
+        for chunk in ids.chunks(500) {
+            for p in Page::objects().where_(Page::id.is_in(chunk.to_vec())).fetch(pool).await? {
+                if let Some(id) = p.id.get().copied() {
+                    by_id.insert(id, p);
+                }
             }
         }
-        out
+        ids.iter().filter_map(|id| by_id.remove(id)).collect()
     };
     if pages.is_empty() {
         return redirect_named_with_message(
@@ -7155,7 +7904,7 @@ pub async fn page_bulk_submit(
                 crate::page::PageStatus::Draft
             };
             let invalidator = _state.cache_invalidator.clone();
-            let tenant_slug = tenant.org.slug.clone();
+            let tenant_slug = tenant_key(&tenant.org)?;
             let purge_urls: Vec<String> = pages.iter().map(|p| p.url_path.clone()).collect();
             let pages_for_tx = pages.clone();
             // #317 — flip the batch's status in one atomic! block and
@@ -7225,8 +7974,13 @@ pub async fn page_bulk_submit(
             }
             // #107 — plugin after_publish_page on bulk publish only.
             if matches!(target, crate::page::PageStatus::Published) {
+                let hook_ctx = crate::hooks::HookCtx::new(
+                    pool,
+                    &tenant.org.slug,
+                    session_user.as_ref().and_then(|u| u.id.get().copied()),
+                );
                 for p in &pages {
-                    crate::hooks::fire_after_publish_page(p);
+                    crate::hooks::fire_after_publish_page(hook_ctx, p).await;
                 }
                 // #115 — notify-on-publish subscribers (per page).
                 let actor = session_user.as_ref().map(|u| u.username.as_str());
@@ -7319,7 +8073,7 @@ pub async fn page_bulk_submit(
             let mut ordered = pages.clone();
             ordered.sort_by(|a, b| b.depth.cmp(&a.depth));
             let invalidator = _state.cache_invalidator.clone();
-            let tenant_slug = tenant.org.slug.clone();
+            let tenant_slug = tenant_key(&tenant.org)?;
             // #78 — purge every deleted URL so the next visitor sees a
             // 404, not a stale 200. #317 — registered via on_commit so
             // it fires only once the whole batch delete commits.
@@ -7435,7 +8189,7 @@ pub async fn page_bulk_submit(
             }
             let moved = to_move.len();
             let invalidator = _state.cache_invalidator.clone();
-            let tenant_slug = tenant.org.slug.clone();
+            let tenant_slug = tenant_key(&tenant.org)?;
             let np_for_tx = new_parent.clone();
             crate::tree_ops::atomic_tree(pool, move |tx| {
                 Box::pin(async move {
@@ -7578,7 +8332,7 @@ pub async fn page_bulk_submit(
             let plan =
                 crate::page::plan_archive(pool, &pages, archive, archive_cascade).await?;
             let invalidator = _state.cache_invalidator.clone();
-            let tenant_slug = tenant.org.slug.clone();
+            let tenant_slug = tenant_key(&tenant.org)?;
             let purge = plan.changed_urls.clone();
             let flips = plan.to_flip.clone();
             let touched = rustango::atomic!(pool, |tx| {
@@ -8261,7 +9015,7 @@ pub async fn page_preview_token(
     // 1-hour token: long enough to click through + iterate, short
     // enough to bound exposure of an unpublished page.
     let expires = chrono::Utc::now().timestamp() + PREVIEW_TOKEN_TTL_SECS;
-    let token = crate::preview_token::mint(&tenant.org.slug, id, expires);
+    let token = crate::preview_token::mint(&tenant_key(&tenant.org)?, id, expires);
     Ok(Json(serde_json::json!({
         "token": token,
         "expires_at": expires,
@@ -9174,7 +9928,7 @@ pub async fn snippet_revert_submit(
     if let Some(v) = snap.get("data") {
         snippet.data = v.clone();
     }
-    snippet.save_pool(tenant.pool()).await?;
+    snippet.save(tenant.pool()).await?;
     // Capture the revert itself so the timeline shows it.
     if let Some(handler) = crate::library::find_handler(&snippet.type_name) {
         if handler.revisions_enabled() {
@@ -9226,7 +9980,7 @@ pub async fn snippet_create_submit(
         created_at: rustango::sql::Auto::Unset,
         updated_at: rustango::sql::Auto::Unset,
     };
-    row.save_pool(tenant.pool()).await?;
+    row.save(tenant.pool()).await?;
     // A new form is empty until its fields are built — go straight to the
     // Form Builder rather than back to the Library list.
     if row.type_name == "form" {
@@ -9316,7 +10070,7 @@ pub async fn snippet_edit_submit(
             crate::snippet::set_element_template(&mut snippet.data, v.trim());
         }
     }
-    snippet.save_pool(tenant.pool()).await?;
+    snippet.save(tenant.pool()).await?;
     // #123 — capture a versioned snapshot when the handler opts in
     // via `revisions_enabled()`. Best-effort: capture failure logs
     // + does NOT abort the save.
@@ -9390,7 +10144,7 @@ pub async fn snippet_delete_submit(
     }
     let title = snippet.title.clone();
     let is_form = snippet.type_name == "form";
-    snippet.delete_pool(tenant.pool()).await?;
+    snippet.delete(tenant.pool()).await?;
     // Forms are deleted from the Forms screen — go back there.
     if is_form {
         let body = super::i18n::tr(&headers, "Deleted snippet “{title}”.", &[("title", title.as_str())]);
@@ -9570,22 +10324,16 @@ pub async fn media_crop_submit(
             // Focal point in original coords no longer maps; clear.
             media.focal_point_x = None;
             media.focal_point_y = None;
-            media.save_pool(tenant.pool()).await?;
+            media.save(tenant.pool()).await?;
 
             // Purge renditions for the OLD content_hash (the route
             // looks them up by hash + filter spec; bytes on disk
             // also need cleaning).
-            for r in crate::rendition::MediaRendition::objects()
+            let stale = crate::rendition::MediaRendition::objects()
                 .where_(crate::rendition::MediaRendition::content_hash.eq(old_hash))
                 .fetch(tenant.pool())
-                .await?
-            {
-                crate::media_storage::disk_for(&tenant.org.slug)
-                    .delete(&crate::media_storage::key(&tenant.org.slug, &r.storage_key))
-                    .await
-                    .log_warn("stored file not deleted; the blob is orphaned");
-                r.delete_pool(tenant.pool()).await?;
-            }
+                .await?;
+            purge_renditions(tenant.pool(), &tenant.org.slug, stale).await?;
             let crop_w = form.crop_w.to_string();
             let crop_h = form.crop_h.to_string();
             redirect_named_with_params_and_message_args(
@@ -9646,7 +10394,7 @@ pub async fn media_crop_submit(
                 focal_point_y: None,
                 uploaded_at: Auto::Unset,
             };
-            clone.insert_pool(tenant.pool()).await?;
+            clone.insert(tenant.pool()).await?;
             let new_id = clone.id.get().copied().unwrap_or_default();
             let new_id_str = new_id.to_string();
             let crop_w = form.crop_w.to_string();
@@ -9777,7 +10525,7 @@ pub async fn media_replace_submit(
     media.size = bytes.len() as i64;
     media.width = new_w;
     media.height = new_h;
-    media.save_pool(tenant.pool()).await?;
+    media.save(tenant.pool()).await?;
 
     // Best-effort cleanup of the old file on disk. Only remove when
     // the storage_key actually changed — content-addressed naming
@@ -9795,17 +10543,11 @@ pub async fn media_replace_submit(
     // Purge renditions for the old content_hash so the next request
     // regenerates from the replacement bytes.
     if old_hash != media.content_hash {
-        for r in crate::rendition::MediaRendition::objects()
+        let stale = crate::rendition::MediaRendition::objects()
             .where_(crate::rendition::MediaRendition::content_hash.eq(old_hash))
             .fetch(tenant.pool())
-            .await?
-        {
-            crate::media_storage::disk_for(&tenant.org.slug)
-                .delete(&crate::media_storage::key(&tenant.org.slug, &r.storage_key))
-                .await
-                .log_warn("stored file not deleted; the blob is orphaned");
-            r.delete_pool(tenant.pool()).await?;
-        }
+            .await?;
+        purge_renditions(tenant.pool(), &tenant.org.slug, stale).await?;
     }
 
     redirect_named_with_params_and_message(
@@ -9822,55 +10564,8 @@ pub async fn media_replace_submit(
 // =====================================================================
 
 /// GET /cms-admin/media/{id}/edit — image detail page with the
-/// focal-point picker. Image-only; other kinds return 404.
-/// Locate every page that references `media_id`. Returns
-/// `(page_id, page_title, url_path, status)` rows. Scan reuses the
-/// `harvest_media_ids` helper that powers `media_unused_report`,
-/// inverted so we collect per-page hits instead of building a
-/// tenant-wide used-set.
-async fn pages_referencing_media(
-    pool: &rustango::sql::Pool,
-    media_id: i64,
-) -> Result<Vec<(i64, String, String, String)>, rustango::sql::ExecError> {
-    let pages: Vec<Page> = Page::objects().fetch(pool).await?;
-    let mut hits: Vec<(i64, String, String, String)> = Vec::new();
-    for p in &pages {
-        let page_id = p.id.get().copied().unwrap_or_default();
-        if page_id == 0 {
-            continue;
-        }
-        let mut ids = std::collections::BTreeSet::new();
-        // Walk the canonical page JSON first (defensive).
-        if let Ok(v) = serde_json::to_value(p) {
-            harvest_media_ids(&v, &mut ids);
-        }
-        // Walk the page-type extension JSON (hero_media_id +
-        // stream-block image refs).
-        if let Ok(pts) = PageType::objects()
-            .where_(PageType::id.eq(p.page_type_id))
-            .fetch(pool)
-            .await
-        {
-            if let Some(pt_row) = pts.into_iter().next() {
-                if let Some(handler) = crate::page_type::find_handler(&pt_row.type_name) {
-                    if let Ok(ext) = handler.load_extension(pool, page_id).await {
-                        harvest_media_ids(&ext, &mut ids);
-                    }
-                }
-            }
-        }
-        if ids.contains(&media_id) {
-            hits.push((
-                page_id,
-                p.title.clone(),
-                p.url_path.clone(),
-                p.status.clone(),
-            ));
-        }
-    }
-    Ok(hits)
-}
-
+/// focal-point picker and where the image is used. Image-only; other
+/// kinds return 404.
 pub async fn media_edit_form(
     State(state): State<super::AdminState>,
     tenant: Tenant,
@@ -9887,18 +10582,29 @@ pub async fn media_edit_form(
         return Err(AdminError::NotFound(id));
     }
     // #100 — per-image usage report.
-    let usages = pages_referencing_media(tenant.pool(), id)
+    // Pages, library elements and settings that use this picture.
+    let usage_rows: Vec<serde_json::Value> = crate::media_usage::uses_of(tenant.pool(), id)
         .await
-        .unwrap_or_default();
-    let usage_rows: Vec<serde_json::Value> = usages
-        .iter()
-        .map(|(pid, title, url_path, status)| {
-            serde_json::json!({
-                "id": pid,
-                "title": title,
-                "url_path": url_path,
-                "status": status,
-            })
+        .unwrap_or_default()
+        .into_iter()
+        .map(|u| match u {
+            crate::media_usage::Use::Page { id, title, url_path, status } => serde_json::json!({
+                "kind": "page", "title": title, "where": url_path, "status": status,
+                "href": format!("/cms-admin/pages/{id}/edit"),
+            }),
+            crate::media_usage::Use::Library { id, title } => serde_json::json!({
+                "kind": "library", "title": title, "where": "Library",
+                "href": format!("/cms-admin/library/{id}/edit"),
+            }),
+            crate::media_usage::Use::Setting { scope } => {
+                let branding = scope == crate::branding::SCOPE;
+                serde_json::json!({
+                    "kind": "setting",
+                    "title": if branding { "Branding".to_owned() } else { scope.clone() },
+                    "where": if branding { "Settings" } else { "Site settings" },
+                    "href": if branding { "/cms-admin/settings".to_owned() } else { format!("/cms-admin/site-settings/{scope}/edit") },
+                })
+            }
         })
         .collect();
     let mut ctx = Context::new();
@@ -9980,7 +10686,7 @@ pub async fn media_edit_submit(
     let focal_changed = media.focal_point_x != new_x || media.focal_point_y != new_y;
     media.focal_point_x = new_x;
     media.focal_point_y = new_y;
-    media.save_pool(tenant.pool()).await?;
+    media.save(tenant.pool()).await?;
 
     // Invalidate rendition cache rows + delete their on-disk bytes
     // so subsequent requests regenerate with the new focal point.
@@ -9999,7 +10705,7 @@ pub async fn media_edit_submit(
                 .delete(&crate::media_storage::key(&tenant.org.slug, &r.storage_key))
                 .await
                 .log_warn("stored file not deleted; the blob is orphaned");
-            r.delete_pool(tenant.pool()).await?;
+            r.delete(tenant.pool()).await?;
         }
     }
     redirect_named_with_params_and_message(
@@ -10041,63 +10747,6 @@ fn json_contains_needle(value: &serde_json::Value, needle: &str) -> bool {
     }
 }
 
-/// Recursively walk `value` (the JSON shape of a page's extension
-/// row, plus any nested stream-block JSON we find as string values)
-/// and collect every `media_id` reference. Catches:
-///
-/// - Direct `media_id` / `hero_media_id` / `*_media_id` fields on
-///   the extension table (any object key matching `media_id` or
-///   ending in `_media_id`).
-/// - Stream-block image references: extension rows store the
-///   `body_stream` column as a JSON string; we detect string values
-///   that look like JSON and recurse into the parsed array.
-/// - IDs stored as numbers OR strings — HTML forms submit text, so
-///   stream-block `media_id` values land as strings in the JSON.
-fn harvest_media_ids(value: &serde_json::Value, out: &mut std::collections::BTreeSet<i64>) {
-    use serde_json::Value;
-    match value {
-        Value::Object(map) => {
-            for (key, child) in map {
-                let is_media_key = key == "media_id" || key.ends_with("_media_id");
-                if is_media_key {
-                    match child {
-                        Value::Number(n) => {
-                            if let Some(id) = n.as_i64() {
-                                if id > 0 {
-                                    out.insert(id);
-                                }
-                            }
-                        }
-                        Value::String(s) => {
-                            if let Ok(id) = s.parse::<i64>() {
-                                if id > 0 {
-                                    out.insert(id);
-                                }
-                            }
-                        }
-                        _ => harvest_media_ids(child, out),
-                    }
-                } else {
-                    harvest_media_ids(child, out);
-                }
-            }
-        }
-        Value::Array(arr) => {
-            for item in arr {
-                harvest_media_ids(item, out);
-            }
-        }
-        Value::String(s) => {
-            let trimmed = s.trim_start();
-            if trimmed.starts_with('[') || trimmed.starts_with('{') {
-                if let Ok(parsed) = serde_json::from_str::<Value>(s) {
-                    harvest_media_ids(&parsed, out);
-                }
-            }
-        }
-        _ => {}
-    }
-}
 
 /// GET /cms-admin/media/unused — list `cms_media` rows that no page
 /// references. Builds a reverse index by walking every page's
@@ -10113,43 +10762,11 @@ pub async fn media_unused_report(
         .order_by(&[("uploaded_at", true)])
         .fetch(tenant.pool())
         .await?;
-    let pages: Vec<Page> = Page::objects().fetch(tenant.pool()).await?;
+    // In use anywhere: pages (code extensions and page-builder data,
+    // blocks included), library elements, site settings.
+    let used = crate::media_usage::used(tenant.pool()).await?;
 
-    let mut used: std::collections::BTreeSet<i64> = std::collections::BTreeSet::new();
-
-    // 1) Page rows themselves carry no media_id columns today, but
-    //    we walk the JSON-serialized page anyway for defense-in-depth
-    //    — a future column would auto-surface.
-    for p in &pages {
-        if let Ok(v) = serde_json::to_value(p) {
-            harvest_media_ids(&v, &mut used);
-        }
-    }
-
-    // 2) Extension rows: every PageType handler loads its own
-    //    extension row. The default impl returns Value::Null for
-    //    unit-struct types; ours returns the row as JSON (including
-    //    body_stream as a string we recurse into).
-    for p in &pages {
-        let page_id = p.id.get().copied().unwrap_or_default();
-        // Resolve the PageType row → type_name → handler.
-        // page_type lookup is cheap; tenants have a handful of types.
-        let pt: Vec<crate::page_type_model::PageType> = crate::page_type_model::PageType::objects()
-            .where_(crate::page_type_model::PageType::id.eq(p.page_type_id))
-            .fetch(tenant.pool())
-            .await?;
-        let Some(pt_row) = pt.into_iter().next() else {
-            continue;
-        };
-        let Some(handler) = crate::page_type::find_handler(&pt_row.type_name) else {
-            continue;
-        };
-        if let Ok(ext_value) = handler.load_extension(tenant.pool(), page_id).await {
-            harvest_media_ids(&ext_value, &mut used);
-        }
-    }
-
-    // 3) Diff: media rows whose ID isn't in the used set are unused.
+    // Media rows whose id isn't in use are unused.
     let unused: Vec<&Media> = all_media
         .iter()
         .filter(|m| m.id.get().copied().is_some_and(|id| !used.contains(&id)))
@@ -10192,24 +10809,21 @@ pub async fn media_unused_bulk_delete(
     rustango::extractors::SessionUser(_session_user): rustango::extractors::SessionUser,
     Form(form): Form<Vec<(String, String)>>,
 ) -> Result<Response, AdminError> {
-    use rustango::sql::Auto;
     let ids: Vec<i64> = form
         .iter()
         .filter(|(k, _)| k == "id" || k == "ids")
         .filter_map(|(_, v)| v.parse::<i64>().ok())
         .collect();
+    // The selected rows in one read per chunk (#631); each delete still
+    // runs on its own, since it also removes the files and renditions.
     let mut deleted = 0usize;
-    for id in ids {
-        let row = Media::objects()
-            .where_(Media::id.eq(id))
-            .first(tenant.pool())
+    for chunk in ids.chunks(500) {
+        let rows: Vec<Media> = Media::objects()
+            .where_(Media::id.is_in(chunk.to_vec()))
+            .fetch(tenant.pool())
             .await?;
-        if let Some(m) = row {
-            // Use Model::delete_pool via the row instance.
-            // The framework's Auto wrapper holds the id; deletion
-            // through the row resolves it cleanly.
-            let _ = Auto::Unset::<i64>; // silence unused-import lint
-            m.delete_pool(tenant.pool()).await?;
+        for m in rows {
+            delete_media(tenant.pool(), &tenant.org.slug, m).await?;
             deleted += 1;
         }
     }
@@ -10298,73 +10912,67 @@ async fn render_media_list(
         .map(str::to_lowercase);
     let from_filter = parse_date_floor(filters.from.as_deref());
     let to_filter = parse_date_ceil(filters.to.as_deref());
-    // Fetch every media row + every collection once. Collection
-    // count is small (a handful per tenant); media count is bounded
-    // by what fits comfortably in the admin list. Walk in Rust.
-    let all: Vec<Media> = Media::objects()
-        .order_by(&[("uploaded_at", true)])
-        .fetch(tenant.pool())
-        .await?;
+    // Filtered, counted and paged in SQL (#632): the library used to be
+    // loaded whole and filtered in Rust. `icontains` is case-insensitive
+    // on every backend, which a bare LIKE is not.
+    let pool = tenant.pool();
+    let in_kind = || {
+        let qs = Media::objects();
+        if kind == "image" {
+            qs.where_(Media::kind.eq("image".to_owned()))
+        } else {
+            qs.where_(Media::kind.ne("image".to_owned()))
+        }
+    };
+    let listed = || {
+        let mut qs = in_kind();
+        if let Some(cid) = collection_filter {
+            qs = qs.where_(Media::collection_id.eq(cid));
+        }
+        if let Some(needle) = &search {
+            qs = qs.where_(
+                Media::title
+                    .icontains(needle)
+                    .or(Media::filename.icontains(needle))
+                    .or(Media::alt_text.icontains(needle)),
+            );
+        }
+        if let Some(floor) = from_filter {
+            qs = qs.where_(Media::uploaded_at.gte(floor));
+        }
+        if let Some(ceil) = to_filter {
+            qs = qs.where_(Media::uploaded_at.lte(ceil));
+        }
+        qs
+    };
     let collections: Vec<crate::media::MediaCollection> = crate::media::MediaCollection::objects()
         .order_by(&[("sort_order", false), ("name", false)])
-        .fetch(tenant.pool())
+        .fetch(pool)
         .await?;
 
-    let items: Vec<&Media> = all
-        .iter()
-        .filter(|m| {
-            let kind_match = if kind == "image" {
-                m.kind == "image"
-            } else {
-                m.kind != "image"
-            };
-            let collection_match = match collection_filter {
-                None => true,
-                Some(cid) => m.collection_id == Some(cid),
-            };
-            let search_match = match &search {
-                None => true,
-                Some(needle) => {
-                    m.title.to_lowercase().contains(needle)
-                        || m.filename.to_lowercase().contains(needle)
-                        || m.alt_text.to_lowercase().contains(needle)
-                }
-            };
-            let date_match = m.uploaded_at.get().is_none_or(|when| {
-                let after_from = from_filter.is_none_or(|floor| *when >= floor);
-                let before_to = to_filter.is_none_or(|ceil| *when <= ceil);
-                after_from && before_to
-            });
-            kind_match && collection_match && search_match && date_match
-        })
-        .collect();
-
-    // Paginate the filtered set, so a large library renders one page of
-    // cards and thumbnails. The fetch above is still unbounded: filtering
-    // happens in Rust so the case-insensitive search behaves the same on
-    // SQLite, Postgres and MySQL (bare LIKE does not) — see #632.
     let per_page = crate::admin::pagination::clamp_per_page(filters.per_page);
-    let requested_page = filters.page.unwrap_or(1);
-    let total_items = items.len();
-    let pagination = crate::admin::pagination::context(requested_page, per_page, total_items);
+    let total_items = usize::try_from(listed().count(pool).await?).unwrap_or_default();
+    let pagination = crate::admin::pagination::context(filters.page.unwrap_or(1), per_page, total_items);
     let current_page = pagination["page"].as_i64().unwrap_or(1);
-    let skip = crate::admin::pagination::offset(current_page, per_page) as usize;
-    let items: Vec<&Media> = items.into_iter().skip(skip).take(per_page).collect();
+    let items: Vec<Media> = listed()
+        .order_by(&[("uploaded_at", true), ("id", true)])
+        .limit(per_page as i64)
+        .offset(crate::admin::pagination::offset(current_page, per_page))
+        .fetch(pool)
+        .await?;
 
-    // Count per collection so the sidebar shows "(N)" beside each
-    // name. We count for the CURRENT kind only so the badges line
-    // up with the filtered view the editor is looking at.
-    let mut counts: std::collections::HashMap<Option<i64>, i64> = std::collections::HashMap::new();
-    for m in &all {
-        let in_kind = if kind == "image" {
-            m.kind == "image"
-        } else {
-            m.kind != "image"
-        };
-        if in_kind {
-            *counts.entry(m.collection_id).or_insert(0) += 1;
-        }
-    }
+    // "(N)" beside each collection in the sidebar, for the current kind
+    // only so the badges match the view: one grouped count.
+    let grouped = in_kind()
+        .values(&["collection_id"])
+        .annotate("n", rustango::core::aggregates::count_all().into())
+        .compile()
+        .map_err(rustango::sql::ExecError::from)?;
+    let counts: std::collections::HashMap<Option<i64>, i64> = rustango::sql::fetch_aggregate_dict(pool, &grouped)
+        .await?
+        .into_iter()
+        .filter_map(|r| Some((sql_i64(r.get("collection_id")), sql_i64(r.get("n"))?)))
+        .collect();
 
     let collections_view: Vec<serde_json::Value> = collections
         .iter()
@@ -10738,7 +11346,7 @@ pub async fn media_upload_staged_commit(
                 uploaded_at: Auto::Unset,
             };
             media_row
-                .insert_pool(tenant.pool())
+                .insert(tenant.pool())
                 .await
                 .map_err(|e| format!("insert media: {e}"))?;
             let new_id = media_row.id.get().copied().unwrap_or_default();
@@ -10937,7 +11545,7 @@ pub(crate) async fn store_media(
         focal_point_y: None,
         uploaded_at: Auto::Unset,
     };
-    row.insert_pool(pool).await?;
+    row.insert(pool).await?;
     Ok(row)
 }
 
@@ -11065,6 +11673,39 @@ pub async fn media_upload_submit(
     Ok(Redirect::to(redirect).into_response())
 }
 
+/// Remove `renditions` — their stored files (best effort) and rows.
+async fn purge_renditions(
+    pool: &rustango::sql::Pool,
+    org_slug: &str,
+    renditions: Vec<crate::rendition::MediaRendition>,
+) -> Result<(), AdminError> {
+    for r in renditions {
+        crate::media_storage::disk_for(org_slug)
+            .delete(&crate::media_storage::key(org_slug, &r.storage_key))
+            .await
+            .log_warn("stored file not deleted; the blob is orphaned");
+        r.delete(pool).await?;
+    }
+    Ok(())
+}
+
+/// Delete a media item: its renditions first (they reference it, so the
+/// row can't go while they exist), then its stored file, then the row.
+async fn delete_media(pool: &rustango::sql::Pool, org_slug: &str, row: Media) -> Result<(), AdminError> {
+    let renditions = crate::rendition::MediaRendition::objects()
+        .where_(crate::rendition::MediaRendition::media_id.eq(row.id.get().copied().unwrap_or_default()))
+        .fetch(pool)
+        .await?;
+    purge_renditions(pool, org_slug, renditions).await?;
+    // Best-effort storage cleanup — a missing object is not fatal.
+    crate::media_storage::disk_for(org_slug)
+        .delete(&crate::media_storage::key(org_slug, &row.storage_key))
+        .await
+        .log_warn("stored file not deleted; the blob is orphaned");
+    row.delete(pool).await?;
+    Ok(())
+}
+
 /// POST /cms-admin/media/{id}/delete — drop a media row.
 pub async fn media_delete_submit(
     State(_state): State<super::AdminState>,
@@ -11076,20 +11717,12 @@ pub async fn media_delete_submit(
         .first(tenant.pool())
         .await?
         .ok_or(AdminError::NotFound(id))?;
-    // Best-effort storage cleanup — a missing object is not fatal.
-    crate::media_storage::disk_for(&tenant.org.slug)
-        .delete(&crate::media_storage::key(
-            &tenant.org.slug,
-            &row.storage_key,
-        ))
-        .await
-        .log_warn("stored file not deleted; the blob is orphaned");
     let redirect = if row.kind == "image" {
         "/cms-admin/media"
     } else {
         "/cms-admin/documents"
     };
-    row.delete_pool(tenant.pool()).await?;
+    delete_media(tenant.pool(), &tenant.org.slug, row).await?;
     Ok(Redirect::to(redirect).into_response())
 }
 
@@ -11121,11 +11754,23 @@ pub async fn model_admin_list(
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
     Path(slug): Path<String>,
+    Query(paging): Query<crate::admin::pagination::PageQuery>,
+    axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
 ) -> Result<Response, AdminError> {
     let Some(ma) = super::model_admin::find(&slug) else {
         return Ok((axum::http::StatusCode::NOT_FOUND, "unknown model admin").into_response());
     };
-    let rows_json = (ma.list_rows)(tenant.pool().clone()).await;
+    // Paged (#629): a host model holds user data, not configuration. The
+    // requested page is read first; only a `?page=` past the end (which
+    // the window clamps to the last page) costs a second read.
+    let per_page = crate::admin::pagination::clamp_per_page(paging.per_page);
+    let asked = crate::admin::pagination::offset(paging.page.unwrap_or(1), per_page);
+    let (mut rows_json, total) =
+        (ma.list_rows)(tenant.pool().clone(), per_page as i64, asked).await;
+    let window = paging.window(usize::try_from(total).unwrap_or_default());
+    if window.offset != asked {
+        rows_json = (ma.list_rows)(tenant.pool().clone(), window.limit, window.offset).await.0;
+    }
     let columns = super::model_admin::list_columns(ma.schema);
     let header_labels: Vec<&str> = columns.iter().map(|(_, l)| l.as_str()).collect();
     let body_rows: Vec<Vec<String>> = rows_json
@@ -11144,7 +11789,9 @@ pub async fn model_admin_list(
     ctx.insert("model_slug", &slug);
     ctx.insert("columns", &header_labels);
     ctx.insert("rows", &body_rows);
-    ctx.insert("total", &body_rows.len());
+    ctx.insert("total", &total);
+    ctx.insert("pagination", &window.context);
+    ctx.insert("query_string", &raw_query.unwrap_or_default());
     render_with_csrf(
         &state,
         &headers,
@@ -11570,7 +12217,7 @@ pub async fn form_build_submit(
     // FB-15 — saving stores a DRAFT; the published (public) form is untouched
     // until Publish.
     snippet.data = crate::forms::schema::save_draft_value(&snippet.data, &parsed);
-    snippet.save_pool(tenant.pool()).await?;
+    snippet.save(tenant.pool()).await?;
     // Keep the notification target in step with the recipients typed into
     // form settings, so the two cannot disagree about who gets told.
     if let Err(e) = crate::notify::targets::sync_form_email(
@@ -11627,7 +12274,7 @@ pub async fn form_publish_submit(
         .map_err(|e| AdminError::Validation(format!("invalid form schema: {e}")))?;
     parsed.sanitize_rich_text();
     snippet.data = crate::forms::schema::publish_value(&parsed);
-    snippet.save_pool(tenant.pool()).await?;
+    snippet.save(tenant.pool()).await?;
     if let Some(h) = crate::library::find_handler(&snippet.type_name) {
         if h.revisions_enabled() {
             let uid = session_user.as_ref().and_then(|u| u.id.get().copied());
@@ -11651,15 +12298,18 @@ pub async fn form_publish_submit(
 async fn load_form_submissions(
     pool: &rustango::sql::Pool,
     form_id: i64,
+    paging: Option<&crate::admin::pagination::PageQuery>,
 ) -> Result<
     (
         crate::snippet::Snippet,
         Vec<(String, String)>,
         Vec<crate::forms::submit::FormEntry>,
         std::collections::HashMap<i64, String>,
+        Option<crate::admin::pagination::Window>,
     ),
     AdminError,
 > {
+    use crate::forms::submit::FormEntry;
     let snippet = crate::snippet::Snippet::objects()
         .where_(crate::snippet::Snippet::id.eq(form_id))
         .where_(crate::snippet::Snippet::type_name.eq("form".to_owned()))
@@ -11681,30 +12331,52 @@ async fn load_form_submissions(
             )
         })
         .collect();
-    let entries: Vec<crate::forms::submit::FormEntry> = crate::forms::submit::FormEntry::objects()
-        .where_(crate::forms::submit::FormEntry::form_snippet_id.eq(form_id))
-        .order_by(&[("submitted_at", true)])
-        .fetch(pool)
-        .await?;
+    // The list shows one page of submissions (#627); the CSV export
+    // passes no paging and gets them all.
+    let listed = || {
+        FormEntry::objects()
+            .where_(FormEntry::form_snippet_id.eq(form_id))
+            // `id` breaks timestamp ties, so pages never repeat or skip rows.
+            .order_by(&[("submitted_at", true), ("id", true)])
+    };
+    let (entries, window): (Vec<FormEntry>, _) = match paging {
+        Some(q) => {
+            let total = listed().count(pool).await?;
+            let w = q.window(usize::try_from(total).unwrap_or_default());
+            (listed().limit(w.limit).offset(w.offset).fetch(pool).await?, Some(w))
+        }
+        None => (listed().fetch(pool).await?, None),
+    };
     // Resolve source pages for provenance links.
     let mut page_urls = std::collections::HashMap::new();
-    let ids: Vec<i64> = entries
+    let ids: std::collections::BTreeSet<i64> = entries
         .iter()
         .map(|e| e.source_page_id)
         .filter(|i| *i != 0)
         .collect();
     if !ids.is_empty() {
-        if let Ok(pages) = crate::page::Page::objects().fetch(pool).await {
-            for p in pages {
-                if let Some(pid) = p.id.get().copied() {
-                    if ids.contains(&pid) {
-                        page_urls.insert(pid, p.url_path.clone());
+        // Only the pages the submissions came from, not the whole tree;
+        // in chunks, so a CSV export over many source pages stays under
+        // every backend's bind-parameter limit.
+        let ids: Vec<i64> = ids.into_iter().collect();
+        for chunk in ids.chunks(500) {
+            match crate::page::Page::objects()
+                .where_(crate::page::Page::id.is_in(chunk.to_vec()))
+                .fetch(pool)
+                .await
+            {
+                Ok(pages) => {
+                    for p in pages {
+                        if let Some(pid) = p.id.get().copied() {
+                            page_urls.insert(pid, p.url_path.clone());
+                        }
                     }
                 }
+                Err(e) => tracing::warn!(target: "rustango_cms::admin", error = %e, "source-page lookup failed"),
             }
         }
     }
-    Ok((snippet, columns, entries, page_urls))
+    Ok((snippet, columns, entries, page_urls, window))
 }
 
 /// Render one submission answer cell from the `data_json` value.
@@ -11729,8 +12401,12 @@ pub async fn form_submissions_list(
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
     Path(id): Path<i64>,
+    Query(paging): Query<crate::admin::pagination::PageQuery>,
+    axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
 ) -> Result<Response, AdminError> {
-    let (snippet, columns, entries, page_urls) = load_form_submissions(tenant.pool(), id).await?;
+    let (snippet, columns, entries, page_urls, window) =
+        load_form_submissions(tenant.pool(), id, Some(&paging)).await?;
+    let pagination = window.map(|w| w.context).unwrap_or_default();
     // Which columns are file uploads → render those cells as download links.
     let parsed = crate::forms::schema::parse(&snippet.data).unwrap_or_default();
     let file_keys: std::collections::HashSet<String> = parsed
@@ -11798,7 +12474,9 @@ pub async fn form_submissions_list(
         &columns.iter().map(|(_, l)| l).collect::<Vec<_>>(),
     );
     ctx.insert("rows", &rows);
-    ctx.insert("total", &entries.len());
+    ctx.insert("total", &pagination["total"]);
+    ctx.insert("pagination", &pagination);
+    ctx.insert("query_string", &raw_query.unwrap_or_default());
     render_with_csrf(
         &state,
         &headers,
@@ -11813,7 +12491,7 @@ pub async fn form_submissions_csv(
     tenant: Tenant,
     Path(id): Path<i64>,
 ) -> Result<Response, AdminError> {
-    let (snippet, columns, entries, page_urls) = load_form_submissions(tenant.pool(), id).await?;
+    let (snippet, columns, entries, page_urls, _) = load_form_submissions(tenant.pool(), id, None).await?;
     let mut out = String::new();
     out.push_str("submitted_at,source_page,ip");
     for (_, label) in &columns {
@@ -11972,6 +12650,7 @@ pub async fn locale_list(
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
 ) -> Result<Response, AdminError> {
+    // Not paged: one row per language the site is published in.
     let items: Vec<Locale> = Locale::objects()
         .order_by(&[("sort_order", false), ("code", false)])
         .fetch(tenant.pool())
@@ -12104,7 +12783,7 @@ pub async fn locale_new_submit(
     if row.is_default {
         clear_default_flag(&tenant, None).await?;
     }
-    row.insert_pool(tenant.pool()).await?;
+    row.insert(tenant.pool()).await?;
     redirect_named_with_message_args(
         "rcms-admin:locales:list",
         MsgLevel::Success,
@@ -12162,7 +12841,7 @@ pub async fn locale_edit_submit(
     if row.is_default {
         clear_default_flag(&tenant, Some(id)).await?;
     }
-    row.save_pool(tenant.pool()).await?;
+    row.save(tenant.pool()).await?;
     redirect_named_with_message_args(
         "rcms-admin:locales:list",
         MsgLevel::Success,
@@ -12280,6 +12959,7 @@ pub async fn sso_provider_list(
         return Ok(redirect);
     }
     use rustango::sql::FetcherPool as _;
+    // Not paged: one row per identity provider configured for sign-in.
     let mut items: Vec<rustango::admin::SsoProvider> = rustango::admin::SsoProvider::objects()
         .fetch(tenant.pool())
         .await
@@ -12481,10 +13161,29 @@ pub async fn sso_provider_new_submit(
         sort_order: v.sort_order,
         scopes: v.scopes,
         allow_email_link: false,
+        // 0.62 policy columns, at their column defaults.
+        allowed_email_domains: None,
+        blocked_email_domains: None,
+        allowed_idp_tenants: None,
+        allowed_hosted_domains: None,
+        required_claims: serde_json::json!({}),
+        signup_mode: None,
+        default_roles: None,
+        role_map: serde_json::json!({}),
+        role_claims: None,
+        sync_roles_on_login: false,
+        username_from: "email_local".to_owned(),
+        username_clash: "suffix".to_owned(),
+        sync_profile: false,
+        allow_email_link_staff: false,
+        sso_only: false,
+        auto_deactivate_after_days: None,
+        session_ttl_secs: None,
+        superuser_session_ttl_secs: None,
         created_at: rustango::sql::Auto::Unset,
         updated_at: rustango::sql::Auto::Unset,
     };
-    row.insert_pool(tenant.pool()).await?;
+    row.insert(tenant.pool()).await?;
     redirect_named_with_message_args(
         "rcms-admin:sso-providers:list",
         MsgLevel::Success,
@@ -12522,7 +13221,7 @@ pub async fn sso_provider_edit_submit(
     row.enabled = v.enabled;
     row.sort_order = v.sort_order;
     row.scopes = v.scopes;
-    row.save_pool(tenant.pool()).await?;
+    row.save(tenant.pool()).await?;
     redirect_named_with_message_args(
         "rcms-admin:sso-providers:list",
         MsgLevel::Success,
@@ -12545,7 +13244,7 @@ pub async fn sso_provider_delete_submit(
     }
     let row = find_sso_provider(&tenant, id).await?;
     let label = row.label.clone();
-    row.delete_pool(tenant.pool()).await?;
+    row.delete(tenant.pool()).await?;
     redirect_named_with_message_args(
         "rcms-admin:sso-providers:list",
         MsgLevel::Success,
@@ -12570,7 +13269,7 @@ async fn clear_default_flag(tenant: &Tenant, except: Option<i64>) -> Result<(), 
             }
         }
         r.is_default = false;
-        r.save_pool(tenant.pool()).await?;
+        r.save(tenant.pool()).await?;
     }
     Ok(())
 }
@@ -12690,7 +13389,7 @@ pub async fn workflow_new_submit(
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    row.insert_pool(tenant.pool()).await?;
+    row.insert(tenant.pool()).await?;
     let id = row.id.get().copied().unwrap_or_default();
     redirect_named_with_params_and_message_args(
         "rcms-admin:workflows:edit",
@@ -12810,7 +13509,7 @@ pub async fn workflow_edit_submit(
     row.description = form.description.trim().to_owned();
     row.active = form.parsed_active();
     row.require_reapproval_on_edit = form.parsed_reapproval();
-    row.save_pool(tenant.pool()).await?;
+    row.save(tenant.pool()).await?;
     // Page types name their workflow; a rename must move them along, or
     // their pages would silently publish without review.
     if old_name != row.name {
@@ -12878,10 +13577,10 @@ pub async fn workflow_delete_submit(
         .fetch(tenant.pool())
         .await?;
     for t in tasks {
-        t.delete_pool(tenant.pool()).await?;
+        t.delete(tenant.pool()).await?;
     }
     let name = row.name.clone();
-    row.delete_pool(tenant.pool()).await?;
+    row.delete(tenant.pool()).await?;
     redirect_named_with_message_args(
         "rcms-admin:workflows:list",
         MsgLevel::Success,
@@ -12952,7 +13651,7 @@ pub async fn workflow_task_add(
         kind,
         webhook_url,
     };
-    row.insert_pool(tenant.pool()).await?;
+    row.insert(tenant.pool()).await?;
     redirect_named_with_params_and_message_args(
         "rcms-admin:workflows:edit",
         &[("id", workflow_id.to_string())],
@@ -12977,7 +13676,7 @@ pub async fn workflow_task_delete(
         .await?
         .ok_or(AdminError::NotFound(task_id))?;
     let name = row.name.clone();
-    row.delete_pool(tenant.pool()).await?;
+    row.delete(tenant.pool()).await?;
     redirect_named_with_params_and_message_args(
         "rcms-admin:workflows:edit",
         &[("id", workflow_id.to_string())],
@@ -13363,7 +14062,7 @@ pub async fn page_workflow_approve(
             if let Some(pending) = crate::pending_change::for_page(tenant.pool(), id).await? {
                 match apply_page_edit(
                     tenant.pool(),
-                    &tenant.org.slug,
+                    &tenant_key(&tenant.org)?,
                     &_state.cache_invalidator,
                     _state.mailer.as_deref(),
                     &_state.mailer_from,
@@ -13393,14 +14092,14 @@ pub async fn page_workflow_approve(
                 }
                 // #251 — workflow-finish publish bumps last-publish.
                 page.last_published_at = Some(now);
-                page.save_pool(tenant.pool()).await?;
+                page.save(tenant.pool()).await?;
                 // #692 — the same go-live effects as any other publish
                 // (search index + after_publish_page hooks), and the page's
                 // cached URL goes too: it used to keep serving the old copy.
-                crate::page::went_live_effects(&tenant.org.slug, &page).await;
+                crate::page::went_live_effects(tenant.pool(), &tenant.org.slug, &page, Some(viewer_id)).await;
                 crate::task_queue::purge_urls(
                     _state.cache_invalidator.clone(),
-                    tenant.org.slug.clone(),
+                    tenant_key(&tenant.org)?,
                     vec![page.url_path.clone()],
                 )
                 .await;
@@ -13782,7 +14481,8 @@ pub async fn history_page(
     // `.where_()` is additive (AND); we apply each filter only when
     // present so the SQL stays minimal.
     let mut revisions_query =
-        crate::revision::Revision::objects().order_by(&[("created_at", true)]); // desc — newest first
+        // Newest first; `id` breaks timestamp ties so pages are stable.
+        crate::revision::Revision::objects().order_by(&[("created_at", true), ("id", true)]);
     if let Some(pid) = q.page_id {
         revisions_query = revisions_query.where_(crate::revision::Revision::page_id.eq(pid));
     }
@@ -13791,23 +14491,18 @@ pub async fn history_page(
             revisions_query.where_(crate::revision::Revision::created_by.eq(Some(uid)));
     }
 
-    // The ORM builder has no server-side limit/offset yet, so we fetch
-    // all matching rows then page in memory via
-    // `rustango::pagination::Paginator` (matches the snippet list).
-    // `get_page()` clamps out-of-range numbers to the last page, so the
-    // prev/next links never dangle. Acceptable on the 50-row scale.
-    let all: Vec<crate::revision::Revision> = revisions_query.fetch(tenant.pool()).await?;
-    let total = all.len();
-    let paginator = rustango::pagination::Paginator::new(total, page_size);
-    let page_obj = paginator.get_page(q.page.unwrap_or(1).max(1) as i64);
-    let current_page = page_obj.number as u32;
-    let has_next = page_obj.has_next();
-    let has_prev = page_obj.has_previous();
-    let revisions: Vec<crate::revision::Revision> = if total == 0 {
-        Vec::new()
-    } else {
-        all[page_obj.start_index().saturating_sub(1)..page_obj.end_index()].to_vec()
-    };
+    // Counted and paged in SQL (#627): each revision carries a full page
+    // snapshot, so loading every match to show 50 was the expensive part.
+    let total = usize::try_from(revisions_query.clone().count(tenant.pool()).await?).unwrap_or_default();
+    let pagination = crate::admin::pagination::context(q.page.unwrap_or(1).max(1) as i64, page_size, total);
+    let current_page = pagination["page"].as_i64().unwrap_or(1) as u32;
+    let has_next = pagination["has_next"].as_bool().unwrap_or(false);
+    let has_prev = pagination["has_prev"].as_bool().unwrap_or(false);
+    let revisions: Vec<crate::revision::Revision> = revisions_query
+        .limit(page_size as i64)
+        .offset(crate::admin::pagination::offset(i64::from(current_page), page_size))
+        .fetch(tenant.pool())
+        .await?;
 
     // Batch-fetch every distinct page + user referenced by this slice.
     let page_ids: std::collections::BTreeSet<i64> = revisions.iter().map(|r| r.page_id).collect();
@@ -13844,36 +14539,34 @@ pub async fn history_page(
     // carries everything Tera needs (no further lookups inside the
     // template loop). `is_latest` flags the most-recent revision for
     // each page so the UI can disable revert on the current state.
+    // Every revision's (id, page_id, sequence) for the pages on this
+    // screen — light columns only, never the snapshots — so the latest
+    // flag and the Compare link are right at the edge of a page too.
+    let page_id_list: Vec<i64> = page_ids.iter().copied().collect();
+    let seqs: Vec<(i64, i64, i32)> = crate::revision::page_sequences(tenant.pool(), &page_id_list).await?;
     let mut latest_seq_by_page: std::collections::HashMap<i64, i32> =
         std::collections::HashMap::new();
-    for r in &all {
-        let cur = latest_seq_by_page.entry(r.page_id).or_insert(r.sequence);
-        if r.sequence > *cur {
-            *cur = r.sequence;
+    for &(_, pid, seq) in &seqs {
+        let cur = latest_seq_by_page.entry(pid).or_insert(seq);
+        if seq > *cur {
+            *cur = seq;
         }
     }
-    // #74 — surface the prior revision's id + sequence per row so
-    // the history list's Compare button can deep-link to the diff
-    // view. "Prior" = next-lower sequence on the same page. Built
-    // from `all` (not the page slice) so a row at the slice boundary
-    // still knows its predecessor.
-    let mut by_page: std::collections::HashMap<i64, Vec<&crate::revision::Revision>> =
+    // #74 — the prior revision (next-lower sequence on the same page) of
+    // each row, for the Compare button's deep link to the diff view.
+    let mut by_page: std::collections::HashMap<i64, Vec<(i64, i32)>> =
         std::collections::HashMap::new();
-    for r in &all {
-        by_page.entry(r.page_id).or_default().push(r);
+    for &(id, pid, seq) in &seqs {
+        by_page.entry(pid).or_default().push((id, seq));
     }
     let mut prev_by_id: std::collections::HashMap<i64, (i64, i32)> =
         std::collections::HashMap::new();
     for (_pid, mut list) in by_page {
-        list.sort_by_key(|r| r.sequence);
-        for window in list.windows(2) {
-            let earlier = window[0];
-            let later = window[1];
-            if let (Some(later_id), Some(earlier_id)) =
-                (later.id.get().copied(), earlier.id.get().copied())
-            {
-                prev_by_id.insert(later_id, (earlier_id, earlier.sequence));
-            }
+        list.sort_by_key(|&(_, seq)| seq);
+        for pair in list.windows(2) {
+            let (earlier_id, earlier_seq) = pair[0];
+            let (later_id, _) = pair[1];
+            prev_by_id.insert(later_id, (earlier_id, earlier_seq));
         }
     }
 
@@ -14311,6 +15004,8 @@ pub async fn site_settings_list(
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
 ) -> Result<Response, AdminError> {
+    // Not paged: one row per registered settings schema plus any ad-hoc
+    // scope a developer wrote; settings are not user content.
     let rows = crate::site_setting::list_all(tenant.pool())
         .await
         .unwrap_or_default();
@@ -14334,7 +15029,9 @@ pub async fn site_settings_list(
         }));
     }
     for s in &rows {
-        if crate::site_setting::schema_for(&s.scope).is_some() {
+        // A schema's row is listed above; the starter theme's own record
+        // of which theme it applied is not a setting to edit.
+        if crate::site_setting::schema_for(&s.scope).is_some() || s.scope == crate::starter::MARKER_SCOPE {
             continue;
         }
         view.push(serde_json::json!({
@@ -14525,7 +15222,7 @@ pub async fn site_setting_delete_submit(
         .await
         .unwrap_or(None)
     {
-        row.delete_pool(tenant.pool()).await?;
+        row.delete(tenant.pool()).await?;
     }
     redirect_named_with_message_args(
         "rcms-admin:site-settings:list",
@@ -14553,20 +15250,40 @@ pub async fn search_promotions_report(
     let top = crate::search_promotion::top_queries(tenant.pool(), 100)
         .await
         .unwrap_or_default();
-    // Annotate each query with its promotion count.
+    // Each query's promotion count, from one grouped query (#628) rather
+    // than one lookup per row.
+    let ids: Vec<i64> = top.iter().filter_map(|q| q.id.get().copied()).collect();
+    let mut promo_counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
+    if !ids.is_empty() {
+        use crate::search_promotion::SearchPromotion;
+        let grouped = SearchPromotion::objects()
+            .where_(SearchPromotion::query_id.is_in(ids))
+            .values(&["query_id"])
+            .annotate("n", rustango::core::aggregates::count_all().into())
+            .compile()
+            .map_err(rustango::sql::ExecError::from)?;
+        let found = rustango::sql::fetch_aggregate_dict(tenant.pool(), &grouped)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(target: "rustango_cms::admin", error = %e, "promotion counts failed");
+                Vec::new()
+            });
+        for r in found {
+            if let (Some(qid), Some(n)) = (sql_i64(r.get("query_id")), sql_i64(r.get("n"))) {
+                promo_counts.insert(qid, n);
+            }
+        }
+    }
     let mut rows: Vec<serde_json::Value> = Vec::with_capacity(top.len());
     for q in top {
         let qid = q.id.get().copied().unwrap_or_default();
-        let promos = crate::search_promotion::promotions_for_query(tenant.pool(), qid)
-            .await
-            .unwrap_or_default();
         rows.push(serde_json::json!({
             "id": qid,
             "raw": q.raw,
             "normalized": q.normalized,
             "hits": q.hits,
             "last_seen_at": q.last_seen_at.get().copied(),
-            "promotion_count": promos.len(),
+            "promotion_count": promo_counts.get(&qid).copied().unwrap_or(0),
         }));
     }
     let mut ctx = Context::new();
@@ -14653,7 +15370,7 @@ pub async fn search_promotion_edit_submit(
             .fetch(tenant.pool())
             .await?;
     for row in existing {
-        row.delete_pool(tenant.pool()).await.log_warn("old search promotion not deleted");
+        row.delete(tenant.pool()).await.log_warn("old search promotion not deleted");
     }
     let ids: Vec<i64> = form
         .page_ids
@@ -14676,7 +15393,7 @@ pub async fn search_promotion_edit_submit(
             description: descriptions.get(idx).cloned().unwrap_or_default(),
             created_at: Auto::Unset,
         };
-        row.insert_pool(tenant.pool()).await.log_warn("search promotion not saved");
+        row.insert(tenant.pool()).await.log_warn("search promotion not saved");
     }
     redirect_named_with_message_plural(
         "rcms-admin:reports:search",
@@ -15021,14 +15738,18 @@ pub async fn locked_pages_csv(
 // Workflows report (#109)
 // =====================================================================
 
+/// The report rows, newest first: one page of them for the screen
+/// (`window` = limit, offset; #628), every row for the CSV.
 async fn workflows_report_rows(
     pool: &rustango::sql::Pool,
+    window: Option<(i64, i64)>,
 ) -> Result<Vec<serde_json::Value>, rustango::sql::ExecError> {
     use rustango::sql::FetcherPool as _;
-    let states: Vec<crate::workflow::WorkflowState> = crate::workflow::WorkflowState::objects()
-        .order_by(&[("requested_at", true)]) // desc
-        .fetch(pool)
-        .await?;
+    let mut qs = crate::workflow::WorkflowState::objects().order_by(&[("requested_at", true), ("id", true)]);
+    if let Some((limit, offset)) = window {
+        qs = qs.limit(limit).offset(offset);
+    }
+    let states: Vec<crate::workflow::WorkflowState> = qs.fetch(pool).await?;
     if states.is_empty() {
         return Ok(Vec::new());
     }
@@ -15100,11 +15821,15 @@ pub async fn workflows_report(
     tenant: Tenant,
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
+    Query(paging): Query<crate::admin::pagination::PageQuery>,
+    axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
 ) -> Result<Response, AdminError> {
-    let rows = workflows_report_rows(tenant.pool())
-        .await
-        .unwrap_or_default();
+    let total = crate::workflow::WorkflowState::objects().count(tenant.pool()).await?;
+    let window = paging.window(usize::try_from(total).unwrap_or_default());
+    let rows = workflows_report_rows(tenant.pool(), Some((window.limit, window.offset))).await?;
     let mut ctx = Context::new();
+    ctx.insert("pagination", &window.context);
+    ctx.insert("query_string", &raw_query.unwrap_or_default());
     add_chrome(
         &mut ctx,
         &tenant,
@@ -15134,46 +15859,57 @@ pub async fn revisions_report(
     tenant: Tenant,
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
+    Query(paging): Query<crate::admin::pagination::PageQuery>,
+    axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
 ) -> Result<Response, AdminError> {
+    use crate::revision::Revision;
+    use rustango::core::aggregates::count_all;
     use rustango::sql::FetcherPool as _;
-    let pages: Vec<Page> = Page::objects().fetch(tenant.pool()).await?;
-    let revisions: Vec<crate::revision::Revision> = crate::revision::Revision::objects()
-        .fetch(tenant.pool())
-        .await
-        .unwrap_or_default();
-    let mut count_by_page: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
-    for r in &revisions {
-        *count_by_page.entry(r.page_id).or_default() += 1;
-    }
-    let mut rows: Vec<serde_json::Value> = pages
+    let pool = tenant.pool();
+    // Counted in SQL (#627): this used to load every revision — each a
+    // full page snapshot — to count them per page.
+    let grouped = Revision::objects()
+        .values(&["page_id"])
+        .annotate("n", count_all().into())
+        .order_by(&[("n", true), ("page_id", false)])
+        .compile()
+        .map_err(rustango::sql::ExecError::from)?;
+    let counts: Vec<(i64, i64)> = rustango::sql::fetch_aggregate_dict(pool, &grouped)
+        .await?
         .into_iter()
-        .filter_map(|p| {
-            let pid = p.id.get().copied()?;
-            let count = count_by_page.get(&pid).copied().unwrap_or(0);
-            if count == 0 {
-                return None;
-            }
+        .filter_map(|r| Some((sql_i64(r.get("page_id"))?, sql_i64(r.get("n"))?)))
+        .collect();
+    let total_revisions: i64 = counts.iter().map(|(_, n)| n).sum();
+    let window = paging.window(counts.len());
+    let slice: Vec<(i64, i64)> = counts
+        .into_iter()
+        .skip(usize::try_from(window.offset).unwrap_or_default())
+        .take(usize::try_from(window.limit).unwrap_or_default())
+        .collect();
+    let pages: std::collections::HashMap<i64, Page> = if slice.is_empty() {
+        std::collections::HashMap::new()
+    } else {
+        Page::objects()
+            .where_(Page::id.is_in(slice.iter().map(|(id, _)| *id).collect::<Vec<_>>()))
+            .fetch(pool)
+            .await?
+            .into_iter()
+            .filter_map(|p| p.id.get().copied().map(|id| (id, p)))
+            .collect()
+    };
+    let rows: Vec<serde_json::Value> = slice
+        .iter()
+        .filter_map(|(pid, n)| {
+            let p = pages.get(pid)?;
             Some(serde_json::json!({
                 "page_id": pid,
                 "title": p.title,
                 "url_path": p.url_path,
                 "status": p.status,
-                "revision_count": count,
+                "revision_count": n,
             }))
         })
         .collect();
-    rows.sort_by(|a, b| {
-        let ac = a
-            .get("revision_count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        let bc = b
-            .get("revision_count")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0);
-        bc.cmp(&ac)
-    });
-    let total_revisions = revisions.len();
     let mut ctx = Context::new();
     add_chrome(
         &mut ctx,
@@ -15185,6 +15921,8 @@ pub async fn revisions_report(
     add_admin_theme(&mut ctx, tenant.pool()).await;
     ctx.insert("rows", &rows);
     ctx.insert("total_revisions", &total_revisions);
+    ctx.insert("pagination", &window.context);
+    ctx.insert("query_string", &raw_query.unwrap_or_default());
     ctx.insert("default_keep_latest", &crate::revision::DEFAULT_KEEP_LATEST);
     render_with_csrf(
         &state,
@@ -15192,6 +15930,37 @@ pub async fn revisions_report(
         "rcms_admin/revisions_report.html",
         &mut ctx,
     )
+}
+
+/// An integer from an aggregate row (dynamically typed per backend).
+/// `group_col → row count` over `qs`, from one grouped query instead of
+/// loading every row to count it. Rows whose group is NULL are left out.
+async fn counts_by<T: rustango::core::Model>(
+    pool: &rustango::sql::Pool,
+    qs: rustango::query::QuerySet<T>,
+    group_col: &'static str,
+) -> Result<std::collections::HashMap<i64, i64>, rustango::sql::ExecError> {
+    let grouped = qs
+        .values(&[group_col])
+        .annotate("n", rustango::core::aggregates::count_all().into())
+        .compile()
+        .map_err(rustango::sql::ExecError::from)?;
+    Ok(rustango::sql::fetch_aggregate_dict(pool, &grouped)
+        .await?
+        .into_iter()
+        .filter_map(|r| Some((sql_i64(r.get(group_col))?, sql_i64(r.get("n"))?)))
+        .collect())
+}
+
+fn sql_i64(v: Option<&rustango::core::SqlValue>) -> Option<i64> {
+    use rustango::core::SqlValue;
+    match v? {
+        SqlValue::I64(n) => Some(*n),
+        SqlValue::I32(n) => Some(i64::from(*n)),
+        SqlValue::I16(n) => Some(i64::from(*n)),
+        SqlValue::F64(n) => Some(*n as i64),
+        _ => None,
+    }
 }
 
 /// Form posted from the revisions report's "Prune now" button.
@@ -15258,7 +16027,7 @@ pub async fn workflows_report_csv(
     tenant: Tenant,
     rustango::extractors::SessionUser(_session_user): rustango::extractors::SessionUser,
 ) -> Result<Response, AdminError> {
-    let rows = workflows_report_rows(tenant.pool())
+    let rows = workflows_report_rows(tenant.pool(), None)
         .await
         .unwrap_or_default();
     let mut out = String::with_capacity(256 + rows.len() * 192);
@@ -15927,8 +16696,16 @@ pub async fn admin_search(
         if trimmed.is_empty() {
             Vec::new()
         } else {
-            crate::hooks::run_admin_search_areas(trimmed)
-                .into_iter()
+            crate::hooks::run_admin_search_areas(
+                crate::hooks::HookCtx::new(
+                    tenant.pool(),
+                    &tenant.org.slug,
+                    session_user.as_ref().and_then(|u| u.id.get().copied()),
+                ),
+                trimmed,
+            )
+            .await
+            .into_iter()
                 .map(|(label, hits)| {
                     serde_json::json!({
                         "label": label,
@@ -15987,18 +16764,14 @@ pub async fn navigation_list(
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
 ) -> Result<Response, AdminError> {
+    // Not paged: one row per menu slot a theme renders (header, footer…).
     let menus: Vec<crate::navigation::Menu> = crate::navigation::Menu::objects()
         .order_by(&[("name", false)])
         .fetch(tenant.pool())
         .await?;
-    // Per-menu item count so the list view shows "(N items)".
-    let all_items: Vec<crate::navigation::MenuItem> = crate::navigation::MenuItem::objects()
-        .fetch(tenant.pool())
-        .await?;
-    let mut counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
-    for it in &all_items {
-        *counts.entry(it.menu_id).or_insert(0) += 1;
-    }
+    // Per-menu item count so the list view shows "(N items)", in SQL.
+    let counts =
+        counts_by(tenant.pool(), crate::navigation::MenuItem::objects(), "menu_id").await?;
     let rows: Vec<serde_json::Value> = menus
         .iter()
         .map(|m| {
@@ -16056,7 +16829,7 @@ pub async fn navigation_create_submit(
         name,
         created_at: rustango::sql::Auto::Unset,
     };
-    row.insert_pool(tenant.pool()).await?;
+    row.insert(tenant.pool()).await?;
     redirect_named_with_message_args(
         "rcms-admin:navigation:list",
         MsgLevel::Success,
@@ -16997,7 +17770,7 @@ pub async fn navigation_item_create(
         external_url: external,
         open_in_new_tab: form.open_in_new_tab.is_some(),
     };
-    row.insert_pool(tenant.pool()).await?;
+    row.insert(tenant.pool()).await?;
     redirect_named_with_params_and_message(
         "rcms-admin:navigation:edit",
         &[("id", menu_id.to_string())],
@@ -17029,9 +17802,9 @@ pub async fn navigation_item_delete(
         .await?;
     for mut c in children {
         c.parent_id = row.parent_id;
-        c.save_pool(tenant.pool()).await?;
+        c.save(tenant.pool()).await?;
     }
-    row.delete_pool(tenant.pool()).await?;
+    row.delete(tenant.pool()).await?;
     redirect_named_with_params_and_message(
         "rcms-admin:navigation:edit",
         &[("id", menu_id.to_string())],
@@ -17045,6 +17818,28 @@ pub async fn navigation_item_delete(
 // Page types — usage dashboard (#16)
 // =====================================================================
 
+/// The newest `published_at` among the pages of `type_id`, counting a
+/// never-published page by its `created_at`.
+async fn latest_page_activity(
+    pool: &rustango::sql::Pool,
+    type_id: i64,
+) -> Result<Option<chrono::DateTime<chrono::Utc>>, rustango::sql::ExecError> {
+    let of_type = || Page::objects().where_(Page::page_type_id.eq(type_id));
+    let published: Option<Page> = of_type()
+        .where_(Page::published_at.is_not_null())
+        .order_by(&[("published_at", true)])
+        .first(pool)
+        .await?;
+    let created: Option<Page> = of_type()
+        .where_(Page::published_at.is_null())
+        .order_by(&[("created_at", true)])
+        .first(pool)
+        .await?;
+    Ok(published
+        .and_then(|p| p.published_at)
+        .max(created.and_then(|p| p.created_at.get().copied())))
+}
+
 /// GET /cms-admin/page-types — registry of every page type the host
 /// has compiled in, with how many pages of each currently exist + the
 /// most-recent one. Useful before deprecating a type or refactoring
@@ -17055,26 +17850,15 @@ pub async fn page_types_dashboard(
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
 ) -> Result<Response, AdminError> {
-    // Pull every Page row once and bucket by `page_type_id` in Rust;
-    // sites have N pages but only a handful of types, so one fetch +
-    // a HashMap aggregate beats a per-type COUNT round-trip.
-    let pages: Vec<Page> = Page::objects().fetch(tenant.pool()).await?;
+    // Not paged: one row per page type compiled in or created in the
+    // admin. The pages themselves are counted in SQL, not loaded.
     let page_types: Vec<PageType> = PageType::objects().fetch(tenant.pool()).await?;
-
-    let mut counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
+    let counts = counts_by(tenant.pool(), Page::objects(), "page_type_id").await?;
     let mut latest: std::collections::HashMap<i64, chrono::DateTime<chrono::Utc>> =
         std::collections::HashMap::new();
-    for p in &pages {
-        *counts.entry(p.page_type_id).or_insert(0) += 1;
-        if let Some(when) = p.published_at.or_else(|| p.created_at.get().copied()) {
-            latest
-                .entry(p.page_type_id)
-                .and_modify(|cur| {
-                    if when > *cur {
-                        *cur = when;
-                    }
-                })
-                .or_insert(when);
+    for &type_id in counts.keys() {
+        if let Some(when) = latest_page_activity(tenant.pool(), type_id).await? {
+            latest.insert(type_id, when);
         }
     }
 
@@ -17160,7 +17944,7 @@ pub async fn page_types_dashboard(
     add_chrome(&mut ctx, &tenant, "page-types", session_user.as_ref()).await;
     add_admin_theme(&mut ctx, tenant.pool()).await;
     ctx.insert("rows", &rows);
-    ctx.insert("total_pages", &pages.len());
+    ctx.insert("total_pages", &counts.values().sum::<i64>());
     ctx.insert("total_types", &rows.len());
     // #566 — the New-page-type affordance is Developer-gated (same
     // codename as the field builder). The template also checks the flag.
@@ -17235,22 +18019,37 @@ pub async fn users_list(
     tenant: Tenant,
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
+    Query(paging): Query<crate::admin::pagination::PageQuery>,
+    axum::extract::RawQuery(raw_query): axum::extract::RawQuery,
 ) -> Result<Response, AdminError> {
+    use rustango::tenancy::auth::User;
+    use rustango::tenancy::permissions::UserRole;
     if let Some(redirect) = require_superuser_for_user_admin(session_user.as_ref()) {
         return Ok(redirect);
     }
-    let users: Vec<rustango::tenancy::auth::User> = rustango::tenancy::auth::User::objects()
+    // One page of users, and only their role links (#627).
+    let total_users = User::objects().count(tenant.pool()).await?;
+    let active_users = User::objects().where_(User::active.eq(true)).count(tenant.pool()).await?;
+    let window = paging.window(usize::try_from(total_users).unwrap_or_default());
+    let users: Vec<User> = User::objects()
         .order_by(&[("username", false)])
+        .limit(window.limit)
+        .offset(window.offset)
         .fetch(tenant.pool())
         .await?;
     let roles: Vec<rustango::tenancy::permissions::Role> =
         rustango::tenancy::permissions::Role::objects()
             .fetch(tenant.pool())
             .await?;
-    let user_roles: Vec<rustango::tenancy::permissions::UserRole> =
-        rustango::tenancy::permissions::UserRole::objects()
+    let user_ids: Vec<i64> = users.iter().filter_map(|u| u.id.get().copied()).collect();
+    let user_roles: Vec<UserRole> = if user_ids.is_empty() {
+        Vec::new()
+    } else {
+        UserRole::objects()
+            .where_(UserRole::user_id.is_in(user_ids))
             .fetch(tenant.pool())
-            .await?;
+            .await?
+    };
 
     let roles_by_id: std::collections::HashMap<i64, &rustango::tenancy::permissions::Role> = roles
         .iter()
@@ -17288,8 +18087,10 @@ pub async fn users_list(
     add_chrome(&mut ctx, &tenant, "users", session_user.as_ref()).await;
     add_admin_theme(&mut ctx, tenant.pool()).await;
     ctx.insert("users", &rows);
-    ctx.insert("total_users", &users.len());
-    ctx.insert("active_users", &users.iter().filter(|u| u.active).count());
+    ctx.insert("total_users", &total_users);
+    ctx.insert("active_users", &active_users);
+    ctx.insert("pagination", &window.context);
+    ctx.insert("query_string", &raw_query.unwrap_or_default());
     render_with_csrf(&state, &headers, "rcms_admin/users_list.html", &mut ctx)
 }
 
@@ -17396,28 +18197,25 @@ pub async fn roles_list(
     if let Some(redirect) = require_superuser_for_user_admin(session_user.as_ref()) {
         return Ok(redirect);
     }
+    // Not paged: one row per role an administrator defined. Grants and
+    // members are counted in SQL — members grow with the user base.
     let roles: Vec<rustango::tenancy::permissions::Role> =
         rustango::tenancy::permissions::Role::objects()
             .order_by(&[("name", false)])
             .fetch(tenant.pool())
             .await?;
-    let perms: Vec<rustango::tenancy::permissions::RolePermission> =
-        rustango::tenancy::permissions::RolePermission::objects()
-            .fetch(tenant.pool())
-            .await?;
-    let user_roles: Vec<rustango::tenancy::permissions::UserRole> =
-        rustango::tenancy::permissions::UserRole::objects()
-            .fetch(tenant.pool())
-            .await?;
-
-    let mut perm_counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
-    for p in &perms {
-        *perm_counts.entry(p.role_id).or_insert(0) += 1;
-    }
-    let mut member_counts: std::collections::HashMap<i64, i64> = std::collections::HashMap::new();
-    for ur in &user_roles {
-        *member_counts.entry(ur.role_id).or_insert(0) += 1;
-    }
+    let perm_counts = counts_by(
+        tenant.pool(),
+        rustango::tenancy::permissions::RolePermission::objects(),
+        "role_id",
+    )
+    .await?;
+    let member_counts = counts_by(
+        tenant.pool(),
+        rustango::tenancy::permissions::UserRole::objects(),
+        "role_id",
+    )
+    .await?;
 
     let rows: Vec<serde_json::Value> = roles
         .iter()
@@ -17754,7 +18552,7 @@ async fn sync_role_codenames(
     // Drop the codenames that are no longer wanted.
     for p in &existing {
         if !want.contains(p.codename.as_str()) {
-            p.clone().delete_pool(pool).await?;
+            p.clone().delete(pool).await?;
         }
     }
     // Insert the codenames that aren't already there.
@@ -17765,7 +18563,7 @@ async fn sync_role_codenames(
                 role_id,
                 codename: codename.clone(),
             };
-            row.insert_pool(pool).await?;
+            row.insert(pool).await?;
         }
     }
     Ok(())
@@ -17801,7 +18599,7 @@ pub async fn roles_create_submit(
         description,
         data: serde_json::Value::Object(serde_json::Map::new()),
     };
-    row.insert_pool(tenant.pool()).await?;
+    row.insert(tenant.pool()).await?;
     let role_id = row.id.get().copied().unwrap_or_default();
     let codenames = parse_matrix_form(&form);
     sync_role_codenames(tenant.pool(), role_id, &codenames).await?;
@@ -17850,7 +18648,7 @@ pub async fn roles_edit_submit(
         .to_owned();
     role.name = name.clone();
     role.description = description;
-    role.save_pool(tenant.pool()).await?;
+    role.save(tenant.pool()).await?;
     // Carry over codenames that live outside the matrix surface so
     // legacy / third-party codenames aren't silently dropped when
     // an admin saves the matrix-only form.
@@ -17906,16 +18704,16 @@ pub async fn roles_delete_submit(
         .fetch(tenant.pool())
         .await?
     {
-        p.delete_pool(tenant.pool()).await?;
+        p.delete(tenant.pool()).await?;
     }
     for ur in rustango::tenancy::permissions::UserRole::objects()
         .where_(rustango::tenancy::permissions::UserRole::role_id.eq(id))
         .fetch(tenant.pool())
         .await?
     {
-        ur.delete_pool(tenant.pool()).await?;
+        ur.delete(tenant.pool()).await?;
     }
-    role.delete_pool(tenant.pool()).await?;
+    role.delete(tenant.pool()).await?;
     record_access_change(
         &tenant,
         session_user.as_ref(),
@@ -18112,7 +18910,7 @@ async fn audit_mcp_key(
         },
         changes: serde_json::json!({ "event": what, "detail": detail }),
     };
-    if let Err(e) = rustango::audit::emit_one_pool(pool, &entry).await {
+    if let Err(e) = rustango::audit::emit_one(pool, &entry).await {
         tracing::warn!(error = %e, "mcp key audit emit failed");
     }
 }
@@ -18420,7 +19218,7 @@ pub async fn users_create_submit(
         password_changed_at: Some(chrono::Utc::now()),
         sessions_revoked_at: None,
     };
-    row.insert_pool(tenant.pool()).await?;
+    row.insert(tenant.pool()).await?;
     if let Some(new_id) = row.id.get().copied() {
         sync_user_roles(tenant.pool(), new_id, &role_ids).await?;
     }
@@ -18529,7 +19327,7 @@ pub async fn users_edit_submit(
         user.password_hash = hash;
         user.password_changed_at = Some(chrono::Utc::now());
     }
-    user.save_pool(tenant.pool()).await?;
+    user.save(tenant.pool()).await?;
     sync_user_roles(tenant.pool(), id, &role_ids).await?;
     let after = user_access(tenant.pool(), &user).await?;
     if let Some(detail) = crate::security_log::describe_user_change(&before, &after) {
@@ -18570,7 +19368,7 @@ async fn sync_user_roles(
     let have: std::collections::BTreeSet<i64> = existing.iter().map(|m| m.role_id).collect();
     for m in &existing {
         if !want.contains(&m.role_id) {
-            m.clone().delete_pool(pool).await?;
+            m.clone().delete(pool).await?;
         }
     }
     for role_id in new_role_ids {
@@ -18580,7 +19378,7 @@ async fn sync_user_roles(
                 user_id,
                 role_id: *role_id,
             };
-            row.insert_pool(pool).await?;
+            row.insert(pool).await?;
         }
     }
     Ok(())
@@ -18661,7 +19459,7 @@ pub async fn users_deactivate_submit(
         .ok_or(AdminError::NotFound(id))?;
     let was_active = user.active;
     user.active = false;
-    user.save_pool(tenant.pool()).await?;
+    user.save(tenant.pool()).await?;
     if was_active {
         record_access_change(
             &tenant,
@@ -18732,20 +19530,29 @@ pub async fn users_bulk_submit(
     let me = session_user.as_ref().and_then(|u| u.id.get().copied());
     let mut changed = 0usize;
     let mut skipped_self = false;
-    for id in ids {
-        // Never disable the acting admin — that's a self-lockout.
-        if !target_active && Some(id) == me {
-            skipped_self = true;
-            continue;
+    // Never disable the acting admin — that's a self-lockout.
+    if !target_active && me.is_some_and(|m| ids.contains(&m)) {
+        skipped_self = true;
+        ids.retain(|id| Some(*id) != me);
+    }
+    // The selected users in one read per chunk (#631); each change is
+    // still saved and logged on its own.
+    let mut by_id = std::collections::HashMap::new();
+    for chunk in ids.chunks(500) {
+        use rustango::tenancy::auth::User;
+        for u in User::objects().where_(User::id.is_in(chunk.to_vec())).fetch(tenant.pool()).await? {
+            if let Some(id) = u.id.get().copied() {
+                by_id.insert(id, u);
+            }
         }
-        if let Some(mut user) = rustango::tenancy::auth::User::objects()
-            .where_(rustango::tenancy::auth::User::id.eq(id))
-            .first(tenant.pool())
-            .await?
+    }
+    // In the posted order, so the audit rows follow the selection.
+    let users: Vec<_> = ids.iter().filter_map(|id| by_id.remove(id)).collect();
+    for mut user in users {
         {
             if user.active != target_active {
                 user.active = target_active;
-                user.save_pool(tenant.pool()).await?;
+                user.save(tenant.pool()).await?;
                 changed += 1;
                 let detail = if target_active { "active: off → on" } else { "active: on → off" };
                 record_access_change(
@@ -18777,6 +19584,9 @@ pub async fn settings_page(
     headers: HeaderMap,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
 ) -> Result<Response, AdminError> {
+    // Pictures uploaded before Branding used the media library move into
+    // it, so the form below can show and change them.
+    crate::branding::migrate_uploads(tenant.pool(), &tenant.org.slug).await;
     let locales: Vec<Locale> = Locale::objects()
         .order_by(&[("sort_order", false), ("code", false)])
         .fetch(tenant.pool())
@@ -18813,121 +19623,65 @@ pub async fn settings_page(
     ctx.insert("org_display_name", &tenant.org.display_name);
     ctx.insert("themes", &theme_rows);
 
-    // #199 — surface the current branding asset filenames + URLs
-    // so the Branding form can render "Current logo: <filename>"
-    // hints next to the upload inputs.
-    if let Ok(Some(row)) = crate::site_setting::get(tenant.pool(), "branding").await {
-        let logo_key = row
-            .value_json
-            .get("logo_storage_key")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_owned();
-        let favicon_key = row
-            .value_json
-            .get("favicon_storage_key")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_owned();
-        ctx.insert("branding_logo_filename", &logo_key);
-        ctx.insert("branding_favicon_filename", &favicon_key);
-        ctx.insert(
-            "branding_site_name",
-            row.value_json.get("site_name").and_then(|v| v.as_str()).unwrap_or(""),
-        );
-    }
+    // Branding: the site name and two pictures from the media library.
+    let branding = crate::branding::get(tenant.pool()).await;
+    let picked = |picture: crate::branding::Picture| {
+        branding.get(picture.key()).and_then(|v| v.as_str()).unwrap_or("").to_owned()
+    };
+    let chooser = |picture: crate::branding::Picture, label: &str, help: &str| {
+        crate::widget::Widget::new(crate::widget::WidgetKind::MediaPicker, picture.key(), super::i18n::tr(&headers, label, &[]))
+            .with_value(picked(picture))
+            .with_help(super::i18n::tr(&headers, help, &[]))
+    };
+    ctx.insert(
+        "branding_pictures",
+        &[
+            chooser(crate::branding::Picture::Logo, "Logo", "Shown beside the site name in the admin and on the site."),
+            chooser(crate::branding::Picture::Favicon, "Site icon", "The small picture browsers show in the tab. A square picture works best."),
+        ],
+    );
+    ctx.insert(
+        "branding_site_name",
+        branding.get("site_name").and_then(|v| v.as_str()).unwrap_or(""),
+    );
 
     render_with_csrf(&state, &headers, "rcms_admin/settings.html", &mut ctx)
 }
 
-/// POST /cms-admin/settings/branding — multipart upload of logo
-/// and/or favicon. Files land in
-/// storage key `<tenant>/branding/<name>` and the storage keys are
-/// recorded in `cms_site_setting` under scope `branding`.
+/// POST /cms-admin/settings/branding — the site name and the logo and
+/// icon, picked from the media library (media ids). An empty field clears
+/// it. Stored in the `branding` site setting (see `crate::branding`).
 pub async fn settings_branding_submit(
     State(_state): State<super::AdminState>,
     tenant: Tenant,
     headers: HeaderMap,
     rustango::extractors::SessionUser(_session_user): rustango::extractors::SessionUser,
-    mut multipart: axum::extract::Multipart,
+    axum::Form(form): axum::Form<std::collections::HashMap<String, String>>,
 ) -> Result<Response, AdminError> {
-    let mut logo_filename: Option<String> = None;
-    let mut favicon_filename: Option<String> = None;
-    let mut site_name: Option<String> = None;
-
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| AdminError::Upload(format!("multipart parse: {e}")))?
-    {
-        let field_name = field.name().unwrap_or("").to_owned();
-        let original = field.file_name().map(|s| s.to_owned());
-        let bytes = field
-            .bytes()
-            .await
-            .map_err(|e| AdminError::Upload(format!("read field {field_name}: {e}")))?;
-        // A text field; empty clears it (back to the tenant's name).
-        if field_name == "site_name" {
-            site_name = Some(String::from_utf8_lossy(&bytes).trim().chars().take(120).collect());
-            continue;
-        }
-        if bytes.is_empty() {
-            continue;
-        }
-        let (slot, default_ext) = match field_name.as_str() {
-            "logo" => (&mut logo_filename, "png"),
-            "favicon" => (&mut favicon_filename, "ico"),
-            _ => continue,
-        };
-        let safe_ext = original
-            .as_deref()
-            .and_then(|n| n.rsplit_once('.'))
-            .map(|(_, ext)| ext)
-            .filter(|ext| ext.len() <= 8 && ext.chars().all(|c| c.is_ascii_alphanumeric()))
-            .map(str::to_ascii_lowercase)
-            .unwrap_or_else(|| default_ext.to_owned());
-        let storage_name = format!("{field_name}.{safe_ext}");
-        crate::media_storage::disk_for(&tenant.org.slug)
-            .save(
-                &crate::media_storage::key(&tenant.org.slug, &format!("branding/{storage_name}")),
-                &bytes,
-            )
-            .await
-            .map_err(|e| AdminError::Upload(format!("write {field_name}: {e}")))?;
-        *slot = Some(storage_name);
+    let mut value = crate::branding::get(tenant.pool()).await.as_object().cloned().unwrap_or_default();
+    let site_name: String = form.get("site_name").map(|n| n.trim().chars().take(120).collect()).unwrap_or_default();
+    if site_name.is_empty() {
+        value.remove("site_name");
+    } else {
+        value.insert("site_name".to_owned(), serde_json::json!(site_name));
     }
-
-    // Merge into the existing row so an upload of just the favicon
-    // doesn't clobber a previously-uploaded logo.
-    let existing = crate::site_setting::get(tenant.pool(), "branding")
-        .await
-        .unwrap_or_default()
-        .map(|r| r.value_json)
-        .unwrap_or_else(|| serde_json::json!({}));
-    let mut value = existing.as_object().cloned().unwrap_or_default();
-    if let Some(name) = logo_filename {
-        value.insert("logo_storage_key".to_owned(), serde_json::json!(name));
-    }
-    if let Some(name) = favicon_filename {
-        value.insert("favicon_storage_key".to_owned(), serde_json::json!(name));
-    }
-    match site_name {
-        Some(n) if n.is_empty() => {
-            value.remove("site_name");
+    for picture in [crate::branding::Picture::Logo, crate::branding::Picture::Favicon] {
+        let Some(raw) = form.get(picture.key()) else { continue };
+        let id = raw.trim();
+        // A picked picture replaces an older upload; an empty field clears both.
+        value.remove(&format!("{}_storage_key", picture.key()));
+        if id.is_empty() {
+            value.remove(picture.key());
+        } else if id.parse::<i64>().is_ok() {
+            value.insert(picture.key().to_owned(), serde_json::json!(id));
         }
-        Some(n) => {
-            value.insert("site_name".to_owned(), serde_json::json!(n));
-        }
-        None => {}
     }
-    let _ =
-        crate::site_setting::upsert(tenant.pool(), "branding", serde_json::Value::Object(value))
-            .await?;
+    crate::site_setting::upsert(tenant.pool(), crate::branding::SCOPE, serde_json::Value::Object(value)).await?;
 
     redirect_named_with_message(
         "rcms-admin:settings",
         MsgLevel::Success,
-        "Branding saved. Reload to see the new logo / favicon.",
+        "Branding saved.",
         &headers,
     )
 }
@@ -18936,48 +19690,19 @@ pub async fn settings_branding_submit(
 /// Anonymous-OK: this is admin chrome but the favicon especially
 /// needs to be reachable before login.
 pub async fn settings_branding_serve_logo(headers: HeaderMap, tenant: Tenant) -> Response {
-    serve_branding_asset(&headers, &tenant, "logo_storage_key").await
+    serve_branding_asset(&headers, &tenant, crate::branding::Picture::Logo).await
 }
 
 /// GET /__cms-branding/favicon — streams the per-tenant favicon.
 pub async fn settings_branding_serve_favicon(headers: HeaderMap, tenant: Tenant) -> Response {
-    serve_branding_asset(&headers, &tenant, "favicon_storage_key").await
+    serve_branding_asset(&headers, &tenant, crate::branding::Picture::Favicon).await
 }
 
-async fn serve_branding_asset(headers: &HeaderMap, tenant: &Tenant, slot: &str) -> Response {
-    let setting = match crate::site_setting::get(tenant.pool(), "branding").await {
-        Ok(Some(s)) => s,
-        _ => {
-            return (axum::http::StatusCode::NOT_FOUND, "no branding set").into_response();
-        }
+async fn serve_branding_asset(headers: &HeaderMap, tenant: &Tenant, picture: crate::branding::Picture) -> Response {
+    let branding = crate::branding::get(tenant.pool()).await;
+    let Some((mime, bytes)) = crate::branding::load(tenant.pool(), &tenant.org.slug, &branding, picture).await else {
+        return (axum::http::StatusCode::NOT_FOUND, "no branding picture").into_response();
     };
-    let storage_name = match setting.value_json.get(slot).and_then(|v| v.as_str()) {
-        Some(s) if !s.is_empty() => s.to_owned(),
-        _ => {
-            return (axum::http::StatusCode::NOT_FOUND, "asset not set").into_response();
-        }
-    };
-    // Reject path traversal — storage_name comes from a setting we
-    // wrote ourselves, but never trust round-tripped JSON.
-    if storage_name.contains('/') || storage_name.contains("..") {
-        return (axum::http::StatusCode::BAD_REQUEST, "invalid storage name").into_response();
-    }
-    let bytes = match crate::media_storage::disk_for(&tenant.org.slug)
-        .load(&crate::media_storage::key(
-            &tenant.org.slug,
-            &format!("branding/{storage_name}"),
-        ))
-        .await
-    {
-        Ok(b) => b,
-        Err(_) => {
-            return (axum::http::StatusCode::NOT_FOUND, "branding bytes missing").into_response();
-        }
-    };
-    let mime = mime_guess::from_path(&storage_name)
-        .first_or_octet_stream()
-        .essence_str()
-        .to_owned();
     // #199 fix — the URL is stable (`/__cms-branding/logo|favicon`) and
     // the storage key can stay the same across a re-upload, so the old
     // `public, max-age=3600` (no validator) left browsers showing the
@@ -19076,7 +19801,7 @@ pub async fn settings_theme_switch(
         } else {
             t.is_default = this_id == target_id;
         }
-        t.save_pool(tenant.pool()).await?;
+        t.save(tenant.pool()).await?;
     }
     // #274 — when the picker submits via fetch() (XHR), return JSON with
     // the freshly-rendered CSS + identifying bits so the client can swap
@@ -19435,7 +20160,7 @@ pub async fn redirect_new_submit(
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    row.insert_pool(tenant.pool()).await?;
+    row.insert(tenant.pool()).await?;
     redirect_save_response(&tenant, &row, overrides_live, true, &headers).await
 }
 
@@ -19667,7 +20392,7 @@ pub async fn snippet_import_submit(
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         };
-        match snippet.insert_pool(tenant.pool()).await {
+        match snippet.insert(tenant.pool()).await {
             Ok(_) => inserted += 1,
             Err(_) => skipped += 1,
         }
@@ -19998,7 +20723,7 @@ pub async fn redirect_import_submit(
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         };
-        match redirect.insert_pool(tenant.pool()).await {
+        match redirect.insert(tenant.pool()).await {
             Ok(_) => inserted += 1,
             Err(_) => skipped += 1,
         }
@@ -20076,7 +20801,7 @@ pub async fn redirect_edit_submit(
     row.from_page_id = form.parsed_from_page_id();
     row.to_page_id = form.parsed_to_page_id();
     row.note = form.note.unwrap_or_default().trim().to_owned();
-    row.save_pool(tenant.pool()).await?;
+    row.save(tenant.pool()).await?;
     let overrides_live = row.overrides_live;
     redirect_save_response(&tenant, &row, overrides_live, false, &headers).await
 }
@@ -20097,7 +20822,7 @@ pub async fn redirect_enable_submit(
         .ok_or(AdminError::NotFound(id))?;
     row.is_active = true;
     row.disabled_reason = String::new();
-    row.save_pool(tenant.pool()).await?;
+    row.save(tenant.pool()).await?;
     redirect_named_with_message_args(
         "rcms-admin:redirects:list",
         MsgLevel::Success,
@@ -20123,7 +20848,7 @@ pub async fn redirect_delete_submit(
         .await?
         .ok_or(AdminError::NotFound(id))?;
     let label = format!("{} → {}", row.from_path, row.to_path);
-    row.delete_pool(tenant.pool()).await?;
+    row.delete(tenant.pool()).await?;
     redirect_named_with_message_args(
         "rcms-admin:redirects:list",
         MsgLevel::Success,
@@ -20285,9 +21010,10 @@ pub async fn no_access_page(
     State(state): State<super::AdminState>,
     headers: HeaderMap,
     rustango::extractors::SessionUser(_session_user): rustango::extractors::SessionUser,
+    tenant: Tenant,
 ) -> Result<Response, AdminError> {
     let mut ctx = Context::new();
-    ctx.insert("admin_title", &"CMS Admin");
+    add_auth_chrome(&mut ctx, &tenant).await;
     render_with_csrf(&state, &headers, "rcms_admin/no_access.html", &mut ctx)
 }
 
@@ -20327,27 +21053,35 @@ pub async fn dashboard(
     let viewer_id = session_user.as_ref().and_then(|u| u.id.get().copied());
 
     // ---- counts ----
-    let all_pages: Vec<Page> = Page::objects().fetch(pool).await.unwrap_or_default();
+    // Counted in SQL, grouped by status (#763): the dashboard used to load
+    // every page to count them. `expired` pages have no tile.
     let mut count_drafts = 0usize;
     let mut count_published = 0usize;
     let mut count_scheduled = 0usize;
     let mut count_archived = 0usize;
-    for p in &all_pages {
-        match p.status.as_str() {
-            "draft" => count_drafts += 1,
-            "published" => count_published += 1,
-            "scheduled" => count_scheduled += 1,
-            "archived" => count_archived += 1,
-            _ => {}
+    if let Ok(q) = Page::objects()
+        .values(&["status"])
+        .annotate("n", rustango::core::aggregates::count_all().into())
+        .compile()
+    {
+        for r in rustango::sql::fetch_aggregate_dict(pool, &q).await.unwrap_or_default() {
+            let n = usize::try_from(sql_i64(r.get("n")).unwrap_or(0)).unwrap_or(0);
+            let status = match r.get("status") {
+                Some(rustango::core::SqlValue::String(s)) => crate::page::PageStatus::parse(s),
+                _ => None,
+            };
+            match status {
+                Some(crate::page::PageStatus::Draft) => count_drafts = n,
+                Some(crate::page::PageStatus::Published) => count_published = n,
+                Some(crate::page::PageStatus::Scheduled) => count_scheduled = n,
+                Some(crate::page::PageStatus::Archived) => count_archived = n,
+                Some(crate::page::PageStatus::Expired) | None => {}
+            }
         }
     }
-    let snippet_count: Vec<crate::snippet::Snippet> = crate::snippet::Snippet::objects()
-        .fetch(pool)
-        .await
-        .unwrap_or_default();
-    let media_rows: Vec<Media> = Media::objects().fetch(pool).await.unwrap_or_default();
-    let media_images = media_rows.iter().filter(|m| m.kind == "image").count();
-    let media_docs = media_rows.len() - media_images;
+    let snippet_count = crate::snippet::Snippet::objects().count(pool).await.unwrap_or(0);
+    let media_images = Media::objects().where_(Media::kind.eq("image".to_owned())).count(pool).await.unwrap_or(0);
+    let media_docs = Media::objects().where_(Media::kind.ne("image".to_owned())).count(pool).await.unwrap_or(0);
 
     // ---- recent edits (last 10 revisions across all pages) ----
     let revs: Vec<crate::revision::Revision> = crate::revision::Revision::objects()
@@ -20370,7 +21104,30 @@ pub async fn dashboard(
             .filter_map(|u| u.id.get().copied().map(|id| (id, u.username)))
             .collect()
     };
-    let page_by_id: std::collections::HashMap<i64, &Page> = all_pages
+    // Locks and in-progress reviews up front, so the pages every panel
+    // names come from one lookup of just those ids — not the whole tree.
+    let locks: Vec<crate::lock::PageLock> = crate::lock::PageLock::objects()
+        .fetch(pool)
+        .await
+        .unwrap_or_default();
+    let review_states: Vec<crate::workflow::WorkflowState> = crate::workflow::WorkflowState::objects()
+        .where_(crate::workflow::WorkflowState::status.eq(crate::workflow::WorkflowStatus::InProgress.as_str().to_owned()))
+        .fetch(pool)
+        .await
+        .unwrap_or_default();
+    let needed: Vec<i64> = revs
+        .iter()
+        .map(|r| r.page_id)
+        .chain(locks.iter().map(|l| l.page_id))
+        .chain(review_states.iter().map(|st| st.page_id))
+        .collect::<std::collections::BTreeSet<i64>>()
+        .into_iter()
+        .collect();
+    let mut named_pages: Vec<Page> = Vec::new();
+    for chunk in needed.chunks(500) {
+        named_pages.extend(Page::objects().where_(Page::id.is_in(chunk.to_vec())).fetch(pool).await.unwrap_or_default());
+    }
+    let page_by_id: std::collections::HashMap<i64, &Page> = named_pages
         .iter()
         .filter_map(|p| p.id.get().copied().map(|id| (id, p)))
         .collect();
@@ -20390,10 +21147,6 @@ pub async fn dashboard(
         .collect();
 
     // ---- locked by me ----
-    let locks: Vec<crate::lock::PageLock> = crate::lock::PageLock::objects()
-        .fetch(pool)
-        .await
-        .unwrap_or_default();
     let now = chrono::Utc::now();
     let mine_locked: Vec<serde_json::Value> = locks
         .iter()
@@ -20416,11 +21169,7 @@ pub async fn dashboard(
     // had no way to know someone was waiting.
     let mut review_rows: Vec<serde_json::Value> = Vec::new();
     if let Some(viewer) = session_user.as_ref() {
-        let states: Vec<crate::workflow::WorkflowState> = crate::workflow::WorkflowState::objects()
-            .where_(crate::workflow::WorkflowState::status.eq(crate::workflow::WorkflowStatus::InProgress.as_str().to_owned()))
-            .fetch(pool)
-            .await
-            .unwrap_or_default();
+        let states = &review_states;
         if !states.is_empty() {
             let my_roles: std::collections::BTreeSet<i64> = rustango::tenancy::permissions::UserRole::objects()
                 .where_(rustango::tenancy::permissions::UserRole::user_id.eq(viewer_id.unwrap_or_default()))
@@ -20439,7 +21188,7 @@ pub async fn dashboard(
                 .into_iter()
                 .filter_map(|t| t.id.get().copied().map(|id| (id, t)))
                 .collect();
-            for st in &states {
+            for st in states {
                 let Some(task) = st.current_task_id.and_then(|id| tasks.get(&id)) else { continue };
                 if !viewer.is_superuser && !my_roles.contains(&task.role_id) {
                     continue;
@@ -20457,14 +21206,15 @@ pub async fn dashboard(
     }
 
     // ---- scheduled next ----
-    let mut scheduled: Vec<&Page> = all_pages
-        .iter()
-        .filter(|p| {
-            p.status == "scheduled" && p.go_live_at.is_some() && p.go_live_at.unwrap() > now
-        })
-        .collect();
-    scheduled.sort_by_key(|p| p.go_live_at);
-    scheduled.truncate(5);
+    // The next five, straight from SQL.
+    let scheduled: Vec<Page> = Page::objects()
+        .where_(Page::status.eq(crate::page::PageStatus::Scheduled.as_str().to_owned()))
+        .where_(Page::go_live_at.gt(now))
+        .order_by(&[("go_live_at", false), ("id", false)])
+        .limit(5)
+        .fetch(pool)
+        .await
+        .unwrap_or_default();
     let scheduled_rows: Vec<serde_json::Value> = scheduled
         .into_iter()
         .map(|p| {
@@ -20478,17 +21228,19 @@ pub async fn dashboard(
         .collect();
 
     // ---- plugin widgets ----
-    let plugin_widgets: Vec<serde_json::Value> = crate::hooks::dashboard_widgets()
-        .into_iter()
-        .map(|w| {
-            serde_json::json!({
-                "key": w.key,
-                "label": w.label,
-                "icon": w.icon,
-                "html": w.html,
+    let plugin_widgets: Vec<serde_json::Value> =
+        crate::hooks::render_dashboard_widgets(crate::hooks::HookCtx::new(pool, &tenant.org.slug, viewer_id))
+            .await
+            .into_iter()
+            .map(|(w, html)| {
+                serde_json::json!({
+                    "key": w.key,
+                    "label": w.label,
+                    "icon": w.icon,
+                    "html": html,
+                })
             })
-        })
-        .collect();
+            .collect();
 
     let mut ctx = Context::new();
     add_chrome(&mut ctx, &tenant, "dashboard", session_user.as_ref()).await;
@@ -20498,7 +21250,7 @@ pub async fn dashboard(
     ctx.insert("count_published", &count_published);
     ctx.insert("count_scheduled", &count_scheduled);
     ctx.insert("count_archived", &count_archived);
-    ctx.insert("count_snippets", &snippet_count.len());
+    ctx.insert("count_snippets", &snippet_count);
     ctx.insert("count_images", &media_images);
     ctx.insert("count_documents", &media_docs);
     ctx.insert("recent_edits", &recent_edits);
@@ -20592,17 +21344,27 @@ async fn mcp_keys_ctx(
             .find(|s| s.id.get().copied() == Some(sid))
             .map(|s| s.codename.clone())
     };
-    let mut rows = Vec::with_capacity(keys.len());
-    for key in &keys {
-        let key_id = key.id.get().copied().unwrap_or_default();
+    // Every key's grants in one query (#630), not one per key.
+    let key_ids: Vec<i64> = keys.iter().filter_map(|k| k.id.get().copied()).collect();
+    let mut grants_by_key: std::collections::HashMap<i64, Vec<i64>> = std::collections::HashMap::new();
+    if !key_ids.is_empty() {
         let grants: Vec<AgentGrant> = AgentGrant::objects()
-            .where_(AgentGrant::agent_id.eq(key_id))
+            .where_(AgentGrant::agent_id.is_in(key_ids))
             .fetch(pool)
             .await
             .unwrap_or_default();
-        let scope: Vec<String> = grants
-            .iter()
-            .filter_map(|g| skill_name(g.skill_id))
+        for g in grants {
+            grants_by_key.entry(g.agent_id).or_default().push(g.skill_id);
+        }
+    }
+    let mut rows = Vec::with_capacity(keys.len());
+    for key in &keys {
+        let key_id = key.id.get().copied().unwrap_or_default();
+        let scope: Vec<String> = grants_by_key
+            .get(&key_id)
+            .into_iter()
+            .flatten()
+            .filter_map(|sid| skill_name(*sid))
             .collect();
         rows.push(serde_json::json!({
             "id": key_id,
@@ -20719,6 +21481,10 @@ async fn render_account_page(
     ctx.insert("account_email", &current_email);
     ctx.insert("account_pending_email", &pending_email);
     ctx.insert("account_mailer_wired", &mailer_wired);
+    ctx.insert(
+        "show_templates",
+        &session_user.is_some_and(|u| crate::template_inspector::wanted(u)),
+    );
 
     // #587 — MCP keys card: the viewer's keys + the skill catalog for
     // the optional-scope picker; `mcp_one_time` carries a just-minted
@@ -20827,13 +21593,21 @@ pub async fn account_profile_submit(
                 if bytes.is_empty() {
                     continue;
                 }
+                // Raster pictures only: an SVG can carry script, and the
+                // avatar is served from the admin's own origin.
                 let ext = original
                     .as_deref()
                     .and_then(|n| n.rsplit_once('.'))
-                    .map(|(_, ext)| ext)
-                    .filter(|ext| ext.len() <= 8 && ext.chars().all(|c| c.is_ascii_alphanumeric()))
-                    .map(str::to_ascii_lowercase)
-                    .unwrap_or_else(|| "png".to_owned());
+                    .map(|(_, ext)| ext.to_ascii_lowercase())
+                    .unwrap_or_default();
+                if !matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "webp" | "gif") {
+                    return Ok(redirect_named_with_message(
+                        "rcms-admin:account",
+                        MsgLevel::Error,
+                        "The avatar must be a PNG, JPEG, WebP or GIF picture.",
+                        &headers,
+                    )?);
+                }
                 std::fs::create_dir_all(&avatar_dir)
                     .map_err(|e| AdminError::Upload(format!("create avatar dir: {e}")))?;
                 let storage_name = format!("{uid}.{ext}");
@@ -20872,7 +21646,7 @@ pub async fn account_profile_submit(
         data.insert("avatar_path".to_owned(), serde_json::json!(path));
     }
     user.data = serde_json::Value::Object(data);
-    user.save_pool(tenant.pool()).await?;
+    user.save(tenant.pool()).await?;
 
     redirect_named_with_message(
         "rcms-admin:account",
@@ -20898,7 +21672,7 @@ async fn persist_user_admin_lang(
         let mut data = user.data.as_object().cloned().unwrap_or_default();
         data.insert("admin_lang".to_owned(), serde_json::json!(lang));
         user.data = serde_json::Value::Object(data);
-        user.save_pool(pool).await?;
+        user.save(pool).await?;
     }
     Ok(())
 }
@@ -20948,6 +21722,51 @@ pub async fn account_language_submit(
         resp.headers_mut().append(header::SET_COOKIE, v);
     }
     Ok(resp)
+}
+
+/// Form body for `POST /cms-admin/me/show-templates`; the checkbox is
+/// absent when unticked.
+#[derive(Debug, Deserialize)]
+pub struct AccountShowTemplatesForm {
+    #[serde(default)]
+    pub show_templates: Option<String>,
+}
+
+/// POST /cms-admin/me/show-templates — turn the template inspector on the
+/// public site on or off for this admin (`data.show_templates`; see
+/// `crate::template_inspector`). Superusers only.
+pub async fn account_show_templates_submit(
+    tenant: Tenant,
+    headers: HeaderMap,
+    rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
+    axum::Form(form): axum::Form<AccountShowTemplatesForm>,
+) -> Result<Response, AdminError> {
+    let Some(viewer) = session_user.as_ref() else {
+        return Ok(unauthorized_no_session());
+    };
+    if !viewer.is_superuser {
+        return Ok((axum::http::StatusCode::FORBIDDEN, "admins only").into_response());
+    }
+    let Some(uid) = viewer.id.get().copied() else {
+        return Ok((axum::http::StatusCode::UNAUTHORIZED, "no user id").into_response());
+    };
+    let on = form.show_templates.is_some();
+    if let Some(mut user) = rustango::tenancy::auth::User::objects()
+        .where_(rustango::tenancy::auth::User::id.eq(uid))
+        .first(tenant.pool())
+        .await?
+    {
+        let mut data = user.data.as_object().cloned().unwrap_or_default();
+        data.insert(crate::template_inspector::PREFERENCE.to_owned(), serde_json::json!(on));
+        user.data = serde_json::Value::Object(data);
+        user.save(tenant.pool()).await?;
+    }
+    redirect_named_with_message(
+        "rcms-admin:account",
+        MsgLevel::Success,
+        if on { "Templates will show on the site while you browse it." } else { "Templates are hidden on the site." },
+        &headers,
+    )
 }
 
 /// Form body for `POST /cms-admin/me/email`.
@@ -21003,7 +21822,7 @@ pub async fn account_email_submit(
         // Clear any in-flight confirmation token from a previous attempt.
         data.remove("pending_email");
         user.data = serde_json::Value::Object(data);
-        user.save_pool(tenant.pool()).await?;
+        user.save(tenant.pool()).await?;
         return redirect_named_with_message(
             "rcms-admin:account",
             MsgLevel::Warning,
@@ -21024,7 +21843,7 @@ pub async fn account_email_submit(
     data.remove("pending_email_token");
     data.remove("pending_email_expires_at");
     user.data = serde_json::Value::Object(data);
-    user.save_pool(tenant.pool()).await?;
+    user.save(tenant.pool()).await?;
 
     // Send the confirmation. Best-effort. The signed URL carries
     // user_id + email + TTL — `EmailVerification::verify` on the
@@ -21149,7 +21968,7 @@ pub async fn account_email_confirm(
     data.remove("pending_email_token");
     data.remove("pending_email_expires_at");
     user.data = serde_json::Value::Object(data);
-    user.save_pool(tenant.pool()).await?;
+    user.save(tenant.pool()).await?;
 
     redirect_named_with_message(
         "rcms-admin:account",
@@ -21219,7 +22038,7 @@ pub async fn account_password_submit(
         .map_err(|e| AdminError::Validation(format!("password hash failed: {e}")))?;
     user.password_hash = hash;
     user.password_changed_at = Some(chrono::Utc::now());
-    user.save_pool(tenant.pool()).await?;
+    user.save(tenant.pool()).await?;
 
     redirect_named_with_message(
         "rcms-admin:account",
@@ -21294,7 +22113,6 @@ pub async fn cms_login_form(
     // `/login`. Set the action to a relative URL so the same shape
     // works under reverse proxies.
     ctx.insert("action", &"/login");
-    ctx.insert("admin_title", &"CMS Admin");
     // #279 — make sure the CMS-branded login form always carries a
     // `next` destination so the framework's POST handler doesn't
     // fall back to `/` (the public homepage). Precedence:
@@ -21333,7 +22151,7 @@ pub async fn cms_login_form(
     // #199 — show the tenant's uploaded logo/favicon in the login brand badge
     // (falls back to the default icon when none is set). Same source as the
     // authenticated sidebar; the `/__cms-branding/*` routes are pre-auth.
-    add_branding_urls(&mut ctx, &tenant).await;
+    add_auth_chrome(&mut ctx, &tenant).await;
     render_with_csrf(&state, &headers, "login.html", &mut ctx)
 }
 
@@ -21342,8 +22160,10 @@ pub async fn password_reset_request_form(
     State(state): State<super::AdminState>,
     headers: HeaderMap,
     rustango::extractors::SessionUser(_session_user): rustango::extractors::SessionUser,
+    tenant: Tenant,
 ) -> Result<Response, AdminError> {
     let mut ctx = Context::new();
+    add_auth_chrome(&mut ctx, &tenant).await;
     render_with_csrf(
         &state,
         &headers,
@@ -21364,9 +22184,9 @@ pub async fn password_reset_request_form(
 /// issued; binding the current password hash makes it die the moment the
 /// password changes, so it is single-use without any cache.
 /// The scope stamped on a reset link: the link only verifies on the tenant
-/// it was issued for, alongside the tenant-bound key.
-fn password_reset_scope(tenant_slug: &str) -> rustango::auth_flows::LinkScope {
-    rustango::auth_flows::LinkScope::audience(&format!("rcms-reset:{tenant_slug}"))
+/// (slug and org id) it was issued for, alongside the tenant-bound key.
+fn password_reset_scope(org: &rustango::tenancy::Org) -> rustango::auth_flows::LinkScope {
+    rustango::auth_flows::LinkScope::from(org)
 }
 
 fn password_reset_key(secret: &[u8], tenant_slug: &str, password_hash: &str) -> Vec<u8> {
@@ -21379,12 +22199,12 @@ fn password_reset_key(secret: &[u8], tenant_slug: &str, password_hash: &str) -> 
 /// the user's current password hash, so it stops working once used.
 fn password_reset_url(
     secret: &[u8],
-    tenant_slug: &str,
+    org: &rustango::tenancy::Org,
     user: &rustango::tenancy::auth::User,
 ) -> String {
-    let key = password_reset_key(secret, tenant_slug, &user.password_hash);
+    let key = password_reset_key(secret, &org.slug, &user.password_hash);
     rustango::auth_flows::PasswordReset::issue(
-        &password_reset_scope(tenant_slug),
+        &password_reset_scope(org),
         "/cms-admin/password-reset/confirm",
         user.id.get().copied().unwrap_or(0),
         &key,
@@ -21392,8 +22212,8 @@ fn password_reset_url(
     )
 }
 
-/// A one-hour password-reset link for the active user `username` in the
-/// tenant `pool` belongs to, or `None` when there is no such user.
+/// A one-hour password-reset link for the active user `username` of `org`,
+/// whose tenant database is `pool`, or `None` when there is no such user.
 ///
 /// For operators: it works for an account with no email on file, which
 /// the reset form cannot reach. The link is relative — prefix the site's
@@ -21404,7 +22224,7 @@ fn password_reset_url(
 /// Database errors from the user lookup.
 pub async fn issue_password_reset_link(
     pool: &rustango::sql::Pool,
-    tenant_slug: &str,
+    org: &rustango::tenancy::Org,
     username: &str,
 ) -> Result<Option<String>, rustango::sql::ExecError> {
     let user: Option<rustango::tenancy::auth::User> = rustango::tenancy::auth::User::objects()
@@ -21415,7 +22235,7 @@ pub async fn issue_password_reset_link(
         .into_iter()
         .next();
     let secret = crate::signing::derived_key(super::PASSWORD_RESET_KEY_PURPOSE);
-    Ok(user.map(|u| password_reset_url(&secret, tenant_slug, &u)))
+    Ok(user.map(|u| password_reset_url(&secret, org, &u)))
 }
 
 /// The active user a reset link was issued for, in this request's tenant.
@@ -21443,7 +22263,7 @@ async fn password_reset_user(
         .ok()??;
     let key = password_reset_key(secret, &tenant.org.slug, &user.password_hash);
     match rustango::auth_flows::PasswordReset::verify(
-        &password_reset_scope(&tenant.org.slug),
+        &password_reset_scope(&tenant.org),
         signed_url,
         &key,
     ) {
@@ -21485,7 +22305,7 @@ pub async fn password_reset_request_submit(
             // renders "sent" either way, so the form never confirms or
             // denies that an account exists.
             let token_url =
-                password_reset_url(state.signing_secret.as_slice(), &tenant.org.slug, &u);
+                password_reset_url(state.signing_secret.as_slice(), &tenant.org, &u);
             let to_email = Some(user_email(&u)).filter(|e| !e.is_empty());
             match (to_email, state.mailer.is_some()) {
                 (Some(to), _) => {
@@ -21526,6 +22346,7 @@ pub async fn password_reset_request_submit(
         }
     }
     let mut ctx = Context::new();
+    add_auth_chrome(&mut ctx, &tenant).await;
     // The stdout hint is only true when no mailer is wired.
     ctx.insert("console_mail", &state.mailer.is_none());
     render_with_csrf(
@@ -21552,6 +22373,7 @@ pub async fn password_reset_confirm_form(
         .unwrap_or_default()
         .to_owned();
     let mut ctx = Context::new();
+    add_auth_chrome(&mut ctx, &tenant).await;
     match password_reset_user(&tenant, state.signing_secret.as_slice(), &path_and_query).await {
         Some(_) => {
             // Pass the signed URL through so the POST handler can
@@ -21595,6 +22417,7 @@ pub async fn password_reset_confirm_submit(
     let password_confirm = form.get("password_confirm").cloned().unwrap_or_default();
 
     let mut ctx = Context::new();
+    add_auth_chrome(&mut ctx, &tenant).await;
     let render_confirm_with_error = |state: &super::AdminState,
                                      headers: &HeaderMap,
                                      token: &str,
@@ -21656,7 +22479,7 @@ pub async fn password_reset_confirm_submit(
         }
     };
     user.password_hash = new_hash;
-    if user.save_pool(tenant.pool()).await.is_err() {
+    if user.save(tenant.pool()).await.is_err() {
         return render_confirm_with_error(
             &state,
             &headers,
@@ -21665,7 +22488,9 @@ pub async fn password_reset_confirm_submit(
         );
     }
     // Proving control of the account's mail lifts a lock a guesser set.
-    crate::security_log::unlock(&tenant.org.slug, &user.username).await;
+    if let Some(site) = rustango::tenancy::TenantSlug::of(&tenant.org) {
+        crate::security_log::unlock(&site, &user.username).await;
+    }
     let entry = SecurityEntry::new(crate::security_log::EVENT_PASSWORD_RESET, "admin", &request.meta)
         .user(user.id.get().copied(), &user.username);
     crate::security_log::record(tenant.pool(), &tenant.org.slug, entry).await;
@@ -21751,16 +22576,21 @@ mod tests {
     #[test]
     fn a_reset_link_verifies_until_the_password_changes() {
         let secret = b"test-secret";
-        let url = password_reset_url(secret, "blog", &reset_user("hash-1"));
+        let blog_org = password_reset_key_tests::org(1, "blog");
+        let url = password_reset_url(secret, &blog_org, &reset_user("hash-1"));
         assert!(url.starts_with("/cms-admin/password-reset/confirm?user_id=7&"), "{url}");
         let key = password_reset_key(secret, "blog", "hash-1");
-        let blog = password_reset_scope("blog");
+        let blog = password_reset_scope(&blog_org);
         assert_eq!(rustango::auth_flows::PasswordReset::verify(&blog, &url, &key).ok(), Some(7));
         let after_change = password_reset_key(secret, "blog", "hash-2");
         assert!(rustango::auth_flows::PasswordReset::verify(&blog, &url, &after_change).is_err());
         let other_tenant = password_reset_key(secret, "shop", "hash-1");
-        let shop = password_reset_scope("shop");
+        let shop = password_reset_scope(&password_reset_key_tests::org(2, "shop"));
         assert!(rustango::auth_flows::PasswordReset::verify(&shop, &url, &other_tenant).is_err());
+        // A new site that reuses the slug does not accept the old link.
+        let reborn = password_reset_key_tests::org(9, "blog");
+        let reborn_key = password_reset_key(secret, "blog", "hash-1");
+        assert!(rustango::auth_flows::PasswordReset::verify(&password_reset_scope(&reborn), &url, &reborn_key).is_err());
     }
 
     #[test]
@@ -21929,6 +22759,166 @@ mod tests {
     }
 
     #[test]
+    fn inline_extractor_keeps_the_row_id_and_widget_fields() {
+        let spec = crate::page_type::InlinePanelSpec::with_widgets(
+            "links",
+            "Links",
+            vec![
+                crate::widget::Widget::new(crate::widget::WidgetKind::Select, "cause_id", "Cause"),
+                crate::widget::Widget::new(crate::widget::WidgetKind::Boolean, "featured", "Featured"),
+            ],
+        );
+        let mut form = std::collections::HashMap::new();
+        form.insert("inline__links__0__id".to_owned(), "7".to_owned());
+        form.insert("inline__links__0__cause_id".to_owned(), "3".to_owned());
+        form.insert("inline__links__1__id".to_owned(), String::new());
+        form.insert("inline__links__1__featured".to_owned(), "on".to_owned());
+        let rows = extract_inline_panel_rows(&form, &spec);
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0]["id"], "7");
+        assert_eq!(rows[0]["cause_id"], "3");
+        assert_eq!(rows[1]["featured"], "on");
+        assert!(!rows[1].contains_key("cause_id"), "an unposted field stays absent");
+    }
+
+    #[test]
+    fn inline_panel_ctx_names_and_fills_each_rows_widgets() {
+        use crate::widget::{Widget, WidgetKind};
+        let spec = crate::page_type::InlinePanelSpec::with_widgets(
+            "links",
+            "Links",
+            vec![
+                Widget::new(WidgetKind::Select, "cause_id", "Cause"),
+                Widget::new(WidgetKind::Boolean, "featured", "Featured").with_value("true"),
+            ],
+        )
+        .in_tab("Causes")
+        .allow(false, false, true);
+        let mut row = serde_json::Map::new();
+        row.insert("id".into(), serde_json::json!(7));
+        row.insert("cause_id".into(), serde_json::json!(3));
+        row.insert("featured".into(), serde_json::json!(false));
+        row.insert("__title".into(), serde_json::json!("Scholarships"));
+        let ctx = inline_panel_ctx(&spec, &[row]);
+
+        assert_eq!(ctx["tab_slug"], "inline-causes");
+        assert_eq!(ctx["row_count"], 1);
+        let cards = ctx["cards"].as_array().expect("cards");
+        // The blank row the add button clones comes first, with the placeholder
+        // index and the widgets' own defaults.
+        assert_eq!(cards[0]["template"], true);
+        assert_eq!(cards[0]["widgets"][0]["name"], format!("inline__links__{INLINE_ROW_PLACEHOLDER}__cause_id"));
+        assert_eq!(cards[0]["widgets"][1]["value"], "true");
+        // A loaded row: its index, id, title and values.
+        assert_eq!(cards[1]["template"], false);
+        assert_eq!(cards[1]["id"], "7");
+        assert_eq!(cards[1]["title"], "Scholarships");
+        assert_eq!(cards[1]["widgets"][0]["name"], "inline__links__0__cause_id");
+        assert_eq!(cards[1]["widgets"][0]["value"], "3");
+        assert_eq!(cards[1]["widgets"][1]["value"], "", "false shows as an unchecked box");
+        assert_eq!(ctx["spec"]["can_add"], false);
+    }
+
+    /// A media item whose thumbnails were generated must still delete:
+    /// its renditions reference it, so they go first.
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn media_with_renditions_deletes() {
+        use rustango::sql::Auto;
+        let pool = rustango::sql::Pool::connect("sqlite::memory:").await.expect("pool");
+        for schema in [
+            <crate::media::MediaCollection as rustango::core::Model>::SCHEMA,
+            <Media as rustango::core::Model>::SCHEMA,
+            <crate::rendition::MediaRendition as rustango::core::Model>::SCHEMA,
+        ] {
+            let sql = rustango::migrate::ddl::create_table_if_not_exists_sql_with_dialect(pool.dialect(), schema);
+            for stmt in sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+                rustango::sql::raw_execute_pool(&pool, stmt, Vec::new()).await.expect("ddl");
+            }
+        }
+        rustango::sql::raw_execute_pool(&pool, "PRAGMA foreign_keys = ON", Vec::new()).await.expect("fk on");
+        let mut media = Media {
+            id: Auto::Unset,
+            filename: "a.png".into(),
+            content_hash: "h".into(),
+            mime: "image/png".into(),
+            size: 1,
+            kind: "image".into(),
+            width: Some(1),
+            height: Some(1),
+            storage_key: "missing-a.png".into(),
+            title: String::new(),
+            alt_text: String::new(),
+            description: String::new(),
+            uploaded_by: None,
+            collection_id: None,
+            focal_point_x: None,
+            focal_point_y: None,
+            uploaded_at: Auto::Unset,
+        };
+        media.save(&pool).await.expect("media");
+        let mid = media.id.get().copied().expect("id");
+        let mut r = crate::rendition::MediaRendition {
+            id: Auto::Unset,
+            media_id: mid,
+            content_hash: "h".into(),
+            filter_spec: "fill-10x10".into(),
+            width: 10,
+            height: 10,
+            mime: "image/webp".into(),
+            storage_key: "missing-r.webp".into(),
+            size: 1,
+            last_used_at: chrono::Utc::now(),
+            created_at: Auto::Unset,
+        };
+        r.save(&pool).await.expect("rendition");
+        assert!(media.clone().delete(&pool).await.is_err(), "the bare delete hits the foreign key");
+        delete_media(&pool, "acme", media).await.expect("deletes with its renditions");
+        assert_eq!(Media::objects().fetch(&pool).await.expect("q").len(), 0);
+        assert_eq!(crate::rendition::MediaRendition::objects().fetch(&pool).await.expect("q").len(), 0);
+    }
+
+    #[test]
+    fn per_row_panels_list_titles_only_and_name_their_endpoint() {
+        let spec = crate::page_type::InlinePanelSpec::with_widgets(
+            "links",
+            "Links",
+            vec![crate::widget::Widget::new(crate::widget::WidgetKind::Text, "name", "Name")],
+        )
+        .in_tab("Causes")
+        .per_row();
+        let rows = vec![crate::page_type::InlineRowSummary { id: 7, title: "Scholarships".into() }];
+        let ctx = inline_panel_lazy_ctx(&spec, &rows, 2);
+        assert_eq!(ctx["endpoint"], "/cms-admin/pages/2/inline/links");
+        assert_eq!(ctx["cards"][0]["id"], "7");
+        assert_eq!(ctx["cards"][0]["title"], "Scholarships");
+        assert!(ctx["cards"][0].get("widgets").is_none(), "fields load when the card opens");
+        assert_eq!(ctx["tab_slug"], "inline-causes");
+        // A page not saved yet has nowhere to attach rows.
+        assert!(inline_panel_lazy_ctx(&spec, &[], 0)["endpoint"].is_null());
+    }
+
+    #[test]
+    fn a_new_card_is_not_a_new_page_to_the_route_gate() {
+        assert!(inline_row_id("new-row").unwrap().is_none());
+        assert_eq!(inline_row_id("12").unwrap(), Some(12));
+        assert!(inline_row_id("new").is_err());
+        let code = |path: &str| super::super::route_perms::required(&axum::http::Method::POST, path).map(|r| r.codename);
+        assert_eq!(code("/cms-admin/pages/2/inline/links/new-row").as_deref(), Some("cms_page.edit"));
+        assert_eq!(code("/cms-admin/pages/2/inline/links/7/remove").as_deref(), Some("cms_page.edit"));
+        assert_eq!(code("/cms-admin/pages/2/inline/links/order").as_deref(), Some("cms_page.edit"));
+    }
+
+    #[test]
+    fn legacy_fields_render_as_their_declared_kind() {
+        // Every legacy field used to render as a text box.
+        let mut spec = sample_spec();
+        spec.fields[1].kind = crate::page_type::ExtensionFieldKind::Number;
+        let kinds: Vec<_> = spec.row_widgets().iter().map(|w| w.kind).collect();
+        assert_eq!(kinds, [crate::widget::WidgetKind::Text, crate::widget::WidgetKind::Number]);
+    }
+
+    #[test]
     fn inline_extractor_ignores_unrelated_form_keys() {
         let spec = sample_spec();
         let mut form = std::collections::HashMap::new();
@@ -21999,7 +22989,7 @@ mod media_picker_tests {
             sort_order: sort,
             created_at: Auto::Unset,
         }
-        .insert_pool(pool)
+        .insert(pool)
         .await
         .expect("collection insert");
         MediaCollection::objects()
@@ -22044,7 +23034,7 @@ mod media_picker_tests {
             focal_point_y: None,
             uploaded_at: Auto::Unset,
         }
-        .insert_pool(pool)
+        .insert(pool)
         .await
         .expect("media insert");
     }
@@ -22296,7 +23286,7 @@ mod forms_list_tests {
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         }
-        .insert_pool(pool)
+        .insert(pool)
         .await
         .expect("form insert");
         Snippet::objects()
@@ -22321,7 +23311,7 @@ mod forms_list_tests {
             ip: String::new(),
             submitted_at: Auto::Unset,
         }
-        .insert_pool(pool)
+        .insert(pool)
         .await
         .expect("entry insert");
     }
@@ -22370,7 +23360,7 @@ mod forms_list_tests {
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         }
-        .insert_pool(&pool)
+        .insert(&pool)
         .await
         .expect("snippet insert");
         let rows = forms_list_rows(&pool).await.expect("rows");
@@ -22421,41 +23411,61 @@ mod forms_list_tests {
 mod password_reset_key_tests {
     use super::{password_reset_key, password_reset_scope};
     use rustango::auth_flows::PasswordReset;
+    use rustango::tenancy::Org;
     use std::time::Duration;
 
     const SECRET: &[u8] = b"process-wide-signing-secret";
     const BASE: &str = "/cms-admin/password-reset/confirm";
 
-    fn link(tenant: &str, hash: &str) -> String {
+    /// A registry org with an id, which a tenant scope needs.
+    pub(super) fn org(id: i64, slug: &str) -> Org {
+        let mut org = Org::new(slug);
+        org.id = rustango::sql::Auto::Set(id);
+        org.backend_kind = "sqlite".to_owned();
+        org
+    }
+
+    fn link(tenant: &Org, hash: &str) -> String {
         PasswordReset::issue(
             &password_reset_scope(tenant),
             BASE,
             1,
-            &password_reset_key(SECRET, tenant, hash),
+            &password_reset_key(SECRET, &tenant.slug, hash),
             Duration::from_secs(3600),
         )
     }
 
     #[test]
     fn a_link_verifies_for_the_tenant_and_password_it_was_issued_for() {
-        let url = link("acme", "$argon2id$v=19$old");
+        let acme = org(1, "acme");
+        let url = link(&acme, "$argon2id$v=19$old");
         let key = password_reset_key(SECRET, "acme", "$argon2id$v=19$old");
-        assert_eq!(PasswordReset::verify(&password_reset_scope("acme"), &url, &key).ok(), Some(1));
+        assert_eq!(PasswordReset::verify(&password_reset_scope(&acme), &url, &key).ok(), Some(1));
     }
 
     #[test]
     fn a_link_issued_on_one_tenant_does_not_verify_on_another() {
         // User ids restart at 1 per tenant: this is the takeover in #673.
-        let url = link("acme", "$argon2id$v=19$same");
+        let url = link(&org(1, "acme"), "$argon2id$v=19$same");
         let other = password_reset_key(SECRET, "globex", "$argon2id$v=19$same");
-        assert!(PasswordReset::verify(&password_reset_scope("globex"), &url, &other).is_err());
+        let globex = org(2, "globex");
+        assert!(PasswordReset::verify(&password_reset_scope(&globex), &url, &other).is_err());
+    }
+
+    #[test]
+    fn a_link_does_not_verify_on_a_new_tenant_reusing_the_slug() {
+        let url = link(&org(1, "acme"), "$argon2id$v=19$same");
+        let key = password_reset_key(SECRET, "acme", "$argon2id$v=19$same");
+        let reborn = org(9, "acme");
+        assert!(PasswordReset::verify(&password_reset_scope(&reborn), &url, &key).is_err());
     }
 
     #[test]
     fn a_link_stops_verifying_once_the_password_changes() {
-        let url = link("acme", "$argon2id$v=19$before");
+        let acme = org(1, "acme");
+        let url = link(&acme, "$argon2id$v=19$before");
         let after = password_reset_key(SECRET, "acme", "$argon2id$v=19$after");
-        assert!(PasswordReset::verify(&password_reset_scope("acme"), &url, &after).is_err());
+        assert!(PasswordReset::verify(&password_reset_scope(&acme), &url, &after).is_err());
     }
 }
 
@@ -22469,7 +23479,7 @@ mod publish_gate_tests {
     use rustango::core::Column as _;
     use rustango::sql::{Auto, Pool};
 
-    async fn mem_pool() -> Pool {
+    pub(super) async fn mem_pool() -> Pool {
         let pool = Pool::connect("sqlite::memory:").await.expect("in-memory sqlite");
         for entry in inventory::iter::<rustango::core::ModelEntry> {
             if !entry.schema.managed {
@@ -22488,7 +23498,7 @@ mod publish_gate_tests {
         pool
     }
 
-    async fn draft(pool: &Pool) -> Page {
+    pub(super) async fn draft(pool: &Pool) -> Page {
         let mut pt = PageType {
             id: Auto::Unset,
             app_label: "cms".to_owned(),
@@ -22503,13 +23513,13 @@ mod publish_gate_tests {
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         };
-        pt.save_pool(pool).await.expect("page type");
+        pt.save(pool).await.expect("page type");
         let mut p = draft_template(pt.id.get().copied().expect("type id"));
-        p.save_pool(pool).await.expect("page");
+        p.save(pool).await.expect("page");
         p
     }
 
-    fn draft_template(type_id: i64) -> Page {
+    pub(super) fn draft_template(type_id: i64) -> Page {
         Page {
             id: Auto::Unset,
             page_type_id: type_id,
@@ -22568,7 +23578,7 @@ mod publish_gate_tests {
         let invalidator: std::sync::Arc<dyn crate::cache_invalidate::PageCacheInvalidator> =
             std::sync::Arc::new(crate::cache_invalidate::Noop);
         let id = page.id.get().copied().expect("id");
-        match apply_page_edit(pool, "t", &invalidator, None, "", false, id, &form, Some(&actor))
+        match apply_page_edit(pool, &rustango::tenancy::TenantSlug::new(1, "t"), &invalidator, None, "", false, id, &form, Some(&actor))
             .await
             .expect("save")
         {
@@ -22606,26 +23616,26 @@ mod publish_gate_tests {
         let pool = mem_pool().await;
         let mut page = draft(&pool).await;
         let mut theme = crate::theme::tests::fixture_theme();
-        theme.save_pool(&pool).await.expect("theme");
+        theme.save(&pool).await.expect("theme");
         let theme_id = theme.id.get().copied().expect("theme id");
         page.theme_id = Some(theme_id);
-        page.save_pool(&pool).await.expect("set theme");
+        page.save(&pool).await.expect("set theme");
 
         let invalidator: std::sync::Arc<dyn crate::cache_invalidate::PageCacheInvalidator> =
             std::sync::Arc::new(crate::cache_invalidate::Noop);
         let id = page.id.get().copied().expect("id");
         let mut form = crate::page_form::prefill(&pool, &page).await;
         form.remove("theme_id");
-        assert!(apply_page_edit(&pool, "t", &invalidator, None, "", false, id, &form, None).await.expect("save").is_ok());
+        assert!(apply_page_edit(&pool, &rustango::tenancy::TenantSlug::new(1, "t"), &invalidator, None, "", false, id, &form, None).await.expect("save").is_ok());
         assert_eq!(stored_theme(&pool, &page).await, Some(theme_id), "a form without the field keeps it");
 
         form.insert("theme_id".into(), String::new());
-        assert!(apply_page_edit(&pool, "t", &invalidator, None, "", false, id, &form, None).await.expect("save").is_ok());
+        assert!(apply_page_edit(&pool, &rustango::tenancy::TenantSlug::new(1, "t"), &invalidator, None, "", false, id, &form, None).await.expect("save").is_ok());
         assert_eq!(stored_theme(&pool, &page).await, None, "posted empty clears it");
     }
 
     /// Publish a page-builder body with one text field, `headline`.
-    async fn publish_headline_schema(pool: &Pool, type_id: i64) {
+    pub(super) async fn publish_headline_schema(pool: &Pool, type_id: i64) {
         let document = serde_json::json!({
             "nodes": [{ "kind": "field", "key": "headline", "label": "Headline", "widget": "text" }]
         });
@@ -22721,7 +23731,7 @@ mod publish_gate_tests {
     /// save straight to Published is refused for everyone but a
     /// superuser — the owner's review can't be skipped.
     /// Bind `type_id` to a one-step "Owner review" workflow.
-    async fn bind_review(pool: &Pool, type_id: i64, reapproval: bool) -> crate::workflow::Workflow {
+    pub(super) async fn bind_review(pool: &Pool, type_id: i64, reapproval: bool) -> crate::workflow::Workflow {
         let mut wf = crate::workflow::Workflow {
             id: Auto::Unset,
             name: "Owner review".to_owned(),
@@ -22731,7 +23741,7 @@ mod publish_gate_tests {
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         };
-        wf.save_pool(pool).await.expect("workflow");
+        wf.save(pool).await.expect("workflow");
         rustango::sql::raw_execute_pool(pool, "INSERT INTO rustango_roles (id, name, description) VALUES (1, 'Owner', '')", Vec::new())
             .await
             .expect("role");
@@ -22744,7 +23754,7 @@ mod publish_gate_tests {
             kind: "group_approval".to_owned(),
             webhook_url: String::new(),
         };
-        task.save_pool(pool).await.expect("task");
+        task.save(pool).await.expect("task");
         let mut pt = PageType::objects()
             .where_(PageType::id.eq(type_id))
             .first(pool)
@@ -22752,7 +23762,7 @@ mod publish_gate_tests {
             .expect("q")
             .expect("type");
         pt.workflow = "Owner review".to_owned();
-        pt.save_pool(pool).await.expect("bind");
+        pt.save(pool).await.expect("bind");
         wf
     }
 
@@ -22771,7 +23781,7 @@ mod publish_gate_tests {
         // Renaming the workflow moves the page type along: still reviewed.
         let other = draft_named(&pool, page.page_type_id, "second").await;
         wf.name = "Studio review".to_owned();
-        wf.save_pool(&pool).await.expect("rename");
+        wf.save(&pool).await.expect("rename");
         assert_eq!(crate::workflow::rebind_page_types(&pool, "Owner review", "Studio review").await.expect("rebind"), 1);
         assert_eq!(save(&pool, &other, "published", None, false).await, Err("review required"));
     }
@@ -22783,7 +23793,7 @@ mod publish_gate_tests {
         let invalidator: std::sync::Arc<dyn crate::cache_invalidate::PageCacheInvalidator> =
             std::sync::Arc::new(crate::cache_invalidate::Noop);
         let id = page.id.get().copied().expect("id");
-        match apply_page_edit(pool, "t", &invalidator, None, "", false, id, &form, actor).await.expect("save") {
+        match apply_page_edit(pool, &rustango::tenancy::TenantSlug::new(1, "t"), &invalidator, None, "", false, id, &form, actor).await.expect("save") {
             Ok(o) => o,
             Err(_) => panic!("refused"),
         }
@@ -22821,7 +23831,7 @@ mod publish_gate_tests {
             password_changed_at: None,
             sessions_revoked_at: None,
         };
-        mia.save_pool(&pool).await.expect("user");
+        mia.save(&pool).await.expect("user");
         let editor = PageEditActor { id: mia.id.get().copied().expect("id"), username: "mia".to_owned(), is_superuser: false };
 
         let out = retitle(&pool, &page, "Proposed", Some(&editor)).await;
@@ -22857,8 +23867,803 @@ mod publish_gate_tests {
         slug.clone_into(&mut p.slug);
         p.path = "0002/".to_owned();
         p.url_path = format!("/{slug}");
-        p.save_pool(pool).await.expect("page");
+        p.save(pool).await.expect("page");
         p
+    }
+}
+
+#[cfg(all(test, feature = "sqlite"))]
+mod partial_save_tests {
+    //! #903 — a page save writes only what changed.
+    use super::publish_gate_tests::{bind_review, draft, draft_template, mem_pool, publish_headline_schema};
+    use super::{apply_page_edit, PageEditActor, PageEditOutcome};
+    use crate::page::Page;
+    use rustango::core::Column as _;
+    use rustango::sql::{FetcherPool as _, Pool, UpdaterPool as _};
+    use std::collections::HashMap;
+
+    async fn edit(pool: &Pool, page: &Page, form: &HashMap<String, String>) -> PageEditOutcome {
+        let owner = user(pool, "owner", true).await;
+        edit_as(pool, page, form, &owner).await
+    }
+
+    /// A real user (so the page log and held changes can name them).
+    async fn user(pool: &Pool, name: &str, superuser: bool) -> PageEditActor {
+        use rustango::tenancy::auth::User;
+        let user = match User::objects().where_(User::username.eq(name)).first(pool).await.expect("user") {
+            Some(u) => u,
+            None => {
+                let mut u = User {
+                    id: rustango::sql::Auto::Unset,
+                    username: name.to_owned(),
+                    password_hash: String::new(),
+                    email: None,
+                    is_superuser: superuser,
+                    active: true,
+                    created_at: chrono::Utc::now(),
+                    data: serde_json::json!({}),
+                    password_changed_at: None,
+                    sessions_revoked_at: None,
+                };
+                u.save(pool).await.expect("user");
+                u
+            }
+        };
+        PageEditActor { id: user.id.get().copied().expect("id"), username: name.to_owned(), is_superuser: superuser }
+    }
+
+    async fn edit_as(pool: &Pool, page: &Page, form: &HashMap<String, String>, actor: &PageEditActor) -> PageEditOutcome {
+        let invalidator: std::sync::Arc<dyn crate::cache_invalidate::PageCacheInvalidator> =
+            std::sync::Arc::new(crate::cache_invalidate::Noop);
+        let id = page.id.get().copied().expect("id");
+        match apply_page_edit(pool, &rustango::tenancy::TenantSlug::new(1, "t"), &invalidator, None, "", false, id, form, Some(actor))
+            .await
+            .expect("save")
+        {
+            Ok(o) => o,
+            Err(_) => panic!("refused"),
+        }
+    }
+
+    async fn stored(pool: &Pool, page: &Page) -> Page {
+        Page::objects()
+            .where_(Page::id.eq(page.id.get().copied().expect("id")))
+            .first(pool)
+            .await
+            .expect("query")
+            .expect("page")
+    }
+
+    /// (revisions, page-log entries) recorded for `page`.
+    async fn history(pool: &Pool, page: &Page) -> (usize, usize) {
+        let id = page.id.get().copied().expect("id");
+        let revisions = crate::revision::Revision::objects()
+            .where_(crate::revision::Revision::page_id.eq(id))
+            .fetch(pool)
+            .await
+            .expect("revisions")
+            .len();
+        let log = crate::page_log::PageLogEntry::objects()
+            .where_(crate::page_log::PageLogEntry::page_id.eq(id))
+            .fetch(pool)
+            .await
+            .expect("log")
+            .len();
+        (revisions, log)
+    }
+
+    fn at(rfc3339: &str) -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::parse_from_rfc3339(rfc3339).expect("time").with_timezone(&chrono::Utc)
+    }
+
+    /// Re-saving a live page as the editor shows it writes nothing: the
+    /// timestamps, the history and the tag rows stay as they were. The
+    /// form's minute-precision schedule, its unchecked boxes, the f32
+    /// priority and tag spelling all count as unchanged.
+    #[tokio::test]
+    async fn a_save_without_changes_writes_nothing() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        let mut form = crate::page_form::prefill(&pool, &page).await;
+        form.insert("status".into(), "published".into());
+        form.insert("tags".into(), "news, Big Story".into());
+        form.insert("sitemap_priority".into(), "0.7".into());
+        form.remove("show_in_menus");
+        form.remove("robots_index");
+        assert!(!edit(&pool, &page, &form).await.unchanged);
+
+        // Times the form can't post exactly: seconds on the go-live.
+        let past = at("2020-01-02T03:04:05Z");
+        let go_live = at("2020-01-01T10:00:30Z");
+        Page::objects()
+            .where_(Page::id.eq(page.id.get().copied().expect("id")))
+            .update()
+            .set("updated_at", past)
+            .set("last_published_at", past)
+            .set("go_live_at", go_live)
+            .execute_pool(&pool)
+            .await
+            .expect("backdate");
+        let before = stored(&pool, &page).await;
+        let history_before = history(&pool, &before).await;
+        let tags_before = crate::page_tag::tags_for_page(&pool, before.id.get().copied().expect("id"))
+            .await
+            .expect("tags");
+
+        let mut form = crate::page_form::prefill(&pool, &before).await;
+        form.insert("tags".into(), "Big  Story,news".into());
+        let out = edit(&pool, &before, &form).await;
+        assert!(out.unchanged, "nothing changed");
+
+        let after = stored(&pool, &before).await;
+        assert_eq!(after.updated_at.get(), Some(&past));
+        assert_eq!(after.last_published_at, Some(past));
+        assert_eq!(after.go_live_at, Some(go_live), "the stored seconds stay");
+        assert_eq!(history(&pool, &after).await, history_before, "no revision, no log entry");
+        let tags_after = crate::page_tag::tags_for_page(&pool, after.id.get().copied().expect("id"))
+            .await
+            .expect("tags");
+        let ids = |t: &[crate::page_tag::PageTag]| t.iter().map(|r| r.id.get().copied()).collect::<Vec<_>>();
+        assert_eq!(ids(&tags_after), ids(&tags_before), "tag rows untouched");
+    }
+
+    /// A save changing one field writes that column (and the change
+    /// stamp) only: a move, re-order or theme set while the editor had
+    /// the page open survives.
+    #[tokio::test]
+    async fn a_save_writes_only_the_changed_column() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        let id = page.id.get().copied().expect("id");
+        // The editor loads the page...
+        let mut form = crate::page_form::prefill(&pool, &page).await;
+        // ...meanwhile it moves, and gets a theme.
+        let mut theme = crate::theme::tests::fixture_theme();
+        theme.save(&pool).await.expect("theme");
+        let theme_id = theme.id.get().copied().expect("theme id");
+        let past = at("2020-01-02T03:04:05Z");
+        Page::objects()
+            .where_(Page::id.eq(id))
+            .update()
+            .set("path", "0009/")
+            .set("sort_order", 7_i32)
+            .set("theme_id", theme_id)
+            .set("updated_at", past)
+            .execute_pool(&pool)
+            .await
+            .expect("concurrent move");
+        let history_before = history(&pool, &page).await;
+
+        form.insert("seo_title".into(), "New SEO title".into());
+        let out = edit(&pool, &page, &form).await;
+        assert!(!out.unchanged);
+
+        let after = stored(&pool, &page).await;
+        assert_eq!(after.seo_title, "New SEO title");
+        assert_eq!(after.title, page.title);
+        assert_eq!(after.path, "0009/", "the move survives");
+        assert_eq!(after.sort_order, 7);
+        assert_eq!(after.theme_id, Some(theme_id), "the theme survives");
+        assert_eq!(after.published_at, None);
+        assert!(after.updated_at.get().is_some_and(|t| *t > past), "updated_at moves");
+        let (revisions, log) = history(&pool, &after).await;
+        assert_eq!((revisions, log), (history_before.0 + 1, history_before.1 + 1));
+    }
+
+    /// The type's content counts: changing only a builder field is a
+    /// change, and saving the same value again is not.
+    #[tokio::test]
+    async fn content_changes_are_detected() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        publish_headline_schema(&pool, page.page_type_id).await;
+        let mut form = crate::page_form::prefill(&pool, &page).await;
+        form.insert("pb__headline".into(), "Hello".into());
+        assert!(!edit(&pool, &page, &form).await.unchanged, "a new headline is a change");
+        let form = crate::page_form::prefill(&pool, &stored(&pool, &page).await).await;
+        assert_eq!(form.get("pb__headline").map(String::as_str), Some("Hello"));
+        let before = history(&pool, &page).await;
+        assert!(edit(&pool, &page, &form).await.unchanged, "the same headline is not");
+        assert_eq!(history(&pool, &page).await, before);
+    }
+
+    /// Tags are diffed: the kept tag keeps its row, only the difference
+    /// is written, and the same set again writes nothing.
+    #[tokio::test]
+    async fn tags_are_diffed() {
+        let pool = mem_pool().await;
+        let id = draft(&pool).await.id.get().copied().expect("id");
+        let names = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        assert!(crate::page_tag::replace_tags(&pool, id, &names(&["a", "b"])).await.expect("tags"));
+        let row_of = |rows: &[crate::page_tag::PageTag], n: &str| {
+            rows.iter().find(|r| r.name == n).and_then(|r| r.id.get().copied())
+        };
+        let first = crate::page_tag::tags_for_page(&pool, id).await.expect("tags");
+        assert!(crate::page_tag::replace_tags(&pool, id, &names(&["B", "c"])).await.expect("tags"));
+        let second = crate::page_tag::tags_for_page(&pool, id).await.expect("tags");
+        assert_eq!(second.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(), ["b", "c"]);
+        assert_eq!(row_of(&second, "b"), row_of(&first, "b"), "the kept tag keeps its row");
+        assert!(!crate::page_tag::replace_tags(&pool, id, &names(&["c", "b", "b"])).await.expect("tags"));
+        let third = crate::page_tag::tags_for_page(&pool, id).await.expect("tags");
+        assert_eq!(
+            third.iter().map(|r| r.id.get().copied()).collect::<Vec<_>>(),
+            second.iter().map(|r| r.id.get().copied()).collect::<Vec<_>>()
+        );
+    }
+
+    /// With re-approval on edit, an editor re-saving a live page untouched
+    /// holds nothing and starts no review; a real change still waits.
+    #[tokio::test]
+    async fn an_unchanged_save_is_not_held_for_review() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        let id = page.id.get().copied().expect("id");
+        publish_headline_schema(&pool, page.page_type_id).await;
+        let mut form = crate::page_form::prefill(&pool, &page).await;
+        form.insert("status".into(), "published".into());
+        form.insert("tags".into(), "news".into());
+        form.insert("pb__headline".into(), "Hello".into());
+        edit(&pool, &page, &form).await;
+        bind_review(&pool, page.page_type_id, true).await;
+        let mia = user(&pool, "mia", false).await;
+
+        let live = stored(&pool, &page).await;
+        let mut form = crate::page_form::prefill(&pool, &live).await;
+        form.insert("_action".into(), "continue".into());
+        let out = edit_as(&pool, &live, &form, &mia).await;
+        assert!(out.unchanged && !out.held_for_review && !out.reapproval_kicked);
+        assert!(crate::pending_change::for_page(&pool, id).await.expect("q").is_none(), "nothing held");
+        assert!(crate::workflow::active_state_for_page(&pool, id).await.expect("q").is_none(), "no review");
+
+        // A changed tag or headline is a change, and waits.
+        let mut tagged = form.clone();
+        tagged.insert("tags".into(), "news,more".into());
+        assert!(edit_as(&pool, &live, &tagged, &mia).await.held_for_review);
+        let mut state = crate::workflow::active_state_for_page(&pool, id).await.expect("q").expect("review started");
+        crate::workflow::cancel(&pool, &mut state, mia.id).await.expect("cancel");
+        form.insert("pb__headline".into(), "Changed".into());
+        assert!(edit_as(&pool, &live, &form, &mia).await.held_for_review);
+        assert!(crate::pending_change::for_page(&pool, id).await.expect("q").is_some());
+    }
+
+    /// A rename after the page moved builds its URL under the parent it
+    /// has now, and rewrites its children from where they are now.
+    #[tokio::test]
+    async fn a_rename_after_a_move_uses_the_current_parent() {
+        let pool = mem_pool().await;
+        let a = draft(&pool).await; // "/draft", path 0001/
+        let type_id = a.page_type_id;
+        let row = |slug: &str, path: &str, url: &str, parent: Option<i64>, depth: i32| {
+            let mut p = draft_template(type_id);
+            slug.clone_into(&mut p.slug);
+            path.clone_into(&mut p.path);
+            url.clone_into(&mut p.url_path);
+            p.parent_id = parent;
+            p.depth = depth;
+            p
+        };
+        let mut b = row("b", "0002/", "/b", None, 1);
+        b.save(&pool).await.expect("b");
+        let mut p = row("p", "0001/0003/", "/draft/p", a.id.get().copied(), 2);
+        p.save(&pool).await.expect("p");
+        let mut c = row("c", "0001/0003/0004/", "/draft/p/c", p.id.get().copied(), 3);
+        c.save(&pool).await.expect("c");
+
+        // The editor loads p; then p (with c) moves under b.
+        let mut form = crate::page_form::prefill(&pool, &p).await;
+        Page::objects()
+            .where_(Page::id.eq(p.id.get().copied().expect("id")))
+            .update()
+            .set("parent_id", b.id.get().copied().expect("id"))
+            .set("path", "0002/0003/")
+            .set("url_path", "/b/p")
+            .execute_pool(&pool)
+            .await
+            .expect("move p");
+        Page::objects()
+            .where_(Page::id.eq(c.id.get().copied().expect("id")))
+            .update()
+            .set("path", "0002/0003/0004/")
+            .set("url_path", "/b/p/c")
+            .execute_pool(&pool)
+            .await
+            .expect("move c");
+
+        form.insert("slug".into(), "renamed".into());
+        edit(&pool, &p, &form).await;
+        let p_after = stored(&pool, &p).await;
+        assert_eq!(p_after.url_path, "/b/renamed");
+        assert_eq!(p_after.path, "0002/0003/", "the move stays");
+        assert_eq!(p_after.parent_id, b.id.get().copied());
+        assert_eq!(stored(&pool, &c).await.url_path, "/b/renamed/c");
+    }
+
+    /// A schedule posted with seconds is compared to the second: moving
+    /// it by 30 s is a change. Posted to the minute, the stored seconds
+    /// are kept.
+    #[tokio::test]
+    async fn schedule_precision_follows_the_posted_text() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        let id = page.id.get().copied().expect("id");
+        let future = |t: &str| at(&format!("2099-01-01T{t}Z"));
+        Page::objects()
+            .where_(Page::id.eq(id))
+            .update()
+            .set("go_live_at", future("10:00:30"))
+            .set("status", "scheduled")
+            .execute_pool(&pool)
+            .await
+            .expect("schedule");
+        let page = stored(&pool, &page).await;
+        let mut form = crate::page_form::prefill(&pool, &page).await;
+
+        form.insert("go_live_at".into(), "2099-01-01T10:00Z".into());
+        assert!(edit(&pool, &page, &form).await.unchanged, "the admin input posts minutes");
+        assert_eq!(stored(&pool, &page).await.go_live_at, Some(future("10:00:30")));
+
+        form.insert("go_live_at".into(), "2099-01-01T10:00:00Z".into());
+        assert!(!edit(&pool, &page, &form).await.unchanged, "a script posts seconds");
+        assert_eq!(stored(&pool, &page).await.go_live_at, Some(future("10:00:00")));
+    }
+
+    #[test]
+    fn same_instant_or_compares_at_the_posted_precision() {
+        let s = Some(at("2026-01-01T10:00:30Z"));
+        assert_eq!(super::same_instant_or(s, Some(at("2026-01-01T10:00:00Z")), true), s);
+        assert_eq!(
+            super::same_instant_or(s, Some(at("2026-01-01T10:00:00Z")), false),
+            Some(at("2026-01-01T10:00:00Z"))
+        );
+        assert_eq!(super::same_instant_or(s, Some(at("2026-01-01T10:00:30Z")), false), s);
+        assert_eq!(super::same_instant_or(s, None, true), None);
+    }
+
+    /// The reference index is diffed the same way, duplicates included.
+    #[tokio::test]
+    async fn references_are_diffed() {
+        use crate::reference_index::{reindex_source, Reference, ReferenceIndex, KIND_MEDIA, KIND_PAGE};
+        let pool = mem_pool().await;
+        let id = draft(&pool).await.id.get().copied().expect("id");
+        let refs = |ids: &[i64]| {
+            ids.iter()
+                .map(|m| Reference { to_kind: KIND_MEDIA, to_id: *m, field_path: "body".to_owned() })
+                .collect::<Vec<_>>()
+        };
+        let rows = |pool: Pool| async move {
+            let mut v: Vec<(i64, Option<i64>)> = ReferenceIndex::objects()
+                .where_(ReferenceIndex::from_id.eq(id))
+                .fetch(&pool)
+                .await
+                .expect("refs")
+                .into_iter()
+                .map(|r| (r.to_id, r.id.get().copied()))
+                .collect();
+            v.sort_unstable();
+            v
+        };
+        reindex_source(&pool, KIND_PAGE, id, refs(&[1, 2, 2])).await.expect("index");
+        let first = rows(pool.clone()).await;
+        reindex_source(&pool, KIND_PAGE, id, refs(&[2, 3, 2])).await.expect("index");
+        let second = rows(pool.clone()).await;
+        assert_eq!(second.iter().map(|r| r.0).collect::<Vec<_>>(), [2, 2, 3]);
+        assert_eq!(&second[..2], &first[1..], "the kept references keep their rows");
+        reindex_source(&pool, KIND_PAGE, id, refs(&[3, 2, 2])).await.expect("index");
+        assert_eq!(rows(pool.clone()).await, second, "the same set writes nothing");
+    }
+
+    // #903 phase 2 — concurrent editors.
+
+    /// The edit form for `page` as loaded, carrying its baseline.
+    async fn loaded_form(pool: &Pool, page: &Page) -> HashMap<String, String> {
+        let mut form = crate::page_form::prefill(pool, page).await;
+        form.insert(
+            crate::page_baseline::BASELINE_KEY.into(),
+            crate::page_baseline::Baseline::of("t", page).token(),
+        );
+        form
+    }
+
+    /// Someone else saves `column = value` while the form is open.
+    async fn concurrent_set(pool: &Pool, page: &Page, column: &'static str, value: impl Into<rustango::core::SqlValue>) {
+        Page::objects()
+            .where_(Page::id.eq(page.id.get().copied().expect("id")))
+            .update()
+            .set(column, value.into())
+            .execute_pool(pool)
+            .await
+            .expect("concurrent save");
+    }
+
+    async fn try_edit(
+        pool: &Pool,
+        page: &Page,
+        form: &HashMap<String, String>,
+        actor: Option<&PageEditActor>,
+    ) -> Result<PageEditOutcome, super::PageEditRefusal> {
+        let invalidator: std::sync::Arc<dyn crate::cache_invalidate::PageCacheInvalidator> =
+            std::sync::Arc::new(crate::cache_invalidate::Noop);
+        let id = page.id.get().copied().expect("id");
+        apply_page_edit(pool, &rustango::tenancy::TenantSlug::new(1, "t"), &invalidator, None, "", false, id, form, actor)
+            .await
+            .expect("save")
+    }
+
+    /// Two editors changing different fields both keep their edits: the
+    /// field this editor left as loaded isn't written back.
+    #[tokio::test]
+    async fn edits_to_different_fields_both_survive() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        let mut form = loaded_form(&pool, &page).await;
+        concurrent_set(&pool, &page, "seo_title", "Theirs").await;
+        form.insert("og_title".into(), "Mine".into());
+        let out = edit(&pool, &page, &form).await;
+        assert!(!out.unchanged);
+        let after = stored(&pool, &page).await;
+        assert_eq!(after.seo_title, "Theirs", "their edit survives");
+        assert_eq!(after.og_title, "Mine", "mine is written");
+    }
+
+    /// The same field changed on both sides is refused with both values,
+    /// and nothing is written.
+    #[tokio::test]
+    async fn the_same_field_changed_twice_is_a_conflict() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        let mut form = loaded_form(&pool, &page).await;
+        concurrent_set(&pool, &page, "title", "Their title").await;
+        let before = stored(&pool, &page).await;
+        let history_before = history(&pool, &before).await;
+        form.insert("title".into(), "My title".into());
+        form.insert("og_title".into(), "Mine".into());
+        let owner = user(&pool, "owner", true).await;
+        match try_edit(&pool, &page, &form, Some(&owner)).await {
+            Err(super::PageEditRefusal::Conflict { conflicts, page: shown }) => {
+                assert_eq!(conflicts.len(), 1);
+                assert_eq!(conflicts[0].field, "title");
+                assert_eq!(conflicts[0].theirs, "Their title");
+                assert_eq!(conflicts[0].yours, "My title");
+                assert_eq!(shown.title, "My title", "the form shows the editor's value");
+                assert_eq!(shown.og_title, "Mine");
+            }
+            Ok(_) => panic!("saved over a concurrent change"),
+            Err(_) => panic!("refused for another reason"),
+        }
+        let after = stored(&pool, &page).await;
+        assert_eq!(after.title, "Their title");
+        assert_eq!(after.og_title, before.og_title, "nothing written, not even the other field");
+        assert_eq!(after.updated_at.get(), before.updated_at.get());
+        assert_eq!(history(&pool, &after).await, history_before);
+
+        // Saved again from the re-shown form (a fresh baseline), the
+        // editor's value goes in.
+        let mut again = loaded_form(&pool, &after).await;
+        again.insert("title".into(), "My title".into());
+        assert!(!edit(&pool, &after, &again).await.unchanged);
+        assert_eq!(stored(&pool, &page).await.title, "My title");
+    }
+
+    /// A save with no actor (an approved held change) has nobody to show a
+    /// conflict to: its values win.
+    #[tokio::test]
+    async fn a_save_without_an_actor_resolves_conflicts_to_its_values() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        let mut form = loaded_form(&pool, &page).await;
+        concurrent_set(&pool, &page, "title", "Their title").await;
+        form.insert("title".into(), "Approved title".into());
+        assert!(try_edit(&pool, &page, &form, None).await.is_ok());
+        assert_eq!(stored(&pool, &page).await.title, "Approved title");
+    }
+
+    /// A post without a baseline (API, MCP, an old form) saves as before:
+    /// the posted values win.
+    #[tokio::test]
+    async fn a_save_without_a_baseline_keeps_last_write_wins() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        let mut form = crate::page_form::prefill(&pool, &page).await;
+        concurrent_set(&pool, &page, "seo_title", "Theirs").await;
+        concurrent_set(&pool, &page, "title", "Their title").await;
+        form.insert("title".into(), "My title".into());
+        assert!(!edit(&pool, &page, &form).await.unchanged);
+        let after = stored(&pool, &page).await;
+        assert_eq!(after.title, "My title");
+        assert_eq!(after.seo_title, page.seo_title, "the loaded value is written back");
+    }
+
+    /// A tampered baseline, or one minted for another page or tenant, is ignored:
+    /// the save goes ahead as one without a baseline.
+    #[tokio::test]
+    async fn a_tampered_baseline_is_ignored() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        let other = {
+            let mut p = page.clone();
+            p.id = rustango::sql::Auto::Set(page.id.get().copied().expect("id") + 1);
+            p
+        };
+        let token = crate::page_baseline::Baseline::of("t", &page).token();
+        let tampered = {
+            let mut t = token.into_bytes();
+            let at = t.len() - 1;
+            t[at] = if t[at] == b'0' { b'1' } else { b'0' };
+            String::from_utf8(t).expect("ascii")
+        };
+        for bad in [
+            tampered,
+            crate::page_baseline::Baseline::of("t", &other).token(),
+            crate::page_baseline::Baseline::of("another-tenant", &page).token(),
+            "garbage".to_owned(),
+        ] {
+            let current = stored(&pool, &page).await;
+            let mut form = crate::page_form::prefill(&pool, &current).await;
+            form.insert(crate::page_baseline::BASELINE_KEY.into(), bad);
+            concurrent_set(&pool, &page, "title", "Their title").await;
+            form.insert("title".into(), "My title".into());
+            let owner = user(&pool, "owner", true).await;
+            assert!(try_edit(&pool, &page, &form, Some(&owner)).await.is_ok(), "no conflict without a valid baseline");
+            assert_eq!(stored(&pool, &page).await.title, "My title");
+        }
+    }
+
+    /// The scheduler published the page while the form was open: saving
+    /// another field with the baseline keeps it published.
+    #[tokio::test]
+    async fn a_page_the_scheduler_published_stays_published() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        let id = page.id.get().copied().expect("id");
+        let soon = chrono::Utc::now() + chrono::Duration::hours(1);
+        Page::objects()
+            .where_(Page::id.eq(id))
+            .update()
+            .set("status", "scheduled")
+            .set("go_live_at", soon)
+            .execute_pool(&pool)
+            .await
+            .expect("schedule");
+        let loaded = stored(&pool, &page).await;
+        let mut form = loaded_form(&pool, &loaded).await;
+        // The sweep runs: go-live passed, the page is live.
+        let past = chrono::Utc::now() - chrono::Duration::minutes(5);
+        Page::objects()
+            .where_(Page::id.eq(id))
+            .update()
+            .set("status", "published")
+            .set("go_live_at", past)
+            .execute_pool(&pool)
+            .await
+            .expect("publish");
+        form.insert("seo_title".into(), "Edited".into());
+        assert!(!edit(&pool, &loaded, &form).await.unchanged);
+        let after = stored(&pool, &page).await;
+        assert_eq!(after.status, "published");
+        assert_eq!(after.go_live_at.map(|t| t.timestamp() / 60), Some(past.timestamp() / 60));
+        assert_eq!(after.seo_title, "Edited");
+    }
+
+    /// Checkboxes post nothing when unticked: a box this editor left as
+    /// loaded keeps another editor's change, one this editor unticked is
+    /// written, and both unticking the same box is no conflict (a two-value
+    /// field can't be changed to different values from one baseline).
+    #[tokio::test]
+    async fn checkboxes_merge_three_ways() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        let owner = user(&pool, "owner", true).await;
+        assert!(page.robots_index && page.show_in_menus);
+
+        // They untick one box, I untick the other: both stand.
+        let mut form = loaded_form(&pool, &page).await;
+        assert_eq!(form.get("robots_index").map(String::as_str), Some("on"));
+        concurrent_set(&pool, &page, "robots_index", false).await;
+        form.remove("show_in_menus");
+        assert!(try_edit(&pool, &page, &form, Some(&owner)).await.is_ok());
+        let after = stored(&pool, &page).await;
+        assert!(!after.robots_index, "their unticking survives the box I left ticked");
+        assert!(!after.show_in_menus, "my unticking is written");
+
+        // They tick one box, I tick the other: both stand.
+        let mut form = loaded_form(&pool, &after).await;
+        concurrent_set(&pool, &page, "show_in_menus", true).await;
+        form.insert("robots_index".into(), "on".into());
+        assert!(try_edit(&pool, &page, &form, Some(&owner)).await.is_ok());
+        let after = stored(&pool, &page).await;
+        assert!(after.robots_index && after.show_in_menus);
+
+        // Both untick the same box: the same change, no conflict.
+        let mut form = loaded_form(&pool, &after).await;
+        concurrent_set(&pool, &page, "robots_index", false).await;
+        form.remove("robots_index");
+        assert!(try_edit(&pool, &page, &form, Some(&owner)).await.is_ok(), "same change on both sides");
+        assert!(!stored(&pool, &page).await.robots_index);
+    }
+
+    /// Another editor renames the page (and so its subtree's URLs) while
+    /// this editor changes another field: the rename stands, and this save
+    /// moves no URL.
+    #[tokio::test]
+    async fn a_concurrent_rename_survives_an_edit_to_another_field() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        let pid = page.id.get().copied().expect("id");
+        let mut child = draft_template(page.page_type_id);
+        child.slug = "child".to_owned();
+        child.path = "0001/0001/".to_owned();
+        child.url_path = "/draft/child".to_owned();
+        child.depth = 2;
+        child.parent_id = Some(pid);
+        child.save(&pool).await.expect("child");
+        let mut mine = loaded_form(&pool, &page).await;
+
+        let mut theirs = crate::page_form::prefill(&pool, &page).await;
+        theirs.insert("slug".into(), "renamed".into());
+        assert!(!edit(&pool, &page, &theirs).await.unchanged);
+        assert_eq!(stored(&pool, &child).await.url_path, "/renamed/child");
+
+        mine.insert("og_title".into(), "Mine".into());
+        assert!(!edit(&pool, &page, &mine).await.unchanged);
+        let after = stored(&pool, &page).await;
+        assert_eq!(after.slug, "renamed");
+        assert_eq!(after.url_path, "/renamed");
+        assert_eq!(after.og_title, "Mine");
+        assert_eq!(stored(&pool, &child).await.url_path, "/renamed/child", "descendants untouched");
+    }
+
+    /// Autosave writes a field only when this editor changed it and nobody
+    /// else did, and hands back the baseline with what it wrote.
+    #[tokio::test]
+    async fn autosave_merges_and_returns_the_rebased_baseline() {
+        let pool = mem_pool().await;
+        let page = draft(&pool).await;
+        let id = page.id.get().copied().expect("id");
+        let mut form = loaded_form(&pool, &page).await;
+        concurrent_set(&pool, &page, "seo_title", "Theirs").await;
+        form.insert("title".into(), "Typed".into());
+        form.insert("seo_description".into(), "Mine".into());
+        let res = super::autosave_page(&pool, "t", None, id, &form).await.expect("autosave");
+        assert_eq!(res.status(), axum::http::StatusCode::NO_CONTENT);
+        let token = res
+            .headers()
+            .get(crate::page_baseline::BASELINE_HEADER)
+            .and_then(|v| v.to_str().ok())
+            .expect("rebased baseline")
+            .to_owned();
+        let after = stored(&pool, &page).await;
+        assert_eq!(after.title, "Typed");
+        assert_eq!(after.seo_description, "Mine");
+        assert_eq!(after.seo_title, "Theirs", "their field isn't overwritten with the loaded value");
+        let rebased = crate::page_baseline::Baseline::parse(&token, "t", id).expect("verifies");
+        assert!(rebased.matches("title", "Typed"));
+        assert!(!rebased.matches("seo_title", "Theirs"), "a field autosave didn't write keeps its baseline");
+
+        // A field both changed: autosave leaves it for the real save.
+        form.insert(crate::page_baseline::BASELINE_KEY.into(), token);
+        concurrent_set(&pool, &page, "title", "Other").await;
+        form.insert("title".into(), "Typed more".into());
+        let res = super::autosave_page(&pool, "t", None, id, &form).await.expect("autosave");
+        assert_eq!(res.status(), axum::http::StatusCode::NO_CONTENT);
+        assert_eq!(stored(&pool, &page).await.title, "Other");
+
+        // The editor's own save after an autosave is no conflict.
+        let mut form = loaded_form(&pool, &stored(&pool, &page).await).await;
+        form.insert("title".into(), "Draft 2".into());
+        let res = super::autosave_page(&pool, "t", None, id, &form).await.expect("autosave");
+        let token = res.headers().get(crate::page_baseline::BASELINE_HEADER).and_then(|v| v.to_str().ok()).expect("header").to_owned();
+        form.insert(crate::page_baseline::BASELINE_KEY.into(), token);
+        form.insert("title".into(), "Draft 3".into());
+        let owner = user(&pool, "owner", true).await;
+        assert!(try_edit(&pool, &page, &form, Some(&owner)).await.is_ok(), "no conflict with my own autosave");
+        assert_eq!(stored(&pool, &page).await.title, "Draft 3");
+
+        // Without a baseline: written as posted, no header.
+        let mut plain = crate::page_form::prefill(&pool, &stored(&pool, &page).await).await;
+        plain.insert("title".into(), "Plain".into());
+        let res = super::autosave_page(&pool, "t", None, id, &plain).await.expect("autosave");
+        assert!(res.headers().get(crate::page_baseline::BASELINE_HEADER).is_none());
+        assert_eq!(stored(&pool, &page).await.title, "Plain");
+    }
+
+    /// The refused save comes back as the edit form with status 409 and
+    /// the editor's values: page fields, tags, categories, the type's own
+    /// fields and page-builder values, all escaped.
+    #[tokio::test]
+    async fn the_conflict_screen_shows_the_editors_values() {
+        let pool = mem_pool().await;
+        crate::error_pages::ensure_table(&pool).await.expect("error page table");
+        let page = draft(&pool).await;
+        let id = page.id.get().copied().expect("id");
+        crate::page_type_model::PageType::objects()
+            .where_(crate::page_type_model::PageType::id.eq(page.page_type_id))
+            .update()
+            .set("type_name", crate::error_pages::TYPE_NAME.to_owned())
+            .execute_pool(&pool)
+            .await
+            .expect("error page type");
+        publish_headline_schema(&pool, page.page_type_id).await;
+        crate::category::upsert_taxonomy(&pool, &crate::category::CategoryTaxonomy).await.expect("taxonomy");
+        let tax = crate::category::find_taxonomy(&pool, "category").await.expect("q").expect("row");
+        let mut cats = Vec::new();
+        for name in ["Mugs", "Plates"] {
+            let c = crate::category::model::create(
+                &pool,
+                tax.id.get().copied().expect("id"),
+                crate::category::NewCategory {
+                    name: name.to_owned(),
+                    slug: String::new(),
+                    description: String::new(),
+                    parent_id: None,
+                    featured_image_id: None,
+                    thumbnail_id: None,
+                },
+            )
+            .await
+            .expect("category");
+            cats.push(c.id.get().copied().expect("id"));
+        }
+
+        let mut form = loaded_form(&pool, &page).await;
+        concurrent_set(&pool, &page, "title", "Their title").await;
+        form.insert("title".into(), "<script>alert(1)</script>".into());
+        form.insert("tags".into(), "<script>tag</script>, pottery".into());
+        form.insert("categories".into(), format!("[\"{}\"]", cats[1]));
+        form.insert("status_code".into(), "503".into());
+        form.insert("pb__headline".into(), "My headline".into());
+        let owner = user(&pool, "owner", true).await;
+        let (conflicts, shown) = match try_edit(&pool, &page, &form, Some(&owner)).await {
+            Err(super::PageEditRefusal::Conflict { conflicts, page }) => (conflicts, page),
+            _ => panic!("expected a conflict"),
+        };
+        let mut tera = tera::Tera::default();
+        crate::admin::register_templates(&mut tera).expect("templates");
+        let state = crate::admin::AdminState {
+            tera: std::sync::Arc::new(tera),
+            signing_secret: std::sync::Arc::new(Vec::new()),
+            cache_invalidator: crate::cache_invalidate::noop(),
+            mailer: None,
+            mailer_from: std::sync::Arc::new(String::new()),
+        };
+        let mut org = rustango::tenancy::Org::new("t");
+        org.id = rustango::sql::Auto::Set(1);
+        let res = super::render_page_edit_form(
+            &state,
+            &pool,
+            &org,
+            &axum::http::HeaderMap::new(),
+            None,
+            id,
+            super::EditQuery::default(),
+            Some(super::EditConflict { conflicts, page: *shown, form }),
+        )
+        .await
+        .expect("render");
+        assert_eq!(res.status(), axum::http::StatusCode::CONFLICT);
+        let bytes = axum::body::to_bytes(res.into_body(), usize::MAX).await.expect("body");
+        let html = String::from_utf8(bytes.to_vec()).expect("utf8");
+        assert!(html.contains("data-edit-conflict"), "conflict notice");
+        assert!(html.contains("data-conflict-field=\"title\""));
+        assert!(html.contains("Their title"), "the saved value is listed");
+        assert!(!html.contains("<script>alert(1)") && !html.contains("<script>tag"), "posted markup is escaped");
+        assert!(html.contains("&lt;script&gt;alert(1)"), "my title, escaped");
+        assert!(html.contains("&lt;script&gt;tag"), "my tags, escaped");
+        assert!(html.contains("pottery"));
+        assert!(
+            html.contains(&format!("value=\"{}\" data-multivalue-option checked", cats[1])),
+            "my category is ticked"
+        );
+        assert!(
+            !html.contains(&format!("value=\"{}\" data-multivalue-option checked", cats[0])),
+            "the other isn't"
+        );
+        assert!(html.contains("My headline"), "my page-builder value");
+        let fresh = crate::page_baseline::Baseline::of("t", &stored(&pool, &page).await).token();
+        assert!(html.contains(&fresh), "a baseline of the page as stored now");
+        let select = html.find("name=\"status_code\"").expect("status code select");
+        let after_select = &html[select..];
+        let opt503 = after_select.find("value=\"503\"").expect("503 option");
+        assert!(after_select[opt503..opt503 + 40].contains("selected"), "my extension value: {}", &after_select[opt503..opt503 + 40]);
     }
 }
 
@@ -22874,5 +24679,131 @@ mod active_upload_tests {
         for ok in ["image/png", "image/svg+xml", "application/pdf", "text/plain", "video/mp4"] {
             assert!(refuse_active_upload(ok).is_ok(), "{ok}");
         }
+    }
+}
+
+#[cfg(all(test, feature = "sqlite"))]
+mod bounded_list_tests {
+    //! #629 — the counts and lookups that replaced whole-table reads.
+    use super::{counts_by, latest_page_activity};
+    use crate::page::{Page, PageStatus};
+    use rustango::core::{Column as _, Model as _};
+    use rustango::sql::{Auto, Pool};
+
+    async fn mem_pool() -> Pool {
+        let pool = Pool::connect("sqlite::memory:").await.expect("mem pool");
+        for schema in [
+            &crate::PageType::SCHEMA,
+            &Page::SCHEMA,
+            &crate::media::Media::SCHEMA,
+            &crate::theme::Theme::SCHEMA,
+        ] {
+            let ddl = rustango::migrate::ddl::create_table_if_not_exists_sql_with_dialect(
+                pool.dialect(),
+                schema,
+            );
+            for stmt in ddl.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+                rustango::sql::raw_execute_pool(&pool, stmt, Vec::new())
+                    .await
+                    .expect("ddl");
+            }
+        }
+        pool
+    }
+
+    async fn page_type(pool: &Pool, name: &str) -> i64 {
+        let mut pt = crate::PageType {
+            id: Auto::Unset,
+            app_label: "cms".to_owned(),
+            type_name: name.to_owned(),
+            verbose_name: name.to_owned(),
+            default_template: "page.html".to_owned(),
+            view_mode: "auto".to_owned(),
+            is_creatable: true,
+            allowed_parent_types: serde_json::json!([]),
+            allowed_child_types: serde_json::json!([]),
+            workflow: String::new(),
+            created_at: Auto::Unset,
+            updated_at: Auto::Unset,
+        };
+        pt.save(pool).await.expect("page type");
+        pt.id.get().copied().expect("type id")
+    }
+
+    async fn page(
+        pool: &Pool,
+        type_id: i64,
+        n: i64,
+        published_at: Option<chrono::DateTime<chrono::Utc>>,
+    ) {
+        let mut p = Page {
+            id: Auto::Unset,
+            page_type_id: type_id,
+            title: format!("p{n}"),
+            slug: format!("p{n}"),
+            path: format!("{n:04x}/"),
+            url_path: format!("/p{n}"),
+            preview_path: String::new(),
+            template_override: String::new(),
+            depth: 1,
+            parent_id: None,
+            locale_variant_of: None,
+            alias_of: None,
+            theme_id: None,
+            sort_order: 0,
+            status: PageStatus::Published.as_str().to_owned(),
+            published_at,
+            last_published_at: None,
+            go_live_at: None,
+            expire_at: None,
+            seo_title: String::new(),
+            seo_description: String::new(),
+            robots_index: true,
+            sitemap_priority: 0.5,
+            show_in_menus: true,
+            og_title: String::new(),
+            og_description: String::new(),
+            og_image_media_id: None,
+            twitter_card: "summary".to_owned(),
+            notification_pre_published_sent: false,
+            created_at: Auto::Unset,
+            updated_at: Auto::Unset,
+        };
+        p.save(pool).await.expect("page");
+    }
+
+    #[tokio::test]
+    async fn counts_by_groups_in_sql_and_honours_the_filter() {
+        let pool = mem_pool().await;
+        let (a, b) = (page_type(&pool, "A").await, page_type(&pool, "B").await);
+        for (n, t) in [(1, a), (2, a), (3, a), (4, b)] {
+            page(&pool, t, n, None).await;
+        }
+        let all = counts_by(&pool, Page::objects(), "page_type_id").await.expect("counts");
+        assert_eq!(all.get(&a), Some(&3));
+        assert_eq!(all.get(&b), Some(&1));
+        assert_eq!(all.len(), 2);
+        let some = counts_by(&pool, Page::objects().where_(Page::slug.ne("p1".to_owned())), "page_type_id")
+            .await
+            .expect("counts");
+        assert_eq!(some.get(&a), Some(&2));
+    }
+
+    #[tokio::test]
+    async fn latest_activity_is_the_newest_publish_or_creation() {
+        let pool = mem_pool().await;
+        let (t, empty) = (page_type(&pool, "A").await, page_type(&pool, "B").await);
+        let old = chrono::Utc::now() - chrono::Duration::days(400);
+        page(&pool, t, 1, Some(old)).await;
+        page(&pool, t, 2, Some(old + chrono::Duration::days(3))).await;
+        assert_eq!(
+            latest_page_activity(&pool, t).await.expect("latest"),
+            Some(old + chrono::Duration::days(3)),
+        );
+        // A never-published page counts by its creation, which is newer.
+        page(&pool, t, 3, None).await;
+        let latest = latest_page_activity(&pool, t).await.expect("latest").expect("some");
+        assert!(latest > old + chrono::Duration::days(300));
+        assert_eq!(latest_page_activity(&pool, empty).await.expect("latest"), None);
     }
 }

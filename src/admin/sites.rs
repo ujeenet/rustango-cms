@@ -118,10 +118,10 @@ async fn set_mapping(
     match (existing, root_page_id) {
         (Some(mut row), Some(id)) => {
             row.root_page_id = id;
-            row.save_pool(pool).await?;
+            row.save(pool).await?;
         }
         (Some(row), None) => {
-            row.delete_pool(pool).await?;
+            row.delete(pool).await?;
         }
         (None, Some(id)) => {
             let mut row = Site {
@@ -130,7 +130,7 @@ async fn set_mapping(
                 root_page_id: id,
                 created_at: rustango::sql::Auto::Unset,
             };
-            row.insert_pool(pool).await?;
+            row.insert(pool).await?;
         }
         (None, None) => {}
     }
@@ -309,7 +309,7 @@ async fn add_pending_host(
         created_at: rustango::sql::Auto::Unset,
     };
     // The unique index on `hostname` settles a race with another claim.
-    row.insert_pool(registry).await?;
+    row.insert(registry).await?;
     Ok(())
 }
 

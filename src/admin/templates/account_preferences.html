@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ "Preferences" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block title %}{{ "Preferences" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Preferences" | translate(locale=LANG) }}{% endblock %}
 
 {% block content %}
@@ -18,9 +18,10 @@
             <div class="rcms-flex-none">
                 {% if user_avatar_url %}
                     <img src="{{ user_avatar_url }}" alt="{{ "Current avatar" | translate(locale=LANG) }}"
-                         class="rcms-rounded-circle rcms-block rcms-avatar">
+                         class="rcms-rounded-circle rcms-block rcms-avatar" id="account-avatar-preview">
                 {% else %}
-                    <div class="rcms-rounded-circle rcms-flex rcms-items-center rcms-text-2xl rcms-text-muted rcms-avatar rcms-avatar-fallback rcms-justify-center">
+                    <img alt="" class="rcms-rounded-circle rcms-block rcms-avatar" id="account-avatar-preview" style="display: none;">
+                    <div class="rcms-rounded-circle rcms-flex rcms-items-center rcms-text-2xl rcms-text-muted rcms-avatar rcms-avatar-fallback rcms-justify-center" id="account-avatar-fallback">
                         {{ user_display_name | default(value="?") | truncate(length=1, end="") | upper }}
                     </div>
                 {% endif %}
@@ -35,8 +36,10 @@
                     <div class="rcms-hint rcms-text-2xs">{{ "Leave blank to fall back to your username (<code>{name}</code>)." | translate(locale=LANG, name=uname) | safe }}</div>
                 </div>
                 <div class="rcms-field rcms-mb-2">
-                    <label>{{ "New avatar (PNG / JPEG / SVG)" | translate(locale=LANG) }}</label>
-                    <input type="file" name="avatar" accept="image/png,image/jpeg,image/svg+xml">
+                    <label for="account-avatar">{{ "New avatar (PNG / JPEG / WebP / GIF)" | translate(locale=LANG) }}</label>
+                    <input type="file" id="account-avatar" name="avatar" accept="image/png,image/jpeg,image/webp,image/gif"
+                           data-file-preview="#account-avatar-preview">
+                    <div class="rcms-hint rcms-text-2xs">{{ "The picture shows on the left; click Save profile to keep it." | translate(locale=LANG) }}</div>
                 </div>
             </div>
         </div>
@@ -126,6 +129,23 @@
         </div>
         <div class="rcms-form-actions">
             <button type="submit" class="rcms-btn rcms-btn-outlined">{{ "Save language" | translate(locale=LANG) }}</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+{% if user_is_superuser %}
+<div class="rcms-card rcms-maxw-720 rcms-mb-4">
+    <h2 class="rcms-m-0 rcms-mb-1 rcms-text-lg">{{ "Templates on the site" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint rcms-m-0 rcms-mb-3">{{ "While you browse the public site, show which template renders the page and each block, and where it comes from. Only you see it." | translate(locale=LANG) }}</p>
+    <form method="post" action="{{ url(name='rcms-admin:account:show-templates') }}">
+        {{ csrf_token | csrf_input | safe }}
+        <label class="rcms-inline-flex rcms-items-center rcms-gap-2 rcms-mb-3">
+            <input type="checkbox" name="show_templates" value="1"{% if show_templates %} checked{% endif %}>
+            {{ "Show templates on the site" | translate(locale=LANG) }}
+        </label>
+        <div class="rcms-form-actions">
+            <button type="submit" class="rcms-btn rcms-btn-outlined">{{ "Save" | translate(locale=LANG) }}</button>
         </div>
     </form>
 </div>

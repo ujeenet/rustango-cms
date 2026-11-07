@@ -1,12 +1,12 @@
 {# CMS-branded login template — overrides the framework's
    `login.html` (same Tera name) so /login renders this instead.
    Context provided by `rustango::admin::login_view` and our shadow
-   GET handler `cms_login_form`: title, action, error, admin_title,
+   GET handler `cms_login_form`: title, action, error, site_name,
    admin_prefix, static_url. #}
 {% extends "rcms_admin/_auth_layout.html" %}
 
-{% block page_title %}{{ "Sign in" | translate(locale=LANG) }} — {{ admin_title | default(value="CMS") }}{% endblock %}
-{% block brand_name %}{{ admin_title | default(value="CMS Admin") }}{% endblock %}
+{% block page_title %}{{ "Sign in" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
+{% block brand_name %}{{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block brand_sub %}{{ "Sign in to manage your content" | translate(locale=LANG) }}{% endblock %}
 
 {% block body %}

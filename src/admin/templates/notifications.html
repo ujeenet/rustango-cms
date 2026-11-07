@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ "Notifications" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block title %}{{ "Notifications" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}<h1>{{ "Notifications" | translate(locale=LANG) }}</h1>{% endblock %}
 {% block content %}
 <div class="rcms-card-stack">
@@ -130,7 +130,7 @@
             <td><code>{{ d.event }}</code></td>
             <td>{{ d.target }}</td>
             <td>
-              <span class="rcms-tag {% if d.status == "sent" %}published{% elif d.status == "failed" %}expired{% else %}draft{% endif %}">{{ d.status }}</span>
+              <span class="rcms-tag {% if d.status == "sent" %}published{% elif d.status == "failed" %}expired{% else %}draft{% endif %}">{{ d.status | capitalize | translate(locale=LANG) }}</span>
               {% if d.attempts > 1 %}<span class="rcms-hint rcms-text-2xs">×{{ d.attempts }}</span>{% endif %}
               {% if d.last_error %}<div class="rcms-hint rcms-text-2xs">{{ d.last_error }}</div>{% endif %}
             </td>

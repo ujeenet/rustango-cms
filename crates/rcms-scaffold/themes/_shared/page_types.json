@@ -1,0 +1,370 @@
+[
+  {
+    "type_name": "Home",
+    "verbose_name": "Home page",
+    "template": "home.html",
+    "parents": [],
+    "children": [
+      "Page",
+      "Blog",
+      "Section",
+      "Projects"
+    ],
+    "schema": {
+      "nodes": [
+        {
+          "kind": "field",
+          "key": "headline",
+          "label": "Headline",
+          "widget": "text",
+          "help": "The big line at the top of the home page."
+        },
+        {
+          "kind": "field",
+          "key": "intro",
+          "label": "Introduction",
+          "widget": "textarea"
+        },
+        {
+          "kind": "row",
+          "children": [
+            {
+              "kind": "field",
+              "key": "cta_label",
+              "label": "Button label",
+              "widget": "text",
+              "width": 6
+            },
+            {
+              "kind": "field",
+              "key": "cta_url",
+              "label": "Button link",
+              "widget": "url",
+              "width": 6
+            }
+          ]
+        },
+        {
+          "kind": "flex",
+          "key": "body",
+          "label": "Content",
+          "allowed": [
+            "rich_text",
+            "image",
+            "quote",
+            "embed",
+            "gallery",
+            "cards",
+            "slider",
+            "cta",
+            "hero",
+            "jumbo",
+            "media_text"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type_name": "Page",
+    "verbose_name": "Page",
+    "template": "page.html",
+    "parents": [],
+    "children": [
+      "Page"
+    ],
+    "schema": {
+      "nodes": [
+        {
+          "kind": "field",
+          "key": "intro",
+          "label": "Introduction",
+          "widget": "textarea"
+        },
+        {
+          "kind": "flex",
+          "key": "body",
+          "label": "Content",
+          "allowed": [
+            "rich_text",
+            "image",
+            "quote",
+            "embed",
+            "gallery",
+            "cards",
+            "slider",
+            "cta",
+            "hero",
+            "jumbo",
+            "media_text"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type_name": "Blog",
+    "verbose_name": "Blog",
+    "template": "blog.html",
+    "parents": [
+      "Home"
+    ],
+    "children": [
+      "Post"
+    ],
+    "schema": {
+      "nodes": [
+        {
+          "kind": "field",
+          "key": "intro",
+          "label": "Introduction",
+          "widget": "textarea"
+        }
+      ]
+    }
+  },
+  {
+    "type_name": "Post",
+    "verbose_name": "Blog post",
+    "template": "post.html",
+    "parents": [
+      "Blog"
+    ],
+    "children": [],
+    "schema": {
+      "nodes": [
+        {
+          "kind": "field",
+          "key": "excerpt",
+          "label": "Excerpt",
+          "widget": "textarea",
+          "help": "Shown on the blog listing."
+        },
+        {
+          "kind": "row",
+          "children": [
+            {
+              "kind": "field",
+              "key": "published",
+              "label": "Date",
+              "widget": "date",
+              "width": 6
+            },
+            {
+              "kind": "field",
+              "key": "author",
+              "label": "Author",
+              "widget": "text",
+              "width": 6
+            }
+          ]
+        },
+        {
+          "kind": "field",
+          "key": "cover",
+          "label": "Cover image",
+          "widget": "mediapicker"
+        },
+        {
+          "kind": "flex",
+          "key": "body",
+          "label": "Content",
+          "allowed": [
+            "rich_text",
+            "image",
+            "quote",
+            "embed",
+            "gallery",
+            "cards",
+            "slider",
+            "cta",
+            "hero",
+            "jumbo",
+            "media_text"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type_name": "Section",
+    "verbose_name": "News section",
+    "template": "section.html",
+    "parents": [
+      "Home"
+    ],
+    "children": [
+      "Article"
+    ],
+    "schema": {
+      "nodes": [
+        {
+          "kind": "field",
+          "key": "intro",
+          "label": "Introduction",
+          "widget": "textarea"
+        }
+      ]
+    }
+  },
+  {
+    "type_name": "Article",
+    "verbose_name": "News article",
+    "template": "article.html",
+    "parents": [
+      "Section"
+    ],
+    "children": [],
+    "schema": {
+      "nodes": [
+        {
+          "kind": "field",
+          "key": "standfirst",
+          "label": "Standfirst",
+          "widget": "textarea",
+          "help": "The summary under the headline."
+        },
+        {
+          "kind": "row",
+          "children": [
+            {
+              "kind": "field",
+              "key": "published",
+              "label": "Date",
+              "widget": "date",
+              "width": 4
+            },
+            {
+              "kind": "field",
+              "key": "author",
+              "label": "Author",
+              "widget": "text",
+              "width": 4
+            },
+            {
+              "kind": "field",
+              "key": "featured",
+              "label": "Featured",
+              "widget": "boolean",
+              "width": 4
+            }
+          ]
+        },
+        {
+          "kind": "field",
+          "key": "cover",
+          "label": "Cover image",
+          "widget": "mediapicker"
+        },
+        {
+          "kind": "flex",
+          "key": "body",
+          "label": "Content",
+          "allowed": [
+            "rich_text",
+            "image",
+            "quote",
+            "embed",
+            "gallery",
+            "cards",
+            "slider",
+            "cta",
+            "hero",
+            "jumbo",
+            "media_text"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "type_name": "Projects",
+    "verbose_name": "Projects",
+    "template": "projects.html",
+    "parents": [
+      "Home"
+    ],
+    "children": [
+      "Project"
+    ],
+    "schema": {
+      "nodes": [
+        {
+          "kind": "field",
+          "key": "intro",
+          "label": "Introduction",
+          "widget": "textarea"
+        }
+      ]
+    }
+  },
+  {
+    "type_name": "Project",
+    "verbose_name": "Project",
+    "template": "project.html",
+    "parents": [
+      "Projects"
+    ],
+    "children": [],
+    "schema": {
+      "nodes": [
+        {
+          "kind": "field",
+          "key": "summary",
+          "label": "Summary",
+          "widget": "textarea"
+        },
+        {
+          "kind": "row",
+          "children": [
+            {
+              "kind": "field",
+              "key": "client",
+              "label": "Client",
+              "widget": "text",
+              "width": 4
+            },
+            {
+              "kind": "field",
+              "key": "year",
+              "label": "Year",
+              "widget": "text",
+              "width": 4
+            },
+            {
+              "kind": "field",
+              "key": "services",
+              "label": "Services",
+              "widget": "text",
+              "width": 4
+            }
+          ]
+        },
+        {
+          "kind": "field",
+          "key": "cover",
+          "label": "Cover image",
+          "widget": "mediapicker"
+        },
+        {
+          "kind": "flex",
+          "key": "body",
+          "label": "Content",
+          "allowed": [
+            "rich_text",
+            "image",
+            "quote",
+            "embed",
+            "gallery",
+            "cards",
+            "slider",
+            "cta",
+            "hero",
+            "jumbo",
+            "media_text"
+          ]
+        }
+      ]
+    }
+  }
+]

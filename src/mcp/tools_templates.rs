@@ -281,7 +281,7 @@ rustango::register_mcp_tool!(
 
         let previous = row.default_template.clone();
         row.default_template = chosen.clone();
-        row.save_pool(&ctx.pool).await.map_err(McpError::from)?;
+        row.save(&ctx.pool).await.map_err(McpError::from)?;
 
         Ok(json!({
             "page_type": row.type_name,

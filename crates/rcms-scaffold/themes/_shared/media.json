@@ -1,0 +1,74 @@
+[
+  {
+    "key": "rustango-cms-icon",
+    "file": "rustango-cms-icon.png",
+    "title": "Rustango-CMS icon",
+    "alt": "Rustango-CMS"
+  },
+  {
+    "key": "rustango-cms-logo",
+    "file": "rustango-cms-logo.png",
+    "title": "Rustango-CMS logo",
+    "alt": "Rustango-CMS, powered by the Rustango framework"
+  },
+  {
+    "key": "hills",
+    "file": "hills.jpg",
+    "title": "Rolling hills",
+    "alt": "Layered hills at dawn under a pale sun"
+  },
+  {
+    "key": "sea",
+    "file": "sea.jpg",
+    "title": "Sea at sunset",
+    "alt": "A calm sea at sunset, the low sun reflected on the water"
+  },
+  {
+    "key": "city",
+    "file": "city.jpg",
+    "title": "City at dusk",
+    "alt": "A city skyline at dusk with lit windows"
+  },
+  {
+    "key": "studio",
+    "file": "studio.jpg",
+    "title": "Studio wall",
+    "alt": "A red circle, a blue rectangle and a yellow triangle on a shelf"
+  },
+  {
+    "key": "paper",
+    "file": "paper.jpg",
+    "title": "Notes on paper",
+    "alt": "Two sheets of ruled paper and a pencil on a desk"
+  },
+  {
+    "key": "circuit",
+    "file": "circuit.jpg",
+    "title": "Circuit board",
+    "alt": "Glowing circuit traces on a dark green board"
+  },
+  {
+    "key": "sound",
+    "file": "sound.jpg",
+    "title": "Sound",
+    "alt": "Pink rings spreading out across a dark purple background"
+  },
+  {
+    "key": "leaves",
+    "file": "leaves.jpg",
+    "title": "House plant",
+    "alt": "Green leaves of a house plant against a pale wall"
+  },
+  {
+    "key": "coffee",
+    "file": "coffee.jpg",
+    "title": "Coffee",
+    "alt": "A cup of coffee with latte art, seen from above on a wooden table"
+  },
+  {
+    "key": "books",
+    "file": "books.jpg",
+    "title": "Bookshelf",
+    "alt": "Three shelves of books in muted colours"
+  }
+]

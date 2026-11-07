@@ -1,0 +1,16 @@
+{#- The fields of one per-row inline-panel card, fetched when the card
+    opens (handlers::inline_card_body). The editor moves every field onto
+    the card's own detached <form>, so the page's Save never sends them;
+    the card's Save button posts them on their own. -#}
+{% import "rcms_admin/_widget.html" as widget %}
+{% for w in widgets %}
+    {{ widget::render(w=w) }}
+{% endfor %}
+{% if can_save %}
+<div class="rcms-inline-card-actions">
+    <span class="rcms-hint" data-inline-card-status aria-live="polite"></span>
+    <button type="button" class="rcms-btn rcms-btn-small" data-inline-card-save>
+        <span class="material-symbols-rounded sm">save</span> {{ "Save" | translate(locale=LANG) }}
+    </button>
+</div>
+{% endif %}

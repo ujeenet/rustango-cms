@@ -311,6 +311,7 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream> {
         ::rustango_cms::__private::inventory::submit! {
             ::rustango_cms::block::BlockRegistration {
                 factory: || ::std::boxed::Box::new(<#struct_ident as ::core::default::Default>::default()),
+                origin: ::core::module_path!(),
             }
         }
     })

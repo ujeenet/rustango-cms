@@ -81,9 +81,12 @@ async fn login_inner(
 ) -> Response {
     use crate::admin::MemberLoginError;
     use crate::api::error::{ApiError, ErrorCode};
+    let Some(tenant_slug) = rustango::tenancy::TenantSlug::of(&tenant.org) else {
+        return ApiError::new(ErrorCode::Internal, "tenant has no id").into_response();
+    };
     let outcome = crate::admin::authenticate_member(
         tenant.pool(),
-        &tenant.org.slug,
+        &tenant_slug,
         request,
         "api",
         &form.identifier,
@@ -108,7 +111,7 @@ async fn login_inner(
         &ctx.session_secret,
         &member_auth::MemberSessionPayload::new(
             uid,
-            &tenant.org.slug,
+            &tenant_slug,
             ttl,
             rustango::session::PasswordFingerprint::of(&ctx.session_secret, &user.password_hash),
         ),
@@ -178,7 +181,10 @@ impl<S: Send + Sync> FromRequestParts<S> for BearerMember {
         };
         // Same verification the cookie path runs: signature, expiry, and
         // the tenant the token was minted for.
-        let Ok(payload) = member_auth::decode(&ctx.session_secret, &org.slug, &token) else {
+        let Some(tenant) = rustango::tenancy::TenantSlug::of(&org) else {
+            return Ok(Self(None));
+        };
+        let Ok(payload) = member_auth::decode(&ctx.session_secret, &tenant, &token) else {
             return Ok(Self(None));
         };
         let Ok(pool) = ctx.pools.scoped_pool_dyn(&org).await else {

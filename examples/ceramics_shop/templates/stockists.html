@@ -1,0 +1,23 @@
+{% extends "_base.html" %}
+{#- /shop/stockists and /shop/stockists/<city>: the ShopPage's routes
+    (models.rs). `stockists` and `city` come from its route_context. -#}
+{% block content %}
+<header class="mb-10 max-w-2xl">
+    <p class="text-sm uppercase tracking-[0.2em] text-ink/70"><a href="{{ page | page_href }}" class="hover:text-[color:var(--accent)]">{{ page.title }}</a></p>
+    <h1 class="font-display text-5xl text-ink">{% if city %}Stockists in {{ city }}{% else %}Find us in a shop{% endif %}</h1>
+    {% if city %}<p class="mt-4 text-lg"><a href="{{ page | page_href }}/stockists" class="hover:text-[color:var(--accent)]">All stockists</a></p>{% endif %}
+</header>
+{% if stockists | length == 0 %}
+<p class="rounded-3xl bg-white p-10 text-center text-ink/70 ring-1 ring-clay-100">No stockists yet.</p>
+{% else %}
+<div class="grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
+    {% for s in stockists %}
+    <div class="rounded-3xl bg-white p-8 ring-1 ring-clay-100">
+        <h2 class="font-display text-2xl text-ink">{{ s.name }}</h2>
+        <p class="mt-4 text-sm text-ink/70"><a href="{{ page | page_href }}/stockists/{{ s.city_slug }}" class="hover:text-[color:var(--accent)]">{{ s.city }}</a></p>
+        {% if s.website %}<p class="mt-4"><a href="{{ s.website }}" class="hover:text-[color:var(--accent)]" rel="noopener">{{ s.website | replace(from="https://", to="") }}</a></p>{% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

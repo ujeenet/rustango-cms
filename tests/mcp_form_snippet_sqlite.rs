@@ -27,6 +27,7 @@ async fn upsert(pool: &Pool, uid: i64, args: Value) -> Value {
         pool: pool.clone(),
         agent: McpAgent {
             agent_id: 1,
+            org_id: 1,
             tenant: "t".to_owned(),
             skills: Vec::new(),
             tools: vec!["upsert_snippet".to_owned()],
@@ -74,7 +75,7 @@ async fn a_form_write_is_a_sanitized_draft_with_its_notify_target() {
         password_changed_at: None,
         sessions_revoked_at: None,
     };
-    admin.save_pool(&pool).await.expect("user");
+    admin.save(&pool).await.expect("user");
     let uid = admin.id.get().copied().expect("uid");
 
     let mut live = Snippet {
@@ -88,7 +89,7 @@ async fn a_form_write_is_a_sanitized_draft_with_its_notify_target() {
         created_at: rustango::sql::Auto::Unset,
         updated_at: rustango::sql::Auto::Unset,
     };
-    live.save_pool(&pool).await.expect("form");
+    live.save(&pool).await.expect("form");
     let id = live.id.get().copied().expect("id");
 
     upsert(

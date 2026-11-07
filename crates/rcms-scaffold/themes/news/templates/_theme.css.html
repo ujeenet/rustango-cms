@@ -1,0 +1,12 @@
+{#- News: dense, newspaper-like, with a strong top rule. -#}
+<style>
+  .site-header { border-top: 4px solid var(--fg); }
+  .site-brand__name { font-size: 1.6rem; letter-spacing: -0.02em; }
+  .site-nav a { text-transform: uppercase; font-size: 0.8125rem; letter-spacing: 0.06em; }
+  .hero { border-bottom: 1px solid var(--line); margin-bottom: 1rem; }
+  .card { border-radius: var(--r-sm); }
+  .error-page { text-align: left; max-width: calc(var(--measure) + 2 * var(--gap)); }
+  .error-page__code { font-size: clamp(3rem, 10vw, 5rem); color: var(--fg); border-top: 4px solid var(--fg); padding-top: 1.5rem; }
+  .error-page__code::after { content: ""; display: block; width: 3rem; height: 4px; margin-top: 1rem; background: var(--accent); }
+  .error-page__body { margin: 0; }
+</style>

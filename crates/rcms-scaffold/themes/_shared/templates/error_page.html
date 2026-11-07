@@ -1,0 +1,13 @@
+{#- An error page (404, 403, 500, 503): the site's own layout around the
+    status, the page title and its content. Edit the wording in the CMS
+    admin under the home page; the page stays out of menus and search. -#}
+{% extends "_base.html" %}
+{% block title %}{{ extension.status_code }} · {{ page.title }}{% endblock %}
+{% block content %}
+<section class="wrap error-page" aria-labelledby="error-title">
+  <p class="error-page__code">{{ extension.status_code }}</p>
+  <h1 id="error-title">{{ page.title }}</h1>
+  <div class="prose error-page__body">{{ _stream_html['body'] | default(value="") | safe }}</div>
+  <p class="error-page__actions"><a class="button" href="{{ url_prefix | default(value='') }}/">Go to the home page</a></p>
+</section>
+{% endblock content %}

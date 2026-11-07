@@ -50,6 +50,9 @@ pub fn run() -> Result<(), Box<dyn Error>> {
     }
 
     println!("\nSign in at http://{HOST}:8080/login as `{ADMIN}`.");
+    // Plain localhost is the operator console: a separate login that
+    // site users have no account on.
+    println!("Use the {HOST} address: plain http://localhost:8080 is the operator console, where `{ADMIN}` can't sign in.");
     println!("Next time, `cargo run -- runserver` is enough.\n");
     step(&["runserver"])
 }

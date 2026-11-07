@@ -34,6 +34,22 @@ use std::collections::HashMap;
 
 use regex::Regex;
 
+/// What a matched routable pattern renders — see
+/// [`crate::PageTypeHandler::route_outcome`].
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum RouteOutcome {
+    /// Render the page with its usual template (override, else the
+    /// type's).
+    #[default]
+    Render,
+    /// Render with this template instead. A name Tera does not know
+    /// falls back to [`Self::Render`].
+    Template(String),
+    /// The record the URL names does not exist: the site's 404 page,
+    /// with status 404.
+    NotFound,
+}
+
 /// A single named URL pattern. The pattern is anchored on both
 /// ends (`^…$`) by the constructor; callers can lean on
 /// `^` / `$` themselves but don't have to.

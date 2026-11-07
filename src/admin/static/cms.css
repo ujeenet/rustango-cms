@@ -634,11 +634,12 @@ html[data-sidebar-collapsed] .rcms-sidebar-group-items .rcms-sidebar-link {
         linear-gradient(135deg, var(--md-sys-color-primary), var(--md-sys-color-primary-container));
     box-shadow: 0 4px 12px color-mix(in srgb, var(--md-sys-color-primary) 30%, transparent);
 }
-/* An uploaded logo IS the brand mark — drop the decorative gradient square. */
+/* The logo or the Rustango CMS icon is the brand mark — drop the
+   decorative gradient square. */
 .rcms-sidebar-brand.has-logo::before {
     display: none;
 }
-/* The Rustango CMS icon, when the tenant has no logo. */
+/* The site's logo (Settings → Branding), else the Rustango CMS icon. */
 .rcms-sidebar-brand-mark {
     display: block;
     flex: 0 0 36px;
@@ -647,18 +648,13 @@ html[data-sidebar-collapsed] .rcms-sidebar-group-items .rcms-sidebar-link {
 .rcms-sidebar-brand-mark img {
     width: 36px;
     height: 36px;
+    object-fit: contain;
 }
 .rcms-sidebar-brand h1 {
     font: var(--md-sys-typescale-ui-header);
     font-size: 15px;
     margin: 0 0 2px;
     color: var(--md-sys-color-on-surface);
-}
-.rcms-sidebar-brand .rcms-tenant {
-    font: var(--md-sys-typescale-ui-label);
-    text-transform: none;
-    letter-spacing: 0;
-    color: var(--sidebar-fg-muted);
 }
 /* #77 — global search, sidebar edition. Search is navigation, so it
    sits with the nav rather than in the topbar, where a three-child
@@ -924,7 +920,6 @@ html[data-sidebar-collapsed] .rcms-sidebar-footer .rcms-sidebar-logout {
    in collapsed mode — the rail is icons-only. */
 html[data-sidebar-collapsed] .rcms-sidebar-section,
 html[data-sidebar-collapsed] .rcms-sidebar-brand h1,
-html[data-sidebar-collapsed] .rcms-sidebar-brand .rcms-tenant,
 html[data-sidebar-collapsed] .rcms-sidebar-footer > a[href^="/admin/"],
 html[data-sidebar-collapsed] .rcms-sidebar-footer [data-user-tz],
 /* The switcher is gone from the bundled sidebar, but host apps that
@@ -938,15 +933,11 @@ html[data-sidebar-collapsed] .rcms-sidebar-brand {
     justify-content: center;
     padding: 16px 0;
 }
-html[data-sidebar-collapsed] .rcms-sidebar-brand-logo img {
-    max-height: 32px;
-}
 /* Hide the brand gradient square (`::before`) and any logo
    image in collapsed mode — the toggle button is the only thing
    that fits in the 64 px rail, and its rotated chevron doubles
    as the "expand me" affordance. */
 html[data-sidebar-collapsed] .rcms-sidebar-brand::before,
-html[data-sidebar-collapsed] .rcms-sidebar-brand-logo,
 html[data-sidebar-collapsed] .rcms-sidebar-brand-mark {
     display: none;
 }
@@ -1081,13 +1072,9 @@ html[data-sidebar-collapsed] .rcms-sidebar-footer form {
         height: auto;
         row-gap: 6px;
     }
-    /* 8 section tabs can't fit a phone row — let them swipe instead of
-       overflowing under the preview controls. */
-    .rcms-tab-strip {
-        flex-wrap: nowrap;
-        max-width: 100%;
-        overflow-x: auto;
-    }
+    /* The strip scrolls sideways at every width (see `.rcms-tab-strip`);
+       on a phone it also takes the whole row above the preview controls. */
+    .rcms-tab-strip { flex: 1 1 100%; max-width: 100%; }
     .rcms-preview-controls { flex-wrap: wrap; }
 }
 
@@ -1100,8 +1087,7 @@ html[data-sidebar-collapsed] .rcms-sidebar-footer form {
     gap: 8px;
     padding: 4px 16px;
     min-height: 40px;
-    /* Don't shrink inside the scrollable main column — grow to fit the
-       wrapped tab strip instead of clipping it. */
+    /* Don't shrink inside the scrollable main column. */
     flex-shrink: 0;
     /* No fill and no rules: the action bar sits on the page canvas like
        the topbar and sidebar. Its own background made a third horizontal
@@ -2700,6 +2686,11 @@ table.rcms-data .rcms-actions .rcms-btn-small,
    the image itself (like the sidebar brand logo). */
 .rcms-brand-icon--img { background: none; }
 .rcms-brand-icon-img { width: 44px; height: 44px; object-fit: contain; display: block; }
+/* #918 — a wide logo (a wordmark) keeps its proportions on the sign-in
+   card instead of shrinking into the 44px square; a square icon is
+   unchanged. */
+.rcms-auth-card .rcms-brand-icon--img { width: auto; max-width: 220px; }
+.rcms-auth-card .rcms-brand-icon-img { width: auto; max-width: 220px; }
 /* The Rustango CMS badge (no tenant logo): large, centred above the name. */
 .rcms-brand:has(.rcms-brand-badge) {
     flex-direction: column;
@@ -3188,10 +3179,16 @@ table.rcms-data .rcms-actions .rcms-btn-small,
     gap: 4px;
     flex: 1 1 auto;
     min-width: 0;
-    /* Wrap to a second row rather than scroll-clipping the last tab(s). The
-       phone media query switches this back to a horizontal swipe. */
-    flex-wrap: wrap;
-    row-gap: 4px;
+    /* One row, scrolling sideways when the tabs don't fit — never wrap.
+       A tab's label expands on hover; in a wrapping strip that pushed the
+       hovered tab onto the next row, out from under the pointer, so it
+       collapsed, fitted back, expanded again: an endless flicker. In one
+       row an expanding tab only nudges the tabs to its right. */
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    /* Room for the focus ring, which overflow would otherwise clip. */
+    padding-block: 2px;
     scrollbar-width: thin;
 }
 .rcms-tab-strip::-webkit-scrollbar { height: 6px; }
@@ -3444,6 +3441,16 @@ table.rcms-data .rcms-actions .rcms-btn-small,
 .rcms-inline-panel-list-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .rcms-inline-panel-row-header strong { font-size: 12px; color: var(--md-sys-color-on-surface-variant); }
 .rcms-inline-panel-row-header .rcms-inline-panel-remove { margin-left: auto; }
+/* A row is a <details> card: the summary is its header, actions pinned right. */
+summary.rcms-inline-panel-row-header { cursor: pointer; list-style: none; margin-bottom: 0; }
+summary.rcms-inline-panel-row-header::-webkit-details-marker { display: none; }
+summary.rcms-inline-panel-row-header strong { font-size: 13px; color: var(--md-sys-color-on-surface); }
+.rcms-inline-panel-row-actions { margin-left: auto; display: flex; align-items: center; gap: 2px; }
+.rcms-inline-panel-row-actions .rcms-inline-panel-remove { margin-left: 0; }
+details.rcms-inline-panel-row[open] > summary { margin-bottom: 8px; }
+.rcms-inline-panel-row-body > .rcms-field:last-child { margin-bottom: 0; }
+/* Per-row cards: their own Save, right-aligned, with a status note. */
+.rcms-inline-card-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-top: 12px; }
 
 /* Inline-panel list — all panels share one fieldset, each panel is a list item */
 .rcms-inline-panel-card { margin-top: 16px; }
@@ -5293,3 +5300,42 @@ textarea[data-template-editor] {
 .rcms-inline-form input { flex: 0 1 320px; }
 .rcms-row-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; }
 .rcms-row-actions form { margin: 0; }
+
+/* Help → Documentation: the guides, read inside the admin. */
+/* Sections flow in columns (each card only as tall as its list) rather than
+   a grid, whose rows stretched short sections to the tallest one. */
+.rcms-help-sections { columns: 3 300px; column-gap: 16px; max-width: 1100px; }
+.rcms-help-sections > .rcms-card { break-inside: avoid; margin: 0 0 16px; }
+.rcms-help-section-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 8px; font-size: 16px; }
+.rcms-help-count { font-size: 12px; font-weight: 500; color: var(--md-sys-color-on-surface-variant); background: var(--md-sys-color-surface-container); border-radius: 999px; padding: 1px 8px; }
+.rcms-help-links { list-style: none; margin: 0 -8px; padding: 0; }
+.rcms-help-links a { display: block; padding: 6px 8px; border-radius: 6px; color: var(--md-sys-color-on-surface); text-decoration: none; line-height: 1.4; }
+.rcms-help-links a:hover { background: var(--md-sys-color-surface-container-high); color: var(--md-sys-color-primary); }
+/* Draw the focus ring inside the row: the sections sit in CSS columns,
+   which clip anything painted past a column's edge (high contrast's thick
+   ring was cut off at the sides). */
+.rcms-help-links a:focus-visible { outline-offset: -2px; }
+:root[data-high-contrast] .rcms-help-links a:focus-visible { outline-offset: -3px; box-shadow: none !important; }
+.rcms-help-layout { display: grid; gap: 24px; grid-template-columns: minmax(0, 760px) 260px; align-items: start; }
+.rcms-help-doc { line-height: 1.65; font-size: 15px; overflow-wrap: anywhere; }
+.rcms-help-doc > :first-child { margin-top: 0; }
+.rcms-help-doc h2 { font-size: 20px; margin: 32px 0 12px; }
+.rcms-help-doc h3 { font-size: 16px; margin: 24px 0 8px; }
+.rcms-help-doc p, .rcms-help-doc ul, .rcms-help-doc ol { margin: 0 0 12px; }
+.rcms-help-doc li { margin: 4px 0; }
+.rcms-help-doc img { max-width: 100%; height: auto; border: 1px solid var(--md-sys-color-outline-variant); border-radius: 8px; margin: 8px 0; }
+.rcms-help-doc code { font-size: 13px; background: var(--md-sys-color-surface-container); padding: 1px 5px; border-radius: 4px; }
+.rcms-help-doc pre { background: var(--md-sys-color-surface-container); padding: 12px 14px; border-radius: 8px; overflow-x: auto; }
+.rcms-help-doc pre code { background: none; padding: 0; }
+.rcms-help-doc table { border-collapse: collapse; width: 100%; margin: 12px 0 16px; font-size: 14px; }
+.rcms-help-doc th, .rcms-help-doc td { border: 1px solid var(--md-sys-color-outline-variant); padding: 6px 10px; text-align: left; vertical-align: top; }
+.rcms-help-doc th { background: var(--md-sys-color-surface-container); }
+.rcms-help-doc blockquote { margin: 12px 0; padding: 4px 14px; border-left: 3px solid var(--md-sys-color-primary); color: var(--md-sys-color-on-surface-variant); }
+.rcms-help-pager { display: flex; justify-content: space-between; gap: 16px; margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--md-sys-color-outline-variant); }
+.rcms-help-toc { position: sticky; top: 72px; font-size: 14px; max-height: calc(100vh - 96px); overflow-y: auto; }
+.rcms-help-toc-section { margin-bottom: 16px; }
+.rcms-help-toc-title { font-weight: 600; margin-bottom: 6px; color: var(--md-sys-color-on-surface); }
+.rcms-help-toc a { display: block; padding: 3px 8px; border-radius: 6px; color: var(--md-sys-color-on-surface-variant); text-decoration: none; }
+.rcms-help-toc a:hover { background: var(--md-sys-color-surface-container-high); }
+.rcms-help-toc a[aria-current] { background: var(--md-sys-color-surface-container-highest); color: var(--md-sys-color-on-surface); font-weight: 600; }
+@media (max-width: 1100px) { .rcms-help-layout { grid-template-columns: minmax(0, 1fr); } .rcms-help-toc { position: static; max-height: none; } }

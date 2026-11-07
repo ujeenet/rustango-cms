@@ -45,7 +45,7 @@ async fn the_default_body_renders_fields_by_kind() {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(&pool).await.expect("page type");
+    pt.save(&pool).await.expect("page type");
     let type_id = pt.id.get().copied().expect("type id");
 
     let mut schema = PageTypeSchema {
@@ -65,7 +65,7 @@ async fn the_default_body_renders_fields_by_kind() {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    schema.save_pool(&pool).await.expect("schema");
+    schema.save(&pool).await.expect("schema");
 
     let mut media = Media {
         id: Auto::Unset,
@@ -86,7 +86,7 @@ async fn the_default_body_renders_fields_by_kind() {
         focal_point_y: None,
         uploaded_at: Auto::Unset,
     };
-    media.save_pool(&pool).await.expect("media");
+    media.save(&pool).await.expect("media");
     let media_id = media.id.get().copied().expect("media id");
 
     let mut page = Page {
@@ -122,7 +122,7 @@ async fn the_default_body_renders_fields_by_kind() {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    page.save_pool(&pool).await.expect("page");
+    page.save(&pool).await.expect("page");
     let page_id = page.id.get().copied().expect("page id");
 
     let mut data = PageBuilderData {
@@ -138,7 +138,7 @@ async fn the_default_body_renders_fields_by_kind() {
         }),
         updated_at: Auto::Unset,
     };
-    data.save_pool(&pool).await.expect("builder data");
+    data.save(&pool).await.expect("builder data");
 
     let mut tera = tera::Tera::default();
     rustango_cms::admin::register_templates(&mut tera).expect("templates");

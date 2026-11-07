@@ -15,7 +15,7 @@ use rustango::extractors::{SessionUser, Tenant};
 use rustango::sql::FetcherPool as _;
 use serde::Deserialize;
 
-use super::images::{compare_media, MEDIA_ORDER_FIELDS};
+use super::images::{list_media, MediaFilter, MEDIA_ORDER_FIELDS};
 use super::query as q;
 use crate::media::Media;
 
@@ -58,69 +58,28 @@ async fn list_inner(
         Err(msg) => return Ok(crate::api::error::ApiError::bad_request(msg).into_response()),
     };
 
-    // Documents = every media row that ISN'T an image. The
-    // discriminator is the `kind` column.
-    let mut rows: Vec<Media> = Media::objects()
-        .fetch(pool)
-        .await?
-        .into_iter()
-        .filter(|m| m.kind != "image")
-        .collect();
-
-    // #members — a collection can be login/group/permission gated, and
-    // `/__media__/` refuses to serve bytes from a gated one. This listing
-    // did no such check, so the catalogue (titles, filenames, dimensions,
-    // alt text) leaked even though the files themselves were protected.
-    let collection_ids: Vec<i64> = rows.iter().filter_map(|m| m.collection_id).collect();
-    let denied_collections = crate::collection_view_restriction::denied_collection_ids(
-        tenant.pool(),
-        viewer,
-        &collection_ids,
-    )
-    .await;
-    if !denied_collections.is_empty() {
-        rows.retain(|m| {
-            m.collection_id
-                .is_none_or(|c| !denied_collections.contains(&c))
-        });
-    }
-
-    if let Some(col_id) = qs.collection {
-        rows.retain(|m| m.collection_id == Some(col_id));
-    }
-
-    if let Some(needle) = qs.list.search.as_deref().filter(|s| !s.trim().is_empty()) {
-        let n = crate::api::search::fold(needle);
-        rows.retain(|m| {
-            crate::api::search::contains_folded(&m.title, &n)
-                || crate::api::search::contains_folded(&m.filename, &n)
-        });
-    }
-
-    if orderings.iter().any(|o| o.random) {
-        use rand::seq::SliceRandom as _;
-        rows.shuffle(&mut rand::rng());
-    } else if !orderings.is_empty() {
-        rows.sort_by(|a, b| compare_media(a, b, &orderings));
-    } else {
-        rows.sort_by(|a, b| b.uploaded_at.get().cmp(&a.uploaded_at.get()));
-    }
-
-    // #changes — `?updated_since=` so a polling client can ask for only
-    // what moved, instead of re-fetching the collection and diffing it.
     let updated_since = match crate::api::query::parse_updated_since(&qs.list) {
         Ok(v) => v,
         Err(msg) => return Ok(crate::api::error::ApiError::bad_request(msg).into_response()),
     };
-    if let Some(since) = updated_since {
-        rows.retain(|r| r.uploaded_at.get().copied().is_some_and(|t| t >= since));
-    }
-
-    let total_count = rows.len();
-    let window: Vec<&Media> = rows.iter().skip(offset).take(limit).collect();
+    let (window, total_count) = list_media(
+        pool,
+        viewer,
+        MediaFilter {
+            images: false,
+            collection: qs.collection,
+            search: qs.list.search.as_deref(),
+            search_alt_text: false,
+            updated_since,
+        },
+        &orderings,
+        limit,
+        offset,
+    )
+    .await?;
 
     let mut items = Vec::with_capacity(window.len());
-    for m in window {
+    for m in &window {
         let mut obj = serialize_document(m);
         // Validated against the first serialized row rather than a
         // hand-written list, so it cannot drift from what we return.

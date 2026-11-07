@@ -44,7 +44,7 @@ Set these on the server, never in the repository. Each one must stay the same ac
 | `RUSTANGO_SESSION_SECRET` | the login sessions of editors and members. Base64 of 32 bytes or more: `openssl rand -base64 32` | with `RUSTANGO_ENV=prod` the site does not start; otherwise a key file in `./var/` is used |
 | `RUSTANGO_SECRET_KEY` | encrypts secrets stored in the database (form email recipients, single sign-on client secrets) | email notifications can't be saved; the admin says so |
 | `RCMS_SECRET_KEY` | preview links, password-reset links, private-page grants, the admin's messages | the CMS generates a key once into `./var/.rustango_cms_signing.key` |
-| `RCMS_RENDITION_SIGNING_KEY` | signs image URLs (`?s=…`), so nobody can ask the server for thousands of image sizes | image URLs are not signed |
+| `RCMS_RENDITION_SIGNING_KEY` | requires a signature (`?s=…`) on every image URL, so nobody can ask the server for sizes the site didn't render | image URLs the site renders are still signed (with a key derived from `RCMS_SECRET_KEY`) and always served; unsigned ones — the ones API clients build — are served, but a visitor who isn't signed in can create at most 128 sizes of one image that way (`RCMS_RENDITION_MAX_UNSIGNED`) |
 
 > **Changing a secret** logs everybody out (`RUSTANGO_SESSION_SECRET`), breaks preview and reset links already sent (`RCMS_SECRET_KEY`), turns signed image URLs in cached pages into errors until the pages are rendered again (`RCMS_RENDITION_SIGNING_KEY`), or makes stored secrets unreadable (`RUSTANGO_SECRET_KEY` — there is no re-encryption). Choose them once.
 
@@ -85,6 +85,23 @@ Each tenant answers on its **host pattern** (`create-tenant … --host-pattern s
 ```
 
 Editors can add names themselves under **Sites**. Names under the domains in `RCMS_SITE_HOST_SUFFIXES` (comma-separated) work at once; others wait for an operator to turn them on.
+
+A tenant can also live under a path on the main domain, with no host of its own:
+
+```sh
+./yoursite create-tenant acme --path-prefix /acme
+```
+
+The whole site then answers under `example.com/acme/`: its pages, `/acme/cms-admin/`, sign-in at `/acme/login`, media, the sitemap and feeds. Links, redirects and the admin's own requests get the prefix added on the way out. A project made with `rcms new` is set up for it. An older one needs these two lines in `main.rs`:
+
+```rust
+rustango::manage::Cli::new()
+    .tenancy()
+    .tenant_header(rustango_cms::path_prefix::tenant_header())
+    .api(rustango_cms::path_prefix::serve(api))
+```
+
+Under a prefix, a site has no `robots.txt` of its own: crawlers only read the one at the domain root.
 
 Let the site listen on `127.0.0.1` and put the proxy in front. A minimal nginx site:
 

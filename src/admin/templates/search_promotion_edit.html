@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "Pin results for" | translate(locale=LANG) }} “{{ query.raw }}” — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ "Pin results for" | translate(locale=LANG) }} “{{ query.raw }}” — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Pin results for" | translate(locale=LANG) }} “{{ query.raw }}”{% endblock %}
 
 {% block topbar_actions %}

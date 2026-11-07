@@ -16,14 +16,14 @@
   const ASSET_VERSION = document.currentScript
     ? new URL(document.currentScript.src, location.href).search
     : "";
-  var VENDOR = "/cms-admin/static/vendor/codemirror.bundle.js" + ASSET_VERSION;
-  var bundlePromise = null;
+  const VENDOR = "/cms-admin/static/vendor/codemirror.bundle.js" + ASSET_VERSION;
+  let bundlePromise = null;
 
   function ensureBundle() {
     if (window.CodeMirror) return Promise.resolve();
     if (bundlePromise) return bundlePromise;
     bundlePromise = new Promise(function (resolve, reject) {
-      var s = document.createElement("script");
+      const s = document.createElement("script");
       s.src = VENDOR;
       s.onload = resolve;
       s.onerror = reject;
@@ -38,7 +38,7 @@
     ta.addEventListener("keydown", function (e) {
       if (e.key !== "Tab") return;
       e.preventDefault();
-      var s = ta.selectionStart, t = ta.selectionEnd;
+      const s = ta.selectionStart, t = ta.selectionEnd;
       ta.value = ta.value.slice(0, s) + "  " + ta.value.slice(t);
       ta.selectionStart = ta.selectionEnd = s + 2;
     });
@@ -50,11 +50,11 @@
 
     ensureBundle()
       .then(function () {
-        var isDark = document.documentElement.getAttribute("data-theme") === "dark"
+        const isDark = document.documentElement.getAttribute("data-theme") === "dark"
           || (!document.documentElement.hasAttribute("data-theme")
               && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
-        var cm = window.CodeMirror.fromTextArea(ta, {
+        const cm = window.CodeMirror.fromTextArea(ta, {
           mode: "tera",
           lineNumbers: true,
           lineWrapping: true,
@@ -80,7 +80,7 @@
 
         function submit() {
           cm.save();
-          var form = ta.form;
+          const form = ta.form;
           if (form) form.requestSubmit ? form.requestSubmit() : form.submit();
         }
         // `fromTextArea` syncs on form submit only via `cm.save()`; wire
@@ -102,24 +102,24 @@
    * author does not lose their cursor to a round trip.
    */
   function wireValidate() {
-    var btn = document.querySelector("[data-validate]");
-    var out = document.querySelector("[data-validate-result]");
+    const btn = document.querySelector("[data-validate]");
+    const out = document.querySelector("[data-validate-result]");
     if (!btn || !out) return;
-    var ta = document.querySelector("textarea[data-template-editor]");
+    const ta = document.querySelector("textarea[data-template-editor]");
     if (!ta) return;
 
     btn.addEventListener("click", function () {
       // Pull from CodeMirror when it has taken over the textarea.
-      var wrapper = ta.nextElementSibling;
-      var cm = wrapper && wrapper.CodeMirror;
+      const wrapper = ta.nextElementSibling;
+      const cm = wrapper && wrapper.CodeMirror;
       if (cm) cm.save();
 
-      var form = ta.form;
-      var body = new URLSearchParams({
+      const form = ta.form;
+      const body = new URLSearchParams({
         name: form.querySelector('input[name="name"]').value,
         body: ta.value,
       });
-      var csrf = form.querySelector('input[name="_csrf"]');
+      const csrf = form.querySelector('input[name="_csrf"]');
       if (csrf) body.append("_csrf", csrf.value);
 
       btn.disabled = true;
@@ -147,8 +147,8 @@
   }
 
   function init() {
-    var nodes = document.querySelectorAll("textarea[data-template-editor]");
-    for (var i = 0; i < nodes.length; i++) enhance(nodes[i]);
+    const nodes = document.querySelectorAll("textarea[data-template-editor]");
+    for (let i = 0; i < nodes.length; i++) enhance(nodes[i]);
     wireValidate();
   }
 

@@ -8,7 +8,8 @@
 //! | Setting | Purpose |
 //! |---|---|
 //! | `RCMS_SECRET_KEY` | Signs preview tokens, password-reset links and other CMS artifacts; generated into `./var/.rustango_cms_signing.key` when unset |
-//! | `RCMS_RENDITION_SIGNING_KEY` | Signs image rendition URLs |
+//! | `RCMS_RENDITION_SIGNING_KEY` | Requires a signature on every image rendition URL (CMS-rendered URLs are signed either way) |
+//! | `RCMS_RENDITION_MAX_UNSIGNED` | Without a signing key, the most sizes unsigned anonymous requests can create per image (default 128) |
 //! | `RCMS_API_CORS_ORIGINS` | Origins allowed to call `/api/v2` |
 //! | `RCMS_MEDIA_BACKEND` | `local` (default), `memory` or `s3` |
 //! | `RCMS_MEDIA_CDN_BASE` | Base URL [`crate::media_storage::public_url`] returns for stored objects (`s3`/`memory` backends). Pages the CMS renders keep serving media through `/__media__/…` with year-long immutable caching, so a CDN in front of the site caches them |

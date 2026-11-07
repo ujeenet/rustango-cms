@@ -408,9 +408,13 @@ fn render_block_inline(
                 // Repeat fields skip the picker (only one type allowed)
                 // — the JS recognises `data-repeat="1"` on the list and
                 // mints a row of that type directly.
+                // "Add picture", from the item block's name (its type name
+                // when it isn't registered).
+                let item_label = crate::block::find_block(&item_type)
+                    .map_or_else(|| item_type.replace('_', " "), |b| b.verbose_name().to_lowercase());
                 html.push_str(&format!(
                     r#"<div class="rcms-stream-picker"><button type="button" class="rcms-btn" data-action="open-picker" data-insert-at="end"><span class="material-symbols-rounded sm">add</span> Add {}</button></div>"#,
-                    tera::escape_html(&item_type),
+                    tera::escape_html(&item_label),
                 ));
                 html.push_str("</fieldset>");
             }

@@ -18,6 +18,10 @@ use tower::ServiceExt as _;
 const HOST: &str = "acme.example.com";
 const TENANT: &str = "acme";
 
+fn tenant() -> rustango::tenancy::TenantSlug {
+    rustango::tenancy::TenantSlug::new(1, TENANT)
+}
+
 fn app(cache: BoxedCache) -> Router {
     Router::new()
         .route("/about", get(|| async { "About us" }))
@@ -26,7 +30,7 @@ fn app(cache: BoxedCache) -> Router {
         .layer(axum::middleware::from_fn(
             |mut req: Request<Body>, next: axum::middleware::Next| async move {
                 req.extensions_mut()
-                    .insert(rustango::tenancy::TenantSlug(TENANT.to_owned()));
+                    .insert(tenant());
                 next.run(req).await
             },
         ))
@@ -62,7 +66,7 @@ async fn a_purged_page_is_rendered_again() {
 
     BoxedCacheInvalidator::new(cache, "rcms:page")
         .with_tenant_hosts(TENANT, [HOST.to_owned()])
-        .invalidate_url(TENANT, "/about")
+        .invalidate_url(&tenant(), "/about")
         .await;
 
     assert_eq!(
@@ -70,4 +74,20 @@ async fn a_purged_page_is_rendered_again() {
         "MISS",
         "the purge must remove the entry the layer wrote",
     );
+}
+
+#[tokio::test]
+async fn default_hosts_purge_under_the_request_tenant() {
+    let cache: BoxedCache = Arc::new(InMemoryCache::new());
+    let app = app(cache.clone());
+
+    assert_eq!(cache_status(&app).await, "MISS");
+    assert_eq!(cache_status(&app).await, "HIT");
+
+    BoxedCacheInvalidator::new(cache, "rcms:page")
+        .with_default_hosts([HOST.to_owned()])
+        .invalidate_url(&tenant(), "/about")
+        .await;
+
+    assert_eq!(cache_status(&app).await, "MISS", "a default host purges the tenant's page");
 }

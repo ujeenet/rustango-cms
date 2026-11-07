@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "Components" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block title %}{{ "Components" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Components" | translate(locale=LANG) }}{% endblock %}
 
 {% block topbar_actions %}

@@ -1,6 +1,6 @@
 {% extends "rcms_admin/_base.html" %}
 {% import "rcms_admin/_widget.html" as widget %}
-{% block title %}{% if mode == "new" %}{{ "New category" | translate(locale=LANG) }}{% else %}{{ "Edit category" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% block title %}{% if mode == "new" %}{{ "New category" | translate(locale=LANG) }}{% else %}{{ "Edit category" | translate(locale=LANG) }}{% endif %} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{% if mode == "new" %}{{ "Add category" | translate(locale=LANG) }}{% else %}{{ "Edit category" | translate(locale=LANG) }}{% endif %}{% endblock %}
 
 {% block topbar_actions %}

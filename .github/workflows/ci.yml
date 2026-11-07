@@ -42,7 +42,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: test-${{ matrix.name }}
-      - run: cargo test --workspace ${{ matrix.flags }}
+      # Prebuilt and pinned, as in rustango: 0.9.114 is the last nextest
+      # that builds on the 1.88 MSRV. Settings: .config/nextest.toml.
+      - uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2.87.31
+        with:
+          tool: nextest@0.9.114
+      - run: cargo nextest run --profile ci --workspace ${{ matrix.flags }}
+      # nextest cannot run doctests.
+      - run: cargo test --workspace --doc ${{ matrix.flags }}
 
   features:
     name: feature builds

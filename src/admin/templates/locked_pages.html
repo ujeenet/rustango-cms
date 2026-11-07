@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "Locked pages" | translate(locale=LANG) }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ "Locked pages" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Locked pages" | translate(locale=LANG) }}{% endblock %}
 
 {% block topbar_actions %}

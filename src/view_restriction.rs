@@ -618,6 +618,14 @@ impl AccessContext {
             .collect();
         (prefixes, types)
     }
+
+    /// True when the viewer satisfies every restriction there is, so
+    /// [`Self::can_view`] answers true for any page and a listing can
+    /// count and page in SQL without checking each row.
+    pub(crate) fn denies_nothing(&self) -> bool {
+        let (prefixes, types) = self.denied_scopes();
+        prefixes.is_empty() && types.is_empty()
+    }
 }
 
 /// Narrow a page query to what an anonymous visitor may see.

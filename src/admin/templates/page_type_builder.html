@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ "Build fields" | translate(locale=LANG) }}: {{ title }} — CMS Admin{% endblock %}
+{% block title %}{{ "Build fields" | translate(locale=LANG) }}: {{ title }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Build fields" | translate(locale=LANG) }}: {{ title }}{% endblock %}
 
 {% block topbar_actions %}
@@ -67,7 +67,7 @@
             {% for v in versions %}
                 <tr>
                     <td>v{{ v.version }}</td>
-                    <td><span class="rcms-tag {% if v.status == "published" %}published{% else %}archived{% endif %}">{{ v.status }}</span></td>
+                    <td><span class="rcms-tag {% if v.status == "published" %}published{% else %}archived{% endif %}">{{ v.status | capitalize | translate(locale=LANG) }}</span></td>
                     <td class="rcms-text-muted rcms-text-xs">{{ v.updated_at | naturaltime }}</td>
                 </tr>
             {% endfor %}

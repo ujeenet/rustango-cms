@@ -117,7 +117,7 @@ pub async fn list(
     // #members — a public member outranks an admin session, matching
     // `tree`, `menus::detail` and the public renderer.
     let viewer = member.as_ref().or(bearer.as_ref()).or(session_user.as_ref());
-    match list_inner(&tenant, viewer, &qs).await {
+    match list_inner(tenant.pool(), &tenant.org.slug, viewer, &qs).await {
         Ok(resp) => resp,
         Err(e) => {
             tracing::error!(target: "rustango_cms::api", error = %e, "pages list failed");
@@ -126,111 +126,270 @@ pub async fn list(
     }
 }
 
-async fn list_inner(
-    tenant: &Tenant,
+/// The SQL side of a page listing: every filter that is an exact match,
+/// resolved once so the count, the window and the in-memory fallback all
+/// read the same rows.
+struct PageScope {
+    /// `?translation_of=` keeps the legacy locale-variant rows every
+    /// other query drops.
+    translation_of: Option<i64>,
+    type_id: Option<i64>,
+    updated_since: Option<chrono::DateTime<chrono::Utc>>,
+    id_in: Option<Vec<i64>>,
+    child_of: Option<i64>,
+    /// `?descendant_of=` as the anchor's path prefix.
+    descendant_prefix: Option<String>,
+    /// `?ancestor_of=` as the anchor's ancestor paths.
+    ancestor_paths: Option<Vec<String>>,
+    /// A non-default `?locale=`: only the variant rows.
+    variants_only: bool,
+    /// `?tag=`, normalized.
+    tag: Option<String>,
+    /// A filter that can match nothing (an unknown type, an anchor the
+    /// viewer cannot see, an empty id list) — no query needed.
+    matches_nothing: bool,
+}
+
+impl PageScope {
+    /// The filters the tree anchors are resolved against: public, no
+    /// legacy variants (unless `translation_of`), type, `updated_since`,
+    /// `id_in` and `child_of`. The anchor of `?descendant_of=` has to pass
+    /// these but not the tag, locale or translation filters, which is the
+    /// order the in-memory listing has always applied them in.
+    fn base(&self) -> rustango::query::QuerySet<Page> {
+        let mut qs = Page::objects().where_(Page::status.is_in([
+            PageStatus::Published.as_str().to_owned(),
+            PageStatus::Archived.as_str().to_owned(),
+        ]));
+        if self.translation_of.is_none() {
+            qs = qs.where_(Page::locale_variant_of.is_null());
+        }
+        if let Some(tid) = self.type_id {
+            qs = qs.where_(Page::page_type_id.eq(tid));
+        }
+        if let Some(since) = self.updated_since {
+            qs = qs.where_(Page::updated_at.gte(since));
+        }
+        if let Some(ids) = &self.id_in {
+            qs = qs.where_(Page::id.is_in(ids.iter().copied()));
+        }
+        if let Some(parent) = self.child_of {
+            qs = qs.where_(Page::parent_id.eq(parent));
+        }
+        qs
+    }
+
+    /// [`Self::base`] plus the tree, translation, locale and tag filters.
+    fn narrowed(&self) -> Result<rustango::query::QuerySet<Page>, rustango::sql::ExecError> {
+        let mut qs = self.base();
+        if let Some(prefix) = &self.descendant_prefix {
+            // Materialized paths are lowercase hex and `/`, so the prefix
+            // needs no LIKE escaping (see `tree`).
+            qs = qs.where_(Page::path.like(format!("{prefix}%")));
+            qs = qs.where_(Page::path.ne(prefix.clone()));
+        }
+        if let Some(paths) = &self.ancestor_paths {
+            qs = qs.where_(Page::path.is_in(paths.iter().cloned()));
+        }
+        if let Some(canon) = self.translation_of {
+            qs = qs.where_(Page::locale_variant_of.eq(canon));
+        }
+        if self.variants_only {
+            qs = qs.where_(Page::locale_variant_of.is_not_null());
+        }
+        if let Some(tag) = &self.tag {
+            // A subquery rather than an id list: a popular tag must not
+            // run into a backend's bind-parameter ceiling.
+            let tagged = crate::page_tag::PageTag::objects()
+                .where_(crate::page_tag::PageTag::name.eq(tag.clone()))
+                .values_list_flat("page_id")
+                .compile()?;
+            qs = qs.where_(rustango::core::TypedExpr::from_where_expr(
+                rustango::core::subquery::in_subquery("id", tagged),
+            ));
+        }
+        Ok(qs)
+    }
+}
+
+/// How a listing with no text search may be ordered in SQL.
+enum SqlOrder {
+    /// The default: newest published first, then title, then id.
+    Default,
+    /// Only date and number keys, then `id`.
+    Keys(Vec<(&'static str, bool, rustango::core::NullsOrder)>),
+}
+
+/// The SQL order for `orderings`, or `None` when it needs Rust: a text
+/// key (collations differ per backend, Rust's byte order does not) or
+/// `random`.
+fn sql_order(orderings: &[q::OrderSpec]) -> Option<SqlOrder> {
+    use rustango::core::NullsOrder;
+    if orderings.is_empty() {
+        return Some(SqlOrder::Default);
+    }
+    let mut keys = Vec::with_capacity(orderings.len() + 1);
+    for o in orderings {
+        if o.random {
+            return None;
+        }
+        let col = match o.field.as_str() {
+            "published_at" => "published_at",
+            "updated_at" => "updated_at",
+            "created_at" => "created_at",
+            "depth" => "depth",
+            "sort_order" => "sort_order",
+            _ => return None,
+        };
+        // Rust orders `None` first, so a descending sort puts it last.
+        let nulls = if col != "published_at" {
+            NullsOrder::Default
+        } else if o.descending {
+            NullsOrder::Last
+        } else {
+            NullsOrder::First
+        };
+        keys.push((col, o.descending, nulls));
+    }
+    keys.push(("id", false, NullsOrder::Default));
+    Some(SqlOrder::Keys(keys))
+}
+
+/// The default listing order: most recently published first, then
+/// title, then id.
+fn compare_default(a: &Page, b: &Page) -> std::cmp::Ordering {
+    b.published_at
+        .cmp(&a.published_at)
+        .then_with(|| a.title.cmp(&b.title))
+        // Unique tiebreaker: `sort_by` is stable, so without one tied
+        // rows keep the fetch order and paging is only as stable as the
+        // driver happens to be.
+        .then_with(|| a.id.get().cmp(&b.id.get()))
+}
+
+/// One window of `scope` in the default order, without loading the rest.
+///
+/// SQL sorts by `published_at DESC, id`, which puts the rows in the same
+/// groups of equal `published_at` as [`compare_default`] and differs only
+/// inside a group, where the title decides. So: take the SQL window, read
+/// the (at most two) groups that straddle its edges in full, and order
+/// that run in Rust. It starts right after every row of a newer group.
+/// Most ids `?id_in=` accepts in one request.
+const MAX_ID_IN: usize = 200;
+
+/// The default-order page window (`published_at` desc, then title, id).
+/// SQL picks the window by `published_at, id`; the rows sharing a
+/// `published_at` with the window's first or last row are re-read in full
+/// and sorted in Rust, since a title order isn't the same on every
+/// backend. Cost note: that re-read is as big as the tie group — pages
+/// bulk-published in the same instant all load once a window touches them.
+async fn default_order_window(
+    pool: &rustango::sql::Pool,
+    scope: &PageScope,
+    limit: usize,
+    offset: usize,
+) -> Result<Vec<Page>, rustango::sql::ExecError> {
+    use rustango::core::NullsOrder;
+    use rustango::sql::CounterPool as _;
+    let sql_window: Vec<Page> = scope
+        .narrowed()?
+        .order_by_with_nulls(&[
+            ("published_at", true, NullsOrder::Last),
+            ("id", false, NullsOrder::Default),
+        ])
+        .limit(i64::try_from(limit).unwrap_or(i64::MAX))
+        // A huge `?offset=` must not wrap negative (backends differ).
+        .offset(i64::try_from(offset).unwrap_or(i64::MAX))
+        .fetch(pool)
+        .await?;
+    let (Some(first), Some(last)) = (sql_window.first(), sql_window.last()) else {
+        return Ok(Vec::new());
+    };
+    let (first_key, last_key) = (first.published_at, last.published_at);
+    let ahead = match first_key {
+        Some(t) => scope.narrowed()?.where_(Page::published_at.gt(t)).count(pool).await?,
+        // NULLs sort last, so every dated row is ahead of them.
+        None => scope.narrowed()?.where_(Page::published_at.is_not_null()).count(pool).await?,
+    };
+    let group = |key: Option<chrono::DateTime<chrono::Utc>>| -> Result<_, rustango::sql::ExecError> {
+        Ok(match key {
+            Some(t) => scope.narrowed()?.where_(Page::published_at.eq(t)),
+            None => scope.narrowed()?.where_(Page::published_at.is_null()),
+        })
+    };
+    let mut run: Vec<Page> = group(first_key)?.fetch(pool).await?;
+    if last_key != first_key {
+        run.extend(
+            sql_window
+                .into_iter()
+                .filter(|p| p.published_at != first_key && p.published_at != last_key),
+        );
+        run.extend(group(last_key)?.fetch(pool).await?);
+    }
+    run.sort_by(compare_default);
+    let skip = offset.saturating_sub(usize::try_from(ahead).unwrap_or_default());
+    Ok(run.into_iter().skip(skip).take(limit).collect())
+}
+
+/// The path of anchor page `id` when it is in `base` and `access` lets
+/// the viewer see it.
+///
+/// `None` for "gated" and for "absent" alike is deliberate: answering
+/// differently would tell a caller whether a page it may not see exists.
+async fn visible_anchor_path(
+    pool: &rustango::sql::Pool,
+    base: rustango::query::QuerySet<Page>,
+    access: &crate::view_restriction::AccessContext,
+    id: i64,
+) -> Result<Option<String>, rustango::sql::ExecError> {
+    let anchor: Option<Page> = base.where_(Page::id.eq(id)).first(pool).await?;
+    Ok(anchor
+        .filter(|p| access.can_view(&p.path, p.page_type_id))
+        .map(|p| p.path))
+}
+
+/// The body of `GET /api/v2/pages/`.
+///
+/// Takes a `&Pool` and the tenant slug rather than the `Tenant`, so the
+/// endpoint is exercisable against an in-memory database (see
+/// [`crate::api::tree::tree_inner`]).
+///
+/// Exact filters run in SQL (#655). Count, order and paging do too when
+/// there is no text search, the viewer is denied nothing, and the order
+/// is the default or uses only date and number keys; otherwise the
+/// SQL-narrowed rows are filtered, ordered and paged in memory.
+///
+/// # Errors
+/// Driver / query failures.
+pub async fn list_inner(
+    pool: &rustango::sql::Pool,
+    tenant_slug: &str,
     viewer: Option<&rustango::tenancy::auth::User>,
     qs: &PageListQuery,
 ) -> Result<Response, rustango::sql::ExecError> {
-    let pool = tenant.pool();
     let (limit, offset) = q::paginate(&qs.list);
     let fields = q::field_set(&qs.list);
     let orderings = match q::parse_order_in(&qs.list, &PAGE_ORDER_FIELDS) {
         Ok(v) => v,
         Err(msg) => return Ok(crate::api::error::ApiError::bad_request(msg).into_response()),
     };
-
-    // Load every public page once. Tenants stay small; downstream
-    // filters are applied in memory so the API can serve compound
-    // queries (descendant_of + locale + search + order) without
-    // composing one mega-WHERE clause.
-    //
-    // Public means `published` **or** `archived` (`PageStatus::is_public`),
-    // matching the renderer, the sitemap, the tree, the child summaries
-    // and the menu resolver. This was the last surface filtering to
-    // `published` alone, which made it describe a different site than
-    // every other endpoint: an archived page resolved at its URL, showed
-    // up in the tree and in a menu, and was absent here — so
-    // `?id_in=` could not even re-fetch a page a menu had just named.
-    let mut pages: Vec<Page> = Page::objects()
-        .where_(Page::status.is_in([
-            PageStatus::Published.as_str().to_owned(),
-            PageStatus::Archived.as_str().to_owned(),
-        ]))
-        // A deterministic base order. Without it the driver decides, and
-        // on Postgres an unrelated UPDATE moves a row to the end of the
-        // heap — so a client walking `?offset=` could see one page twice
-        // and miss another. `id` is unique, which is what the in-memory
-        // comparators below lack.
-        .order_by(&[("id", false)])
-        .fetch(pool)
-        .await?;
-
-    // Legacy per-locale variant trees were standalone copies of the whole
-    // site, so leaving them in returned it once per locale. Every other
-    // surface drops them (#275); this one did not.
-    //
-    // `?translation_of=` is the exception — it exists precisely to list
-    // those rows, so it opts out.
-    if qs.filters.translation_of.is_none() {
-        pages.retain(|p| p.locale_variant_of.is_none());
-    }
-
-    // #members — drop what this viewer may not see, *before* any filter
-    // runs. This endpoint applied no restrictions at all, so every gated
-    // page's title, SEO text and URL was public — and `?descendant_of=`
-    // against a member-only section dumped the lot, the very thing
-    // `tree/?root=` refuses. Batched and subtree-aware via `path`, so a
-    // gated ancestor takes its descendants with it.
-    let triples: Vec<(i64, String, i64)> = pages
-        .iter()
-        .map(|p| {
-            (
-                p.id.get().copied().unwrap_or_default(),
-                p.path.clone(),
-                p.page_type_id,
-            )
-        })
-        .collect();
-    let denied = crate::view_restriction::denied_page_ids(pool, viewer, &triples).await;
-    if !denied.is_empty() {
-        pages.retain(|p| !denied.contains(&p.id.get().copied().unwrap_or_default()));
-    }
-
-    // ----- type filter --------------------------------------------------
-    if let Some(type_name) = qs.filters.r#type.as_deref().filter(|s| !s.is_empty()) {
-        // `cms_page_type.type_name` stores the bare handler name and
-        // keeps `app_label` in its own column, so the dotted form the
-        // doc comment advertises (`cms_pages.HomePage`) could never
-        // match. Accept both rather than making the documentation wrong.
-        let bare = type_name.rsplit('.').next().unwrap_or(type_name);
-        if let Some(pt) = lookup_page_type(pool, bare).await? {
-            let pt_id = pt.id.get().copied().unwrap_or_default();
-            pages.retain(|p| p.page_type_id == pt_id);
-        } else {
-            pages.clear();
-        }
-    }
-
     // #changes — `?updated_since=` so a polling client can ask for only
     // what moved, instead of re-fetching the collection and diffing it.
     let updated_since = match crate::api::query::parse_updated_since(&qs.list) {
         Ok(v) => v,
         Err(msg) => return Ok(crate::api::error::ApiError::bad_request(msg).into_response()),
     };
-    if let Some(since) = updated_since {
-        pages.retain(|p| p.updated_at.get().copied().is_some_and(|t| t >= since));
-    }
-
     // ----- explicit id set ----------------------------------------------
+    // An *unknown* id is deliberately absent rather than an error, so one
+    // stale id costs a batch one row instead of all of them. A segment
+    // that is not a number at all is a different thing: it was never an
+    // id, so it cannot be stale, and dropping it made a client's own bug
+    // look like a deleted page — the worst possible reading, on the
+    // endpoint whose whole job is hydrating a list of ids a menu just
+    // handed over.
+    let mut id_in: Option<Vec<i64>> = None;
     if let Some(raw) = qs.filters.id_in.as_deref() {
-        // An *unknown* id is deliberately absent rather than an error, so
-        // one stale id costs a batch one row instead of all of them. A
-        // segment that is not a number at all is a different thing: it
-        // was never an id, so it cannot be stale, and dropping it made a
-        // client's own bug look like a deleted page — the worst possible
-        // reading, on the endpoint whose whole job is hydrating a list of
-        // ids a menu just handed over.
-        let mut wanted = std::collections::HashSet::new();
+        let mut wanted = std::collections::BTreeSet::new();
         for seg in raw.split(',').map(str::trim).filter(|s| !s.is_empty()) {
             match seg.parse::<i64>() {
                 Ok(id) => {
@@ -244,128 +403,18 @@ async fn list_inner(
                 }
             }
         }
-        pages.retain(|p| p.id.get().copied().is_some_and(|id| wanted.contains(&id)));
-    }
-
-    // ----- tree filters -------------------------------------------------
-    if let Some(parent_id) = qs.filters.child_of {
-        pages.retain(|p| p.parent_id == Some(parent_id));
-    }
-    // The anchors are resolved against the *visible* set, not the whole
-    // table. Looking them up unrestricted would let a caller pivot off a
-    // page they cannot see: the anchor's path is all `?descendant_of=`
-    // needs, so an unfiltered lookup re-opened the leak the filter above
-    // just closed.
-    if let Some(root_id) = qs.filters.descendant_of {
-        if let Some(prefix) = visible_path(&pages, root_id) {
-            pages.retain(|p| p.path != prefix && p.path.starts_with(&prefix));
-        } else {
-            pages.clear();
+        // Bound the list: it is bound as one `IN (…)` in several queries,
+        // and SQLite builds can cap bind parameters at 999.
+        if wanted.len() > MAX_ID_IN {
+            return Ok(crate::api::error::ApiError::bad_request(format!(
+                "`id_in` takes at most {MAX_ID_IN} ids; got {}",
+                wanted.len()
+            ))
+            .into_response());
         }
-    }
-    if let Some(leaf_id) = qs.filters.ancestor_of {
-        if let Some(path) = visible_path(&pages, leaf_id) {
-            let ancestor_paths: std::collections::HashSet<String> = ancestor_paths_of(&path);
-            pages.retain(|p| ancestor_paths.contains(&p.path));
-        } else {
-            pages.clear();
-        }
+        id_in = Some(wanted.into_iter().collect());
     }
 
-    // ----- translation_of (locale-variant siblings) ---------------------
-    if let Some(canon_id) = qs.filters.translation_of {
-        // The *other* translations, not the anchor — asking for a page's
-        // translations and getting the page back is the only useful
-        // answer.
-        pages.retain(|p| p.locale_variant_of == Some(canon_id));
-    }
-
-    // ----- locale -------------------------------------------------------
-    if let Some(code) = qs.filters.locale.as_deref().filter(|s| !s.is_empty()) {
-        // Resolve through the shared helper: it honours `active` and
-        // falls back to the tenant default on an unknown code, which is
-        // what `tree`, `detail` and `menus` all do. This used to query
-        // `cms_locale` directly with no `active` filter and *empty the
-        // list* on an unknown code — two divergences from every other
-        // endpoint in one branch.
-        let locale = crate::translation::resolve_locale(pool, Some(code)).await?;
-        if let Some(loc) = locale {
-            let loc_id = loc.id.get().copied().unwrap_or_default();
-            if loc.is_default {
-                // Canonical content lives on the page row; default-locale
-                // filter is a no-op (every page is "in" the default).
-            } else {
-                // For non-default locales, a page is "in" the locale if
-                // it's a `locale_variant_of` chain rooted in that locale.
-                // V1 ships a simpler proxy: only return rows explicitly
-                // marked as variants. Future revisions can join the
-                // translation table to surface partially-translated rows.
-                pages.retain(|p| {
-                    p.locale_variant_of.is_some() && {
-                        // Fetch the canonical's locale would require a join;
-                        // for v1 we accept the variant rows themselves and
-                        // leave canonical filtering as a follow-up.
-                        let _ = loc_id;
-                        true
-                    }
-                });
-            }
-        }
-    }
-
-    // ----- tag ----------------------------------------------------------
-    if let Some(raw) = qs.filters.tag.as_deref().filter(|s| !s.is_empty()) {
-        let tagged: std::collections::HashSet<i64> = crate::page_tag::pages_with_tag(pool, raw)
-            .await?
-            .into_iter()
-            .collect();
-        pages.retain(|p| p.id.get().copied().is_some_and(|id| tagged.contains(&id)));
-    }
-
-    // ----- search -------------------------------------------------------
-    // Capture the raw needle so the promotion-pinning step below can run
-    // off the same value the title/slug/url_path filter uses.
-    let search_needle = qs.list.search.as_deref().filter(|s| !s.trim().is_empty());
-    // #408 — relevance-ranked search. An installed external backend
-    // (Elasticsearch) takes priority; else Postgres full-text; else
-    // (None) the substring filter below. The ranked hit list also drives
-    // result order (relevance by default).
-    let mut fts_ordered = false;
-    if let Some(needle) = search_needle {
-        crate::search_promotion::log_public_query(pool, needle, offset);
-        let ranked =
-            crate::search::ranked_public_page_ids(pool, &tenant.org.slug, needle, 1000).await;
-        // A ranked hit OR a substring match (#702): the ranked backend finds
-        // stemmed words but not a partial word, slug fragment or URL path,
-        // so it adds to the substring match every backend runs rather than
-        // replacing it. Ranked hits lead, in rank order; substring-only
-        // hits follow in their existing order (the sort is stable).
-        let rank: Option<std::collections::HashMap<i64, usize>> =
-            ranked.map(|r| r.iter().enumerate().map(|(i, id)| (*id, i)).collect());
-        let n = crate::api::search::fold(needle);
-        pages.retain(|p| {
-            rank.as_ref()
-                .is_some_and(|r| p.id.get().copied().is_some_and(|id| r.contains_key(&id)))
-                || crate::api::search::contains_folded(&p.title, &n)
-                || crate::api::search::contains_folded(&p.slug, &n)
-                || crate::api::search::contains_folded(&p.url_path, &n)
-        });
-        if let Some(rank) = &rank {
-            pages.sort_by_key(|p| {
-                p.id.get()
-                    .copied()
-                    .and_then(|id| rank.get(&id).copied())
-                    .unwrap_or(usize::MAX)
-            });
-            fts_ordered = true;
-        }
-    }
-
-    // ----- ordering -----------------------------------------------------
-    // FTS already ordered by relevance; an explicit ?order= still wins.
-    // Drop specs naming a field this endpoint cannot sort on, *before*
-    // deciding whether an ordering was requested. `parse_order` accepts
-    // any name and `compare_pages` skipped unknown ones per pair, so
     // `random` reshuffles per request, so an offset into it is not a
     // second page — it is a fresh shuffle with rows skipped. Refuse the
     // combination rather than quietly returning overlapping garbage.
@@ -375,86 +424,243 @@ async fn list_inner(
         )
         .into_response());
     }
+    // Public means `published` **or** `archived` (`PageStatus::is_public`),
+    // matching the renderer, the sitemap, the tree, the child summaries
+    // and the menu resolver — so `?id_in=` can re-fetch any page a menu
+    // just named.
+    //
+    // Legacy per-locale variant trees were standalone copies of the whole
+    // site, so leaving them in returned it once per locale (#275).
+    // `?translation_of=` exists precisely to list those rows, so it opts
+    // out.
+    let mut scope = PageScope {
+        translation_of: qs.filters.translation_of,
+        type_id: None,
+        updated_since,
+        matches_nothing: id_in.as_ref().is_some_and(Vec::is_empty),
+        id_in,
+        child_of: qs.filters.child_of,
+        descendant_prefix: None,
+        ancestor_paths: None,
+        variants_only: false,
+        tag: None,
+    };
 
-    if fts_ordered && orderings.is_empty() {
-        // keep the relevance order from the FTS hit list
-    } else if orderings.iter().any(|o| o.random) {
-        // Random is one-shot per request; cheap on bounded list size.
-        use rand::seq::SliceRandom as _;
-        pages.shuffle(&mut rand::rng());
-    } else if !orderings.is_empty() {
-        pages.sort_by(|a, b| compare_pages(a, b, &orderings));
-    } else {
-        // Default: most recently published first, then title.
-        pages.sort_by(|a, b| {
-            b.published_at
-                .cmp(&a.published_at)
-                .then_with(|| a.title.cmp(&b.title))
-                // Unique tiebreaker: `sort_by` is stable, so without one
-                // tied rows keep the fetch order and paging is only as
-                // stable as the driver happens to be.
-                .then_with(|| a.id.get().cmp(&b.id.get()))
-        });
+    // ----- type filter --------------------------------------------------
+    if let Some(type_name) = qs.filters.r#type.as_deref().filter(|s| !s.is_empty()) {
+        // `cms_page_type.type_name` stores the bare handler name and
+        // keeps `app_label` in its own column, so the dotted form the
+        // doc comment advertises (`cms_pages.HomePage`) could never
+        // match. Accept both rather than making the documentation wrong.
+        let bare = type_name.rsplit('.').next().unwrap_or(type_name);
+        match lookup_page_type(pool, bare).await? {
+            Some(pt) => scope.type_id = Some(pt.id.get().copied().unwrap_or_default()),
+            None => scope.matches_nothing = true,
+        }
     }
 
-    // ----- search promotions (#289) -------------------------------------
-    // After the search filter + ordering settle, pin editor-promoted
-    // pages to the front of the list. Skipped when the request didn't
-    // include a search needle (no query to look up), when no
-    // SearchQuery row matches the normalized form (visitor's query
-    // hasn't been logged + promoted), or when the query has no
-    // promotions attached.
-    //
-    // Promotion order: pages are inserted in `sort_order` ascending,
-    // de-duplicated against whatever was already at the head of the
-    // filtered list (a page that organically ranked first AND was
-    // promoted stays where the promotion put it, doesn't appear
-    // twice).
-    if let Some(needle) = search_needle {
-        if let Ok(Some(q)) = crate::search_promotion::find_by_query(pool, needle).await {
-            let query_id = q.id.get().copied().unwrap_or_default();
-            if query_id != 0 {
-                if let Ok(promos) =
-                    crate::search_promotion::promotions_for_query(pool, query_id).await
-                {
-                    // Pull each promoted page out of the filtered list
-                    // (preserving its full Page row — we still want
-                    // status, published_at, etc. as ranked) and reinsert
-                    // at the front in promotion order. Promoted pages
-                    // that aren't in the filtered result set (because
-                    // they failed the type/locale/tag/search filter)
-                    // stay dropped; the promotion table doesn't
-                    // override the visitor's filter scope.
-                    let mut pinned: Vec<Page> = Vec::with_capacity(promos.len());
-                    for p in &promos {
-                        if let Some(pos) = pages
-                            .iter()
-                            .position(|page| page.id.get().copied() == Some(p.page_id))
-                        {
-                            pinned.push(pages.remove(pos));
-                        }
+    // #members — what this viewer may not see is dropped *before* any
+    // filter runs, so a gated page's title, SEO text and URL stay
+    // private, and `?descendant_of=` against a member-only section
+    // cannot dump it. Subtree-aware via `path`, so a gated ancestor takes
+    // its descendants with it.
+    let access = crate::view_restriction::access_context(pool, viewer).await;
+
+    // ----- tree filters -------------------------------------------------
+    // The anchors are resolved against the *visible* set, not the whole
+    // table. Looking them up unrestricted would let a caller pivot off a
+    // page they cannot see: the anchor's path is all `?descendant_of=`
+    // needs.
+    let mut descendant_prefix = None;
+    let mut ancestor_paths = None;
+    if !scope.matches_nothing {
+        if let Some(root_id) = qs.filters.descendant_of {
+            descendant_prefix = visible_anchor_path(pool, scope.base(), &access, root_id).await?;
+            if descendant_prefix.is_none() {
+                scope.matches_nothing = true;
+            }
+        }
+        if let Some(leaf_id) = qs.filters.ancestor_of {
+            match visible_anchor_path(pool, scope.base(), &access, leaf_id).await? {
+                Some(path) => {
+                    let paths: Vec<String> = ancestor_paths_of(&path).into_iter().collect();
+                    if paths.is_empty() {
+                        scope.matches_nothing = true;
                     }
-                    // Splice pinned to the front in promotion order.
-                    for (i, page) in pinned.into_iter().enumerate() {
-                        pages.insert(i, page);
+                    ancestor_paths = Some(paths);
+                }
+                None => scope.matches_nothing = true,
+            }
+        }
+    }
+    scope.descendant_prefix = descendant_prefix;
+    scope.ancestor_paths = ancestor_paths;
+
+    // ----- locale -------------------------------------------------------
+    if let Some(code) = qs.filters.locale.as_deref().filter(|s| !s.is_empty()) {
+        // Resolve through the shared helper: it honours `active` and
+        // falls back to the tenant default on an unknown code, which is
+        // what `tree`, `detail` and `menus` all do.
+        //
+        // Canonical content lives on the page row, so the default locale
+        // filters nothing. A non-default locale keeps only rows
+        // explicitly marked as variants (a v1 proxy for "in that locale").
+        let locale = crate::translation::resolve_locale(pool, Some(code)).await?;
+        scope.variants_only = locale.is_some_and(|loc| !loc.is_default);
+    }
+
+    // ----- tag ----------------------------------------------------------
+    if let Some(raw) = qs.filters.tag.as_deref().filter(|s| !s.is_empty()) {
+        scope.tag = Some(crate::page_tag::normalize_name(raw));
+    }
+
+    // Capture the raw needle so the promotion-pinning step below can run
+    // off the same value the title/slug/url_path filter uses.
+    let search_needle = qs.list.search.as_deref().filter(|s| !s.trim().is_empty());
+
+    // ----- SQL fast path ------------------------------------------------
+    let fast = if search_needle.is_some() || !access.denies_nothing() {
+        None
+    } else {
+        sql_order(&orderings)
+    };
+    let mut fts_ordered = false;
+    let (window, total_count): (Vec<Page>, usize) = if scope.matches_nothing && fast.is_some() {
+        (Vec::new(), 0)
+    } else if let Some(order) = fast {
+        use rustango::sql::CounterPool as _;
+        let total = usize::try_from(scope.narrowed()?.count(pool).await?).unwrap_or_default();
+        let rows = match order {
+            SqlOrder::Default => default_order_window(pool, &scope, limit, offset).await?,
+            SqlOrder::Keys(keys) => {
+                scope
+                    .narrowed()?
+                    .order_by_with_nulls(&keys)
+                    .limit(i64::try_from(limit).unwrap_or(i64::MAX))
+                    // A huge `?offset=` must not wrap negative.
+                    .offset(i64::try_from(offset).unwrap_or(i64::MAX))
+                    .fetch(pool)
+                    .await?
+            }
+        };
+        (rows, total)
+    } else {
+        let mut pages: Vec<Page> = if scope.matches_nothing {
+            Vec::new()
+        } else {
+            scope
+                .narrowed()?
+                // A deterministic base order. Without it the driver
+                // decides, and on Postgres an unrelated UPDATE moves a row
+                // to the end of the heap. `id` is unique, which is what
+                // the in-memory comparators below lack.
+                .order_by(&[("id", false)])
+                .fetch(pool)
+                .await?
+        };
+        if !access.is_unrestricted() {
+            pages.retain(|p| access.can_view(&p.path, p.page_type_id));
+        }
+
+        // ----- search ---------------------------------------------------
+        // #408 — relevance-ranked search. An installed external backend
+        // (Elasticsearch) takes priority; else Postgres full-text; else
+        // (None) the substring filter below. The ranked hit list also
+        // drives result order (relevance by default).
+        if let Some(needle) = search_needle {
+            crate::search_promotion::log_public_query(pool, needle, offset);
+            let ranked =
+                crate::search::ranked_public_page_ids(pool, tenant_slug, needle, 1000).await;
+            // A ranked hit OR a substring match (#702): the ranked backend
+            // finds stemmed words but not a partial word, slug fragment or
+            // URL path, so it adds to the substring match every backend
+            // runs rather than replacing it. Ranked hits lead, in rank
+            // order; substring-only hits follow in their existing order
+            // (the sort is stable).
+            let rank: Option<std::collections::HashMap<i64, usize>> =
+                ranked.map(|r| r.iter().enumerate().map(|(i, id)| (*id, i)).collect());
+            let n = crate::api::search::fold(needle);
+            pages.retain(|p| {
+                rank.as_ref()
+                    .is_some_and(|r| p.id.get().copied().is_some_and(|id| r.contains_key(&id)))
+                    || crate::api::search::contains_folded(&p.title, &n)
+                    || crate::api::search::contains_folded(&p.slug, &n)
+                    || crate::api::search::contains_folded(&p.url_path, &n)
+            });
+            if let Some(rank) = &rank {
+                pages.sort_by_key(|p| {
+                    p.id.get()
+                        .copied()
+                        .and_then(|id| rank.get(&id).copied())
+                        .unwrap_or(usize::MAX)
+                });
+                fts_ordered = true;
+            }
+        }
+
+        // ----- ordering -------------------------------------------------
+        // FTS already ordered by relevance; an explicit ?order= still wins.
+        if fts_ordered && orderings.is_empty() {
+            // keep the relevance order from the FTS hit list
+        } else if orderings.iter().any(|o| o.random) {
+            // Random is one-shot per request; cheap on bounded list size.
+            use rand::seq::SliceRandom as _;
+            pages.shuffle(&mut rand::rng());
+        } else if !orderings.is_empty() {
+            pages.sort_by(|a, b| compare_pages(a, b, &orderings));
+        } else {
+            pages.sort_by(compare_default);
+        }
+
+        // ----- search promotions (#289) ---------------------------------
+        // After the search filter + ordering settle, pin editor-promoted
+        // pages to the front of the list. Skipped when the request didn't
+        // include a search needle, when no SearchQuery row matches the
+        // normalized form, or when the query has no promotions attached.
+        //
+        // Promotion order: pages are inserted in `sort_order` ascending,
+        // de-duplicated against whatever was already at the head of the
+        // filtered list (a page that organically ranked first AND was
+        // promoted stays where the promotion put it, doesn't appear
+        // twice).
+        if let Some(needle) = search_needle {
+            if let Ok(Some(q)) = crate::search_promotion::find_by_query(pool, needle).await {
+                let query_id = q.id.get().copied().unwrap_or_default();
+                if query_id != 0 {
+                    if let Ok(promos) =
+                        crate::search_promotion::promotions_for_query(pool, query_id).await
+                    {
+                        // Pull each promoted page out of the filtered list
+                        // and reinsert it at the front in promotion order.
+                        // Promoted pages outside the filtered result set
+                        // stay dropped; the promotion table doesn't
+                        // override the visitor's filter scope.
+                        let mut pinned: Vec<Page> = Vec::with_capacity(promos.len());
+                        for p in &promos {
+                            if let Some(pos) = pages
+                                .iter()
+                                .position(|page| page.id.get().copied() == Some(p.page_id))
+                            {
+                                pinned.push(pages.remove(pos));
+                            }
+                        }
+                        for (i, page) in pinned.into_iter().enumerate() {
+                            pages.insert(i, page);
+                        }
                     }
                 }
             }
         }
-    }
 
-    // ----- pagination ---------------------------------------------------
-    let total_count = pages.len();
-    let window: Vec<&Page> = pages.iter().skip(offset).take(limit).collect();
+        let total = pages.len();
+        (pages.into_iter().skip(offset).take(limit).collect(), total)
+    };
 
     // #408 — a fuzzy "did you mean?" when an FTS search matched nothing
     // but a near-match title exists (Postgres + pg_trgm only; None
-    // otherwise). Only offered for FTS-backed searches that came up empty.
-    // #408 — the suggestion comes from a similarity query that joins
-    // nothing and spans `published + archived`, so left alone it will
-    // happily name a member-only or archived page by title. Confirm the
-    // suggested title actually belongs to something this caller can see
-    // before offering it. One extra query, and only on a zero-hit search.
+    // otherwise). The suggestion comes from a similarity query that joins
+    // nothing and spans `published + archived`, so confirm the suggested
+    // title belongs to something this caller can see before offering it.
     let did_you_mean = match (fts_ordered, total_count, search_needle) {
         (true, 0, Some(needle)) => match crate::search::did_you_mean(pool, needle, 0.3).await {
             Some(title) => visible_title(pool, viewer, &title).await,
@@ -466,7 +672,7 @@ async fn list_inner(
     // ----- serialize ----------------------------------------------------
     let type_names = page_type_names(pool).await?;
     let mut items = Vec::with_capacity(window.len());
-    for p in window {
+    for p in &window {
         let mut obj = serialize_summary(p, &type_names);
         // Validated against the first serialized row rather than a
         // hand-written list, so it cannot drift from what we return.
@@ -503,7 +709,8 @@ pub async fn detail(
     let allow_draft = qs
         .preview_token
         .as_deref()
-        .and_then(|t| crate::preview_token::verify(&tenant.org.slug, t, chrono::Utc::now().timestamp()))
+        .zip(rustango::tenancy::TenantSlug::of(&tenant.org))
+        .and_then(|(t, org)| crate::preview_token::verify(&org, t, chrono::Utc::now().timestamp()))
         == Some(id);
     match detail_inner(
         &tenant,
@@ -790,18 +997,6 @@ async fn visible_title(
         .iter()
         .any(|(id, _, _)| !denied.contains(id))
         .then(|| title.to_owned())
-}
-
-/// The materialized path of `id`, but only if it survived filtering.
-///
-/// Returning `None` for "gated" and for "absent" alike is deliberate: a
-/// filter that behaved differently would answer "does this page exist?"
-/// for pages the caller may not see.
-fn visible_path(pages: &[Page], id: i64) -> Option<String> {
-    pages
-        .iter()
-        .find(|p| p.id.get().copied() == Some(id))
-        .map(|p| p.path.clone())
 }
 
 /// Echo the locale a detail body was built in as `meta.locale`. An

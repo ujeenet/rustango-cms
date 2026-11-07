@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "Permissions" | translate(locale=LANG) }} — {{ collection_name }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ "Permissions" | translate(locale=LANG) }} — {{ collection_name }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Permissions" | translate(locale=LANG) }} — {{ collection_name }}{% endblock %}
 
 {% block topbar_actions %}

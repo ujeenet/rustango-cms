@@ -48,7 +48,7 @@ pub async fn sync_form_email(
         // Cleared in the form editor → the target goes too, otherwise
         // turning notifications off in one place leaves them on in another.
         if let Some(t) = managed {
-            t.delete_pool(pool).await?;
+            t.delete(pool).await?;
         }
         return Ok(());
     }
@@ -76,7 +76,7 @@ pub async fn sync_form_email(
             t.config = config;
             t.events = "form.submitted".to_owned();
             t.enabled = true;
-            t.save_pool(pool).await?;
+            t.save(pool).await?;
         }
         None => {
             let mut row = NotificationTarget {
@@ -91,7 +91,7 @@ pub async fn sync_form_email(
                 enabled: true,
                 created_at: rustango::sql::Auto::Unset,
             };
-            row.insert_pool(pool).await?;
+            row.insert(pool).await?;
         }
     }
     Ok(())

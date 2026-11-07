@@ -1,0 +1,439 @@
+{
+  "name": "Portfolio",
+  "site": {
+    "tagline": "Design & development",
+    "footer": "© 2026 Studio North. Built with Rustango-CMS.",
+    "footer_logo": "@media:rustango-cms-logo"
+  },
+  "branding": {
+    "site_name": "Studio North",
+    "logo": "@media:rustango-cms-icon",
+    "favicon": "@media:rustango-cms-icon"
+  },
+  "theme": {
+    "base": "slate",
+    "slug": "starter-portfolio",
+    "name": "Starter: Portfolio",
+    "tokens": {
+      "color_link": "#7c3aed",
+      "font_heading": "'Space Grotesk', system-ui, sans-serif",
+      "font_body": "'Inter', system-ui, sans-serif",
+      "font_url": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&display=swap",
+      "radius_md": "14px",
+      "radius_lg": "22px"
+    }
+  },
+  "page_types": [
+    "Home",
+    "Page",
+    "Projects",
+    "Project"
+  ],
+  "pages": [
+    {
+      "key": "home",
+      "type": "Home",
+      "title": "Home",
+      "slug": "",
+      "data": {
+        "headline": "We design and build calm, useful products.",
+        "intro": "A small studio working with founders, cafés, libraries and research teams.",
+        "cta_label": "See our work",
+        "cta_url": "/work",
+        "body": [
+          {
+            "type": "cta",
+            "value": {
+              "heading": "Have a project in mind?",
+              "text": "Tell us about it. We reply to every message.",
+              "button_label": "Get in touch",
+              "url": "/contact"
+            }
+          },
+          {
+            "type": "slider",
+            "value": {
+              "heading": "Selected work",
+              "style": "slides",
+              "slides": [
+                {
+                  "type": "slide",
+                  "id": "home-slide-0",
+                  "value": {
+                    "image": "@media:coffee",
+                    "alt": "A cup of coffee with latte art, seen from above on a wooden table",
+                    "heading": "Harbour Coffee",
+                    "text": "A warmer brand for a seaside café.",
+                    "link_label": "See the project",
+                    "url": "/work/harbour-coffee"
+                  }
+                },
+                {
+                  "type": "slide",
+                  "id": "home-slide-1",
+                  "value": {
+                    "image": "@media:studio",
+                    "alt": "A red circle, a blue rectangle and a yellow triangle on a shelf",
+                    "heading": "Fieldnote",
+                    "text": "A calm notes app for researchers.",
+                    "link_label": "See the project",
+                    "url": "/work/fieldnote-app"
+                  }
+                },
+                {
+                  "type": "slide",
+                  "id": "home-slide-2",
+                  "value": {
+                    "image": "@media:books",
+                    "alt": "Three shelves of books in muted colours",
+                    "heading": "City Library",
+                    "text": "Wayfinding across four floors.",
+                    "link_label": "See the project",
+                    "url": "/work/city-library-wayfinding"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "children": [
+        {
+          "key": "work",
+          "type": "Projects",
+          "title": "Work",
+          "slug": "work",
+          "in_menu": true,
+          "data": {
+            "intro": "Selected projects from the last few years."
+          },
+          "children": [
+            {
+              "key": "project-1",
+              "type": "Project",
+              "title": "Harbour Coffee rebrand",
+              "slug": "harbour-coffee",
+              "seo_description": "A fresh identity and website for a neighbourhood coffee roaster.",
+              "in_menu": true,
+              "data": {
+                "summary": "A fresh identity and website for a neighbourhood coffee roaster.",
+                "client": "Harbour Coffee",
+                "year": "2026",
+                "services": "Brand identity, Website",
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>The challenge</h2><p>Harbour Coffee had outgrown its hand-drawn logo and a site nobody could update.</p>"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>What we did</h2><p>We designed a new identity and a simple website the team edits themselves.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "We finally have a website we're proud to send people to.",
+                      "attribution": "Harbour Coffee"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>The result</h2><p>Online orders doubled in the first three months.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:coffee"
+              }
+            },
+            {
+              "key": "project-2",
+              "type": "Project",
+              "title": "Fieldnote mobile app",
+              "slug": "fieldnote-app",
+              "seo_description": "A note-taking app for researchers working offline in the field.",
+              "in_menu": true,
+              "data": {
+                "summary": "A note-taking app for researchers working offline in the field.",
+                "client": "Fieldnote",
+                "year": "2025",
+                "services": "Product design, iOS, Android",
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>The challenge</h2><p>Researchers needed to capture notes, photos and locations without a signal.</p>"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>What we did</h2><p>We designed an offline-first app that syncs when a connection returns.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "It just works, even on a mountain.",
+                      "attribution": "Fieldnote"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>The result</h2><p>Used by 40 research teams in its first year.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:studio"
+              }
+            },
+            {
+              "key": "project-3",
+              "type": "Project",
+              "title": "City Library wayfinding",
+              "slug": "city-library-wayfinding",
+              "seo_description": "Clear signs and maps for a five-floor public library.",
+              "in_menu": true,
+              "data": {
+                "summary": "Clear signs and maps for a five-floor public library.",
+                "client": "City Library",
+                "year": "2025",
+                "services": "Signage, Print",
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>The challenge</h2><p>Visitors kept getting lost between the five floors and two entrances.</p>"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>What we did</h2><p>We created a colour-coded signage system and printed and digital maps.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "People stop asking for directions now.",
+                      "attribution": "City Library"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>The result</h2><p>Help-desk questions about directions dropped by half.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:books"
+              }
+            }
+          ]
+        },
+        {
+          "key": "about",
+          "type": "Page",
+          "title": "About",
+          "slug": "about",
+          "in_menu": true,
+          "data": {
+            "intro": "A little about the studio.",
+            "body": [
+              {
+                "type": "hero",
+                "value": {
+                  "heading": "Design and development, under one roof",
+                  "text": "We help teams turn ideas into calm, useful products.",
+                  "height": "medium",
+                  "image": "@media:hills"
+                }
+              },
+              {
+                "type": "rich_text",
+                "value": {
+                  "body": "<p>This is a sample page. Edit it in the CMS admin under <strong>Pages</strong>: change the text, add images, quotes or a call to action from the <em>Content</em> field.</p>"
+                }
+              },
+              {
+                "type": "quote",
+                "value": {
+                  "text": "Simple things should be simple, complex things should be possible.",
+                  "attribution": "Alan Kay"
+                }
+              },
+              {
+                "type": "rich_text",
+                "value": {
+                  "body": "<h2>What this site is for</h2><p>Replace this text with your own story. Every page here is yours to rewrite or delete.</p>"
+                }
+              },
+              {
+                "type": "media_text",
+                "value": {
+                  "image_side": "left",
+                  "heading": "How we work",
+                  "text": "Small team, short feedback loops. We design and build together, so nothing is lost between the two.\n\n*Change this text and the picture in the admin.*",
+                  "image": "@media:studio",
+                  "image_alt": "A red circle, a blue rectangle and a yellow triangle on a shelf"
+                }
+              },
+              {
+                "type": "media_text",
+                "value": {
+                  "image_side": "right",
+                  "heading": "What we care about",
+                  "text": "Clear interfaces, fast pages and products that are easy to look after once we hand them over.",
+                  "button_label": "Get in touch",
+                  "url": "/contact",
+                  "image": "@media:paper",
+                  "image_alt": "Two sheets of ruled paper and a pencil on a desk"
+                }
+              },
+              {
+                "type": "cards",
+                "value": {
+                  "heading": "What we do",
+                  "columns": "3",
+                  "cards": [
+                    {
+                      "type": "card",
+                      "id": "about-card-0",
+                      "value": {
+                        "title": "Product design",
+                        "text": "Research, interfaces and design systems.",
+                        "image": "@media:studio"
+                      }
+                    },
+                    {
+                      "type": "card",
+                      "id": "about-card-1",
+                      "value": {
+                        "title": "Development",
+                        "text": "Fast, accessible sites and apps.",
+                        "image": "@media:circuit"
+                      }
+                    },
+                    {
+                      "type": "card",
+                      "id": "about-card-2",
+                      "value": {
+                        "title": "Ongoing care",
+                        "text": "Hosting, updates and improvements.",
+                        "url": "/contact",
+                        "image": "@media:leaves"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "jumbo",
+                "value": {
+                  "heading": "Have a project in mind?",
+                  "text": "Tell us about it. We reply within two working days.",
+                  "button_label": "Start a project",
+                  "url": "/contact",
+                  "style": "accent"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "key": "contact",
+          "type": "Page",
+          "title": "Contact",
+          "slug": "contact",
+          "in_menu": true,
+          "data": {
+            "intro": "Questions, ideas or a project in mind? Get in touch.",
+            "body": [
+              {
+                "type": "rich_text",
+                "value": {
+                  "body": "<p>Write to <a href=\"mailto:hello@example.com\">hello@example.com</a> and we'll reply within two working days.</p>"
+                }
+              },
+              {
+                "type": "cta",
+                "value": {
+                  "heading": "Prefer a call?",
+                  "text": "Book a short introduction call and we'll take it from there.",
+                  "button_label": "Book a call",
+                  "url": "mailto:hello@example.com"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "menus": [
+    {
+      "slug": "header",
+      "name": "Header",
+      "items": [
+        {
+          "page": "work"
+        },
+        {
+          "page": "about"
+        },
+        {
+          "page": "contact"
+        }
+      ]
+    },
+    {
+      "slug": "footer",
+      "name": "Footer",
+      "items": [
+        {
+          "label": "Studio",
+          "children": [
+            {
+              "page": "work"
+            },
+            {
+              "page": "about"
+            },
+            {
+              "page": "contact"
+            }
+          ]
+        },
+        {
+          "label": "Elsewhere",
+          "children": [
+            {
+              "label": "GitHub",
+              "url": "https://github.com/ujeenet/rustango-cms"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "error_pages": [
+    {
+      "status": 404,
+      "title": "Nothing on the board here",
+      "slug": "page-not-found",
+      "body": [
+        {
+          "type": "paragraph",
+          "value": {
+            "body": "This page isn't part of the portfolio, or it has moved. The work is all a click away on the home page."
+          }
+        }
+      ]
+    }
+  ]
+}

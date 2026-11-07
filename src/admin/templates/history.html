@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "History" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block title %}{{ "History" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Revision history" | translate(locale=LANG) }}{% endblock %}
 
 {% block topbar_actions %}
@@ -84,7 +84,7 @@
                         </td>
                         <td>
                             {% if row.page_status %}
-                                <span class="rcms-tag {{ row.page_status }}">{{ row.page_status }}</span>
+                                <span class="rcms-tag {{ row.page_status }}">{{ row.page_status | capitalize | translate(locale=LANG) }}</span>
                             {% endif %}
                         </td>
                         <td class="rcms-actions">

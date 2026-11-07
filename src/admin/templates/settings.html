@@ -1,5 +1,6 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ "Settings" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% import "rcms_admin/_widget.html" as widget %}
+{% block title %}{{ "Settings" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Settings" | translate(locale=LANG) }}{% endblock %}
 
 {% block content %}
@@ -52,44 +53,22 @@
     </ul>
 </div>
 
-{# #199 — per-tenant branding. Logo + favicon upload land under
-   cms_site_setting scope `branding`. The base template resolves
-   /__cms-branding/logo and /__cms-branding/favicon to the uploaded
-   bytes; absence falls back to the brand name + no favicon. #}
+{#- Branding: the site's name, logo and icon, used in the admin and on the
+    public site (see `crate::branding`). The pictures come from the media
+    library. -#}
 <div class="rcms-card">
     <h2 class="rcms-text-lg">{{ "Branding" | translate(locale=LANG) }}</h2>
     <p class="rcms-hint rcms-m-0 rcms-mb-3">
-        {{ "Replace the sidebar brand text with a logo image, and the browser tab icon with a favicon. Logo accepts PNG / SVG / JPEG; favicon accepts ICO / PNG / SVG." | translate(locale=LANG) }}
+        {{ "The site's name, logo and icon, used in the admin, on sign-in pages and on the site." | translate(locale=LANG) }}
     </p>
-    <form method="post"
-          action="{{ url(name='rcms-admin:settings:branding') }}"
-          enctype="multipart/form-data">
+    <form method="post" action="{{ url(name='rcms-admin:settings:branding') }}">
         {{ csrf_token | csrf_input | safe }}
         <div class="rcms-field rcms-mb-3">
             <label for="branding-site-name">{{ "Site name" | translate(locale=LANG) }}</label>
             <input id="branding-site-name" type="text" name="site_name" value="{{ branding_site_name | default(value='') }}" maxlength="120" placeholder="{{ org_display_name }}">
-            <div class="rcms-hint">{{ "Shown on the members' sign-in and sign-up pages. Empty: the name above." | translate(locale=LANG) }}</div>
+            <div class="rcms-hint">{{ "Empty: the name above." | translate(locale=LANG) }}</div>
         </div>
-        <div class="rcms-field rcms-mb-3">
-            <label for="branding-logo">{{ "Logo (PNG / SVG / JPEG)" | translate(locale=LANG) }}</label>
-            <input id="branding-logo" type="file" name="logo" accept="image/png,image/jpeg,image/svg+xml">
-            {% if branding_logo_filename %}
-                <div class="rcms-hint rcms-text-2xs rcms-mt-1">
-                    {{ "Current:" | translate(locale=LANG) }} <code>{{ branding_logo_filename }}</code> &nbsp;·&nbsp;
-                    <a href="/__cms-branding/logo" target="_blank" rel="noopener">{{ "preview" | translate(locale=LANG) }}</a>
-                </div>
-            {% endif %}
-        </div>
-        <div class="rcms-field rcms-mb-3">
-            <label for="branding-favicon">{{ "Favicon (ICO / PNG / SVG)" | translate(locale=LANG) }}</label>
-            <input id="branding-favicon" type="file" name="favicon" accept="image/x-icon,image/png,image/svg+xml,.ico">
-            {% if branding_favicon_filename %}
-                <div class="rcms-hint rcms-text-2xs rcms-mt-1">
-                    {{ "Current:" | translate(locale=LANG) }} <code>{{ branding_favicon_filename }}</code> &nbsp;·&nbsp;
-                    <a href="/__cms-branding/favicon" target="_blank" rel="noopener">{{ "preview" | translate(locale=LANG) }}</a>
-                </div>
-            {% endif %}
-        </div>
+        {% for w in branding_pictures | default(value=[]) %}{{ widget::render(w=w) }}{% endfor %}
         <div class="rcms-form-actions">
             <button type="submit" class="rcms-btn">{{ "Save branding" | translate(locale=LANG) }}</button>
         </div>

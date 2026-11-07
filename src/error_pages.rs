@@ -33,6 +33,12 @@ use crate::page::Page;
 /// Registry `type_name` for the built-in Error page type.
 pub const TYPE_NAME: &str = "ErrorPage";
 
+/// The HTTP statuses an Error page can serve.
+pub const STATUSES: [u16; 4] = [404, 403, 500, 503];
+
+/// The blocks an Error page's body accepts.
+pub const BODY_BLOCKS: [&str; 7] = ["heading", "paragraph", "image", "quote", "embed", "code", "raw_html"];
+
 /// Typed extension row for an Error page: the HTTP status it serves
 /// plus its block-stream body.
 #[derive(Model, Debug, Clone, Default, Serialize, Deserialize)]
@@ -121,19 +127,7 @@ impl crate::PageTypeHandler for ErrorPage {
             .required()
             .with_value(code)
             .with_help("HTTP status this page is served for."),
-            crate::Widget::stream(
-                "body",
-                "Body",
-                [
-                    "heading",
-                    "paragraph",
-                    "image",
-                    "quote",
-                    "embed",
-                    "code",
-                    "raw_html",
-                ],
-            )
+            crate::Widget::stream("body", "Body", BODY_BLOCKS.iter().copied())
             .with_value(body),
         ])
     }
@@ -165,7 +159,7 @@ impl crate::PageTypeHandler for ErrorPage {
             Some(mut row) => {
                 row.status_code = status_code;
                 row.body = body;
-                row.save_pool(pool).await?;
+                row.save(pool).await?;
             }
             None => {
                 let mut row = ErrorPageExt {
@@ -174,7 +168,7 @@ impl crate::PageTypeHandler for ErrorPage {
                     status_code,
                     body,
                 };
-                row.insert_pool(pool).await?;
+                row.insert(pool).await?;
             }
         }
         Ok(())
@@ -306,6 +300,42 @@ pub(crate) fn fallback_response(status: StatusCode) -> Response {
         503 => "The site is briefly down for maintenance. Please try again shortly.",
         _ => "An unexpected error occurred. Please try again shortly.",
     };
+    let actions = r#"<a class="primary" href="/">Go to homepage</a><a class="ghost" href="javascript:history.back()">&larr; Go back</a>"#;
+    styled_page(status, &code.to_string(), title, detail, actions)
+}
+
+/// What `/` answers on a site with no published page yet — a fresh
+/// site straight after `quickstart`. A bare 404 there reads as a broken
+/// install, so say what is missing and where to sign in to add it.
+pub(crate) fn empty_site_response() -> Response {
+    styled_page(
+        StatusCode::NOT_FOUND,
+        "Hello",
+        "This site has no pages yet",
+        "Sign in to the admin on this address and add the home page. It shows up here once it's published.",
+        r#"<a class="primary" href="/login?next=/cms-admin/pages">Sign in to the admin</a>"#,
+    )
+}
+
+/// True when the site has no published page at all.
+pub(crate) async fn site_is_empty(pool: &Pool) -> bool {
+    match Page::objects()
+        .where_(Page::status.eq(crate::page::PageStatus::Published.as_str().to_owned()))
+        .first(pool)
+        .await
+    {
+        Ok(found) => found.is_none(),
+        Err(e) => {
+            tracing::warn!(error = %e, "empty-site check failed");
+            false
+        }
+    }
+}
+
+/// The self-contained page shared by the fallback error pages and the
+/// empty-site welcome: no Tera, no DB, no assets.
+fn styled_page(status: StatusCode, big: &str, title: &str, detail: &str, actions: &str) -> Response {
+    let code = status.as_u16();
     let html = format!(
         r##"<!doctype html>
 <html lang="en">
@@ -335,11 +365,11 @@ p{{margin:0 auto 28px;color:var(--muted);max-width:44ch}}
 </head>
 <body>
 <div class="box">
-<p class="code">{code}</p>
+<p class="code">{big}</p>
 <hr class="rule">
 <h1>{title}</h1>
 <p>{detail}</p>
-<div class="actions"><a class="primary" href="/">Go to homepage</a><a class="ghost" href="javascript:history.back()">&larr; Go back</a></div>
+<div class="actions">{actions}</div>
 </div>
 </body>
 </html>"##
@@ -403,6 +433,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn an_empty_site_points_at_the_admin_sign_in() {
+        let resp = empty_site_response();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        let body = body_string(resp).await;
+        assert!(body.contains("no pages yet"), "{body}");
+        assert!(body.contains("href=\"/login?next=/cms-admin/pages\""), "sign-in link present");
+    }
+
+    #[cfg(feature = "sqlite")]
+    #[tokio::test]
+    async fn a_site_without_published_pages_is_empty() {
+        let pool = Pool::connect("sqlite::memory:").await.expect("pool");
+        let sql = rustango::migrate::ddl::create_table_if_not_exists_sql_with_dialect(pool.dialect(), Page::SCHEMA);
+        for stmt in sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+            rustango::sql::raw_execute_pool(&pool, stmt, Vec::new()).await.expect("ddl");
+        }
+        assert!(site_is_empty(&pool).await);
+    }
+
+    #[tokio::test]
     async fn fallback_titles_cover_wired_statuses() {
         for (status, needle) in [
             (StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong"),
@@ -460,7 +510,7 @@ mod tests {
                 created_at: Auto::Unset,
                 updated_at: Auto::Unset,
             };
-            pt.insert_pool(&pool).await.expect("insert page type");
+            pt.insert(&pool).await.expect("insert page type");
             pool
         }
 
@@ -498,7 +548,7 @@ mod tests {
                 created_at: Auto::Unset,
                 updated_at: Auto::Unset,
             };
-            page.insert_pool(pool).await.expect("insert page");
+            page.insert(pool).await.expect("insert page");
             page.id.get().copied().expect("page id")
         }
 
@@ -513,7 +563,7 @@ mod tests {
                 status_code: "404".into(),
                 body: None,
             }
-            .insert_pool(&pool)
+            .insert(&pool)
             .await
             .expect("draft ext");
             assert!(
@@ -529,7 +579,7 @@ mod tests {
                 status_code: "404".into(),
                 body: None,
             }
-            .insert_pool(&pool)
+            .insert(&pool)
             .await
             .expect("live ext");
             let hit = find_for_status(&pool, 404).await.expect("query");
@@ -549,7 +599,7 @@ mod tests {
                 status_code: "410".into(),
                 body: None,
             }
-            .insert_pool(&pool)
+            .insert(&pool)
             .await
             .expect("archived ext");
             let hit = find_for_status(&pool, 410).await.expect("query");

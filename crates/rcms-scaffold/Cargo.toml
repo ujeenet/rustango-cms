@@ -1,21 +1,30 @@
 [package]
 name = "rcms-scaffold"
-version = "0.3.0"
-description = "`rcms new <project>` — scaffold a new rustango-cms project"
+version = "0.4.0"
+description = "Create a new Rustango-CMS site: `rcms new <name>`"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
+documentation = "https://cms.rustango.com/getting-started"
 authors.workspace = true
 rust-version.workspace = true
-# Not publishable yet: the skeleton and baseline migrations are embedded with
-# include_str! from outside this crate, and generated projects depend on
-# rustango-cms by path until rustango-cms itself is on crates.io.
-publish = false
+keywords = ["cms", "rustango", "scaffold", "cli"]
+categories = ["command-line-utilities", "web-programming"]
+readme = "README.md"
 
-# Standalone bin: no dependency on rustango-cms (or its heavy build tree).
-# The skeleton + the CMS baseline migrations are embedded via include_str!
-# from the repo, so the scaffolder compiles in seconds.
+# Released in step with rustango-cms: same version, and generated projects
+# depend on rustango-cms `major.minor` of this version.
+
+[package.metadata.rcms-scaffold]
+# The framework requirement generated projects use. Must match what
+# rustango-cms requires (a test compares it with the workspace manifest).
+rustango = "0.65"
+
+[dependencies]
+# Expands a starter theme's `theme.json` (page-type names → definitions).
+serde_json = "1"
+
 [[bin]]
 name = "rcms"
 path = "src/main.rs"

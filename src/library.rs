@@ -259,17 +259,11 @@ pub trait LibraryTypeHandler: Send + Sync + 'static {
         None
     }
 
-    /// Optional Tera template the public-render handler uses to
-    /// pre-render this snippet type's rows. When `Some("<path>")`
-    /// the renderer pre-fetches every row of this type, renders
-    /// each through the template (with `{ snippet: <row JSON> }`
-    /// in context), and stamps the resulting HTML into the public
-    /// Tera ctx map `_snippets_html_by_id` keyed on the snippet's
-    /// `id`.
-    ///
-    /// Templates pull the pre-rendered HTML via
-    /// `{{ snippet_html(type="Category", id=4) }}` so multiple
-    /// pages that reference the same snippet share one render.
+    /// Optional Tera template for this type's rows on public pages.
+    /// When `Some("<path>")`, `{{ snippet_html(type="Category", id=4) }}`
+    /// renders that row through it, with `{ snippet: <row JSON> }` in
+    /// context. Only the rows a page asks for are fetched and rendered,
+    /// once each however often the page references them.
     ///
     /// `None` (default) — snippet has no public-side surface; the
     /// only consumers are admin / API.
@@ -294,10 +288,10 @@ pub trait LibraryTypeHandler: Send + Sync + 'static {
     /// Opt-in rather than always-on so a stray `template` key in a
     /// row's `data` can't silently repoint an existing type's render.
     ///
-    /// Types that opt in participate in the public pre-render even
-    /// when [`Self::render_template`] is `None` — an element template
-    /// alone is enough. Rows that name nothing and have no type
-    /// default are skipped, exactly as before.
+    /// Types that opt in render through `snippet_html` even when
+    /// [`Self::render_template`] is `None` — an element template alone
+    /// is enough. Rows that name nothing and have no type default
+    /// render empty.
     fn allows_element_template(&self) -> bool {
         false
     }
@@ -535,7 +529,7 @@ async fn upsert_one(
         row.app_label = handler.app_label().to_owned();
         row.verbose_name = handler.verbose_name().to_owned();
         row.extension_table = extension_table;
-        row.save_pool(pool).await?;
+        row.save(pool).await?;
     } else {
         let mut row = LibraryType {
             id: Auto::Unset,
@@ -546,7 +540,7 @@ async fn upsert_one(
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         };
-        row.insert_pool(pool).await?;
+        row.insert(pool).await?;
     }
     Ok(())
 }

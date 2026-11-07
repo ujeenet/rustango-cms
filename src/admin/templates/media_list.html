@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ kind_label }} — CMS Admin{% endblock %}
+{% block title %}{{ kind_label }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ kind_label }}{% endblock %}
 
 {% block topbar_actions %}

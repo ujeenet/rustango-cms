@@ -1,6 +1,6 @@
 {% extends "rcms_admin/_auth_layout.html" %}
-{% block page_title %}{{ "No CMS admin access" | translate(locale=LANG) }} — {{ admin_title | default(value="CMS") }}{% endblock %}
-{% block brand_name %}{{ admin_title | default(value="CMS Admin") }}{% endblock %}
+{% block page_title %}{{ "No CMS admin access" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
+{% block brand_name %}{{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block sub %}{{ "You're signed in, but not allowed in the CMS admin." | translate(locale=LANG) }}{% endblock %}
 
 {% block body %}

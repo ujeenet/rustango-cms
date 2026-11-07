@@ -1,0 +1,18 @@
+{% import "_macros.html" as m %}
+{#- The "Media and text" content block: an image beside a heading and
+    text, on the left or the right, with an optional button. Stacks on
+    narrow screens, image first. -#}
+<section class="media-text media-text--{% if value.image_side == 'right' %}right{% else %}left{% endif %}">
+  <div class="media-text__media">
+    {%- if value.image %}
+    <img src="{{ rcms_image_url(media_id=value.image, filter='width-1200') }}" alt="{{ value.image_alt | default(value='') }}" loading="lazy">
+    {%- else %}
+    <div class="placeholder" aria-hidden="true"></div>
+    {%- endif %}
+  </div>
+  <div class="media-text__body">
+    {%- if value.heading %}<h2>{{ value.heading }}</h2>{% endif %}
+    {%- if value.text %}<div class="media-text__text">{{ value.text | markdown | safe }}</div>{% endif %}
+    {%- if value.button_label and value.url %}<p>{{ m::button(label=value.button_label | default(value=""), url=value.url | default(value="")) | safe }}</p>{% endif %}
+  </div>
+</section>

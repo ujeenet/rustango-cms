@@ -431,6 +431,7 @@
         wireMultiValueWidgets();
         wireMissingThumbnails();
         wireSelectAll();
+        wireFilePreviews();
 
         // 6.5. #133 — per-user column picker. Any `.rcms-data` table that
         //   declares `data-col-picker="<list-name>"` gets a Columns
@@ -1398,6 +1399,27 @@
      * when rows were ticked individually. One handler, driven by
      * `data-select-all="<row checkbox selector>"`, covers all of them.
      */
+    /**
+     * `<input type="file" data-file-preview="#img">`: show the chosen
+     * picture in that image straight away (and hide the `…-fallback`
+     * stand-in beside it, if any), so the choice is visible before saving.
+     */
+    function wireFilePreviews() {
+        document.addEventListener("change", (event) => {
+            const input = event.target;
+            if (!(input instanceof HTMLInputElement) || !input.matches("[data-file-preview]")) return;
+            const img = document.querySelector(input.getAttribute("data-file-preview"));
+            const file = input.files && input.files[0];
+            if (!(img instanceof HTMLImageElement) || !file) return;
+            // `style.display`, not `hidden`: the avatar classes set
+            // `display`, which wins over the `hidden` attribute.
+            img.src = URL.createObjectURL(file);
+            img.style.display = "block";
+            const fallback = document.getElementById(img.id.replace(/-preview$/, "-fallback"));
+            if (fallback) fallback.style.display = "none";
+        });
+    }
+
     function wireSelectAll() {
         const boxes = document.querySelectorAll("[data-select-all]");
         for (const box of boxes) {

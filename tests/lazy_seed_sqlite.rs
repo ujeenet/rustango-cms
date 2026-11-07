@@ -21,26 +21,9 @@ async fn file_pool(tag: &str) -> Pool {
 }
 
 fn org(slug: &str) -> rustango::tenancy::Org {
-    rustango::tenancy::Org {
-        id: rustango::Auto::Unset,
-        slug: slug.to_owned(),
-        display_name: slug.to_owned(),
-        storage_mode: "database".to_owned(),
-        backend_kind: "sqlite".to_owned(),
-        database_url: None,
-        schema_name: None,
-        host_pattern: None,
-        port: None,
-        path_prefix: None,
-        active: true,
-        created_at: chrono::Utc::now(),
-        brand_name: None,
-        brand_tagline: None,
-        logo_path: None,
-        favicon_path: None,
-        primary_color: None,
-        theme_mode: None,
-    }
+    let mut org = rustango::tenancy::Org::new(slug);
+    org.backend_kind = "sqlite".to_owned();
+    org
 }
 
 #[tokio::test]

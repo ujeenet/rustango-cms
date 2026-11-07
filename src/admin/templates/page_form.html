@@ -1,6 +1,7 @@
 {% extends "rcms_admin/_base.html" %}
 {% import "rcms_admin/_widget.html" as widget %}
-{% block title %}{% if mode == "new" %}{{ "New Page" | translate(locale=LANG) }}{% else %}{{ "Edit Page" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% import "rcms_admin/_inline_panel.html" as inline %}
+{% block title %}{% if mode == "new" %}{{ "New Page" | translate(locale=LANG) }}{% else %}{{ "Edit Page" | translate(locale=LANG) }}{% endif %} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 
 {# The page editor folds breadcrumbs + heading + status + display-
    field chips into the topbar so the chrome stays at two sticky
@@ -294,6 +295,16 @@
             </button>
             {% endfor %}
         {% endif %}
+        {% if inline_tabs and inline_tabs | length > 0 %}
+            {% for t in inline_tabs %}
+            <button type="button" class="rcms-tab-tab" role="tab"
+                    data-tab-trigger="{{ t.slug }}"
+                    aria-controls="tab-{{ t.slug }}" aria-selected="false">
+                <span class="material-symbols-rounded sm">{{ t.icon | default(value="view_list") }}</span>
+                <span class="rcms-tab-label"><span>{{ t.label | translate(locale=LANG) }}</span></span>
+            </button>
+            {% endfor %}
+        {% endif %}
         {% if revisions and revisions | length > 0 %}
         <button type="button" class="rcms-tab-tab" role="tab" data-tab-trigger="revisions" aria-controls="tab-revisions" aria-selected="false">
             <span class="material-symbols-rounded sm">history</span> <span class="rcms-tab-label"><span>{{ "Revisions" | translate(locale=LANG) }}</span></span>
@@ -439,6 +450,31 @@
         <span class="rcms-hint rcms-block rcms-text-xs">
             {{ "The form shows the proposed version. Visitors see the live page until the changes are approved." | translate(locale=LANG) }}
         </span>
+    </div>
+</div>
+{% endif %}
+{# Another save changed fields this editor changed too: nothing was
+   saved, the form shows the editor's values over the current page. #}
+{% if mode == "edit" and edit_conflicts %}
+<div class="rcms-alert rcms-alert--warning" role="alert" data-edit-conflict>
+    <span class="material-symbols-rounded">warning</span>
+    <div class="rcms-alert-body">
+        <strong>{{ "Someone else changed this page while you were editing it." | translate(locale=LANG) }}</strong>
+        <span class="rcms-hint rcms-block rcms-text-xs">
+            {{ "Nothing was saved. Both of you changed the fields below. The form shows your values: save again to keep them, or edit them first." | translate(locale=LANG) }}
+        </span>
+        <ul class="rcms-mt-1 rcms-mb-0">
+            {% for c in edit_conflicts %}
+            {% set bool_field = c.field == "robots_index" or c.field == "show_in_menus" %}
+            <li data-conflict-field="{{ c.field }}">
+                <strong>{{ c.label | translate(locale=LANG) }}</strong> —
+                {{ "Saved now" | translate(locale=LANG) }}:
+                {% if c.theirs == "" %}{{ "(empty)" | translate(locale=LANG) }}{% elif bool_field %}{% if c.theirs == "true" %}{{ "yes" | translate(locale=LANG) }}{% else %}{{ "no" | translate(locale=LANG) }}{% endif %}{% elif c.field == "status" %}{{ c.theirs | capitalize | translate(locale=LANG) }}{% else %}“{{ c.theirs }}”{% endif %};
+                {{ "Your value" | translate(locale=LANG) }}:
+                {% if c.yours == "" %}{{ "(empty)" | translate(locale=LANG) }}{% elif bool_field %}{% if c.yours == "true" %}{{ "yes" | translate(locale=LANG) }}{% else %}{{ "no" | translate(locale=LANG) }}{% endif %}{% elif c.field == "status" %}{{ c.yours | capitalize | translate(locale=LANG) }}{% else %}“{{ c.yours }}”{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
     </div>
 </div>
 {% endif %}
@@ -955,6 +991,7 @@
       {% if mode == "edit" and lock_owned_by_me %}data-lock-heartbeat-url="{{ url(name='rcms-admin:pages:lock-heartbeat', id=page.id) }}" data-lock-heartbeat-secs="{{ lock_heartbeat_secs }}" data-lock-release-url="{{ url(name='rcms-admin:pages:lock-release', id=page.id) }}"{% endif %}
       {% if mode == "edit" %}data-autosave-url="{{ url(name='rcms-admin:pages:autosave', id=page.id) }}" data-autosave-secs="30"{% endif %}>
     {{ csrf_token | csrf_input | safe }}
+    {% if mode == "edit" and page_baseline %}<input type="hidden" name="_baseline" value="{{ page_baseline }}">{% endif %}
     {% if mode == "new" and parent %}
         <div class="rcms-page-form-notice">
             <span class="material-symbols-rounded sm">arrow_downward</span>
@@ -1111,54 +1148,19 @@
            `__deleted=1` sentinel so the server-side extractor skips
            them. #}
         {% if inline_panels and inline_panels | length > 0 %}
+            {% set_global untabbed = 0 %}
+            {% for panel in inline_panels %}{% if not panel.tab_slug %}{% set_global untabbed = untabbed + 1 %}{% endif %}{% endfor %}
+            {% if untabbed > 0 %}
             <fieldset class="rcms-content-fieldset rcms-inline-panel-card">
                 <legend>
                     <span class="material-symbols-rounded sm rcms-icon-bullet">view_list</span>
                     {{ "Related" | translate(locale=LANG) }}
                 </legend>
-                <ul class="rcms-inline-panel-list" role="list">
-                    {% for panel in inline_panels %}
-                        <li class="rcms-inline-panel-list-item" data-inline-panel="{{ panel.spec.name }}">
-                            <div class="rcms-inline-panel-list-head">
-                                <span class="material-symbols-rounded sm">{{ panel.spec.icon | default(value="view_list") }}</span>
-                                <strong>{{ panel.spec.label }}</strong>
-                                {% if panel.spec.max_num %}
-                                    <span class="rcms-hint rcms-inline-panel-cap">{{ "max" | translate(locale=LANG) }} {{ panel.spec.max_num }}</span>
-                                {% endif %}
-                            </div>
-                            {% if panel.spec.help %}
-                                <p class="rcms-hint rcms-inline-panel-help">{{ panel.spec.help }}</p>
-                            {% endif %}
-                            <div class="rcms-inline-panel-rows" data-inline-rows>
-                                {% for row in panel.rows %}
-                                    <div class="rcms-inline-panel-row" data-inline-row data-row-idx="{{ loop.index0 }}">
-                                        <div class="rcms-inline-panel-row-header">
-                                            <strong>#{{ loop.index }}</strong>
-                                            <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small rcms-inline-panel-remove" data-inline-remove>
-                                                <span class="material-symbols-rounded sm">delete</span> {{ "Remove" | translate(locale=LANG) }}
-                                            </button>
-                                        </div>
-                                        {% for f in panel.spec.fields %}
-                                            <div class="rcms-field">
-                                                <label>{{ f.label }}</label>
-                                                <input type="text"
-                                                       name="inline__{{ panel.spec.name }}__{{ loop.index0 }}__{{ f.name }}"
-                                                       value="{{ row[f.name] | default(value='') }}">
-                                                {% if f.help %}<div class="rcms-hint">{{ f.help }}</div>{% endif %}
-                                            </div>
-                                        {% endfor %}
-                                    </div>
-                                {% endfor %}
-                            </div>
-                            <button type="button" class="rcms-btn rcms-btn-tonal rcms-btn-small rcms-inline-panel-add" data-inline-add
-                                    data-panel-name="{{ panel.spec.name }}"
-                                    data-fields="{% for f in panel.spec.fields %}{{ f.name }}{% if not loop.last %},{% endif %}{% endfor %}">
-                                <span class="material-symbols-rounded sm">add</span> {{ "Add row" | translate(locale=LANG) }}
-                            </button>
-                        </li>
-                    {% endfor %}
-                </ul>
+                {% for panel in inline_panels %}
+                    {% if not panel.tab_slug %}{{ inline::render(panel=panel) }}{% endif %}
+                {% endfor %}
             </fieldset>
+            {% endif %}
         {% endif %}
     </section>
 
@@ -1362,6 +1364,19 @@
         {% for t in extra_tabs %}
         <section class="rcms-tab-panel" id="tab-{{ t.name }}" role="tabpanel" data-tab-panel="{{ t.name }}" hidden>
             {{ t.html | safe }}
+        </section>
+        {% endfor %}
+    {% endif %}
+
+    {# Inline panels that asked for a tab of their own (InlinePanelSpec::in_tab). #}
+    {% if inline_tabs and inline_tabs | length > 0 %}
+        {% for t in inline_tabs %}
+        <section class="rcms-tab-panel" id="tab-{{ t.slug }}" role="tabpanel" data-tab-panel="{{ t.slug }}" hidden>
+            <div class="rcms-content-fieldset rcms-inline-panel-card">
+                {% for panel in inline_panels %}
+                    {% if panel.tab_slug == t.slug %}{{ inline::render(panel=panel) }}{% endif %}
+                {% endfor %}
+            </div>
         </section>
         {% endfor %}
     {% endif %}
@@ -1836,6 +1851,20 @@
     let dirty = false;
     let lastSavedAt = null;
     let suspended = false;
+    // The autosave request in flight, if any. A Save pressed meanwhile
+    // waits for it, so it posts the baseline that autosave hands back
+    // (otherwise the editor's own autosave reads as someone else's edit).
+    let inflight = null;
+    form.addEventListener("submit", (e) => {
+        if (!inflight) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const submitter = e.submitter;
+        inflight.finally(() => {
+            if (submitter && submitter.form === form) form.requestSubmit(submitter);
+            else form.requestSubmit();
+        });
+    }, true);
     form.addEventListener("input", () => { dirty = true; });
     form.addEventListener("change", () => { dirty = true; });
     // After a manual save the form action triggers a navigation;
@@ -1863,12 +1892,21 @@
         return `${m}m ago`;
     }
     function tick() {
-        if (lastSavedAt) setChip(`Auto-saved ${timeSince(lastSavedAt)}`, "idle");
+        // A paused autosave keeps its warning ("use Save", "locked").
+        if (lastSavedAt && !suspended) setChip(`Auto-saved ${timeSince(lastSavedAt)}`, "idle");
     }
     setInterval(tick, 5000);
     async function autosave() {
-        if (suspended || !dirty) return;
+        if (suspended || !dirty || inflight) return;
         if (document.visibilityState !== "visible") return;
+        inflight = run();
+        try {
+            await inflight;
+        } finally {
+            inflight = null;
+        }
+    }
+    async function run() {
         setChip("Auto-saving…", "saving");
         try {
             const params = new URLSearchParams();
@@ -1882,12 +1920,21 @@
                 headers: { "X-CSRF-Token": csrfToken },
             });
             if (res.status === 204) {
+                // What autosave wrote is now what this form loaded.
+                const baseline = res.headers.get("x-rcms-baseline");
+                const baselineInput = form.querySelector('input[name="_baseline"]');
+                if (baseline && baselineInput) baselineInput.value = baseline;
                 lastSavedAt = Date.now();
                 dirty = false;
                 setChip("Auto-saved just now", "idle");
                 // #418 — a persisted draft means there's nothing to
                 // lose; clear the unsaved-changes navigate-away guard.
                 form.dispatchEvent(new CustomEvent("rcms:autosaved"));
+            } else if (res.status === 202) {
+                // Live or scheduled page: autosave writes nothing there,
+                // so the changes are still unsaved — keep the guard.
+                suspended = true;
+                setChip("Autosave is off for live pages — use Save", "warn");
             } else if (res.status === 409) {
                 suspended = true;
                 setChip("Locked by another editor — autosave paused", "warn");
@@ -2019,14 +2066,19 @@
 </script>
 {% endif %}
 
-{# #117 — InlinePanel Add/Remove JS. Pure client-side: Remove
-   hides the row and injects a __deleted=1 tombstone so the server
-   skips it; Add clones a row template with the next index. #}
+{# Inline panels: add (clone the panel's <template> with the next free
+   index), remove, move up / down. On submit the visible rows are
+   renumbered in page order, so the saved order is what the editor sees;
+   a removed row is simply not posted (the handler drops it). #}
 <script>
 (function () {
     "use strict";
-    const panels = document.querySelectorAll("[data-inline-panel]");
+    const panels = document.querySelectorAll("[data-inline-panel]:not([data-per-row])");
     if (!panels.length) return;
+
+    function rowPrefix(name, idx) {
+        return `inline__${name}__${idx}__`;
+    }
 
     function nextIndex(rowsEl) {
         const used = Array.from(rowsEl.querySelectorAll("[data-row-idx]"))
@@ -2035,64 +2087,272 @@
         return used.length === 0 ? 0 : Math.max(...used) + 1;
     }
 
-    panels.forEach((panel) => {
-        const panelName = panel.getAttribute("data-inline-panel");
-        const rowsEl = panel.querySelector("[data-inline-rows]");
-        const addBtn = panel.querySelector("[data-inline-add]");
+    // The nearest row card in one direction (the blank <template> sits
+    // among the rows and is skipped).
+    function sibling(row, dir) {
+        let el = row[dir];
+        while (el && !el.matches("[data-inline-row]")) el = el[dir];
+        return el;
+    }
 
-        function wireRemove(row) {
-            const btn = row.querySelector("[data-inline-remove]");
+    // Give every field in `row` index `to` instead of its current one.
+    function reindex(row, name, to) {
+        const from = row.dataset.rowIdx;
+        if (String(from) === String(to)) return;
+        const oldP = rowPrefix(name, from);
+        const newP = rowPrefix(name, to);
+        row.querySelectorAll("[name], [id], [for], [data-name]").forEach((el) => {
+            ["name", "id", "for", "data-name"].forEach((attr) => {
+                const v = el.getAttribute(attr);
+                if (v && v.includes(oldP)) el.setAttribute(attr, v.split(oldP).join(newP));
+            });
+        });
+        row.dataset.rowIdx = String(to);
+    }
+
+    panels.forEach((panel) => {
+        const name = panel.dataset.inlinePanel;
+        const rowsEl = panel.querySelector("[data-inline-rows]");
+        const tpl = panel.querySelector("template[data-inline-template]");
+        const addBtn = panel.querySelector("[data-inline-add]");
+        const placeholder = panel.dataset.placeholder;
+
+        // One delegated listener per panel covers rows added later too.
+        rowsEl.addEventListener("click", (event) => {
+            const btn = event.target.closest("[data-inline-remove], [data-inline-up], [data-inline-down]");
             if (!btn) return;
-            btn.addEventListener("click", (event) => {
+            event.preventDefault();
+            const row = btn.closest("[data-inline-row]");
+            if (btn.hasAttribute("data-inline-remove")) {
+                row.remove();
+            } else if (btn.hasAttribute("data-inline-up")) {
+                const prev = sibling(row, "previousElementSibling");
+                if (prev) rowsEl.insertBefore(row, prev);
+            } else if (btn.hasAttribute("data-inline-down")) {
+                const next = sibling(row, "nextElementSibling");
+                if (next) rowsEl.insertBefore(next, row);
+            }
+            if (addBtn && addBtn.dataset.max) {
+                addBtn.disabled = rowsEl.querySelectorAll("[data-inline-row]").length >= Number(addBtn.dataset.max);
+            }
+        });
+
+        // A card without a title (a new row) takes the text of the
+        // first choice made in it, e.g. the cause picked.
+        rowsEl.addEventListener("change", (event) => {
+            const select = event.target.closest("select");
+            if (!select) return;
+            const title = select.closest("[data-inline-row]")?.querySelector("[data-inline-title-auto]");
+            const text = select.selectedOptions[0]?.textContent.trim();
+            if (title && text && select.value) title.textContent = text;
+        });
+
+        if (addBtn && tpl) {
+            addBtn.addEventListener("click", (event) => {
                 event.preventDefault();
-                const idx = row.getAttribute("data-row-idx");
-                const tomb = document.createElement("input");
-                tomb.type = "hidden";
-                tomb.name = `inline__${panelName}__${idx}____deleted`;
-                tomb.value = "1";
-                row.appendChild(tomb);
-                row.style.display = "none";
+                const idx = String(nextIndex(rowsEl));
+                const html = tpl.innerHTML.split(placeholder).join(idx);
+                const holder = document.createElement("div");
+                holder.innerHTML = html;
+                const row = holder.firstElementChild;
+                rowsEl.appendChild(row);
+                row.open = true;
+                row.querySelector("input:not([type=hidden]), select, textarea")?.focus();
+                if (addBtn.dataset.max) {
+                    addBtn.disabled = rowsEl.querySelectorAll("[data-inline-row]").length >= Number(addBtn.dataset.max);
+                }
             });
         }
 
-        rowsEl.querySelectorAll("[data-inline-row]").forEach(wireRemove);
+        // Renumber in page order just before the form posts. Two passes
+        // (first to temporary indexes) so a swap can't collide.
+        const form = panel.closest("form");
+        if (form) {
+            form.addEventListener("submit", () => {
+                const rows = Array.from(rowsEl.querySelectorAll(":scope > [data-inline-row]"));
+                rows.forEach((row, i) => reindex(row, name, `t${i}`));
+                rows.forEach((row, i) => reindex(row, name, i));
+            });
+        }
+    });
+})();
+</script>
 
-        if (addBtn) {
-            const fields = (addBtn.dataset.fields || "").split(",").filter(Boolean);
+{# Per-row inline panels (InlinePanelSpec::per_row): a card's fields load
+   when it opens and move onto a detached <form> of their own, so the
+   page's Save never sends them; the card's Save posts just that card.
+   Add, remove and reorder apply at once. #}
+<script>
+(function () {
+    "use strict";
+    const panels = document.querySelectorAll("[data-inline-panel][data-per-row]");
+    if (!panels.length) return;
+    const csrf = () => {
+        const c = document.cookie.split(";").find((x) => x.trim().startsWith("rustango_csrf="));
+        return c ? c.split("=").slice(1).join("=").trim() : "";
+    };
+    const post = (url, params) => fetch(url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "X-CSRF-Token": csrf(), "Content-Type": "application/x-www-form-urlencoded" },
+        body: params,
+    });
+    const toast = (level, body) => (window.rcmsToast ? window.rcmsToast({ level, body }) : null);
+    let seq = 0;
+
+    panels.forEach((panel) => {
+        const endpoint = panel.dataset.endpoint;
+        const rowsEl = panel.querySelector("[data-inline-rows]");
+        if (!endpoint || !rowsEl) return;
+        const msg = (key) => panel.dataset[key] || "";
+        const countEl = panel.querySelector("[data-inline-count]");
+        const cards = () => Array.from(rowsEl.querySelectorAll(":scope > [data-inline-row]"));
+        const cardUrl = (card) => `${endpoint}/${card.dataset.rowId || "new-row"}`;
+        const updateCount = () => {
+            if (countEl) countEl.textContent = String(cards().filter((c) => c.dataset.rowId).length);
+        };
+
+        async function load(card) {
+            if (card.dataset.loaded) return;
+            card.dataset.loaded = "1";
+            const body = card.querySelector("[data-inline-card-body]");
+            const n = ++seq;
+            const prefix = `card${n}__`;
+            card.dataset.prefix = prefix;
+            body.textContent = msg("msgLoading");
+            try {
+                const resp = await fetch(`${cardUrl(card)}?prefix=${prefix}`, { credentials: "same-origin" });
+                if (!resp.ok) throw new Error(String(resp.status));
+                body.innerHTML = await resp.text();
+            } catch (_) {
+                body.textContent = msg("msgLoadFailed");
+                delete card.dataset.loaded;
+                return;
+            }
+            const form = document.createElement("form");
+            form.id = `rcms-inline-card-${n}`;
+            form.hidden = true;
+            document.body.appendChild(form);
+            card.dataset.form = form.id;
+            body.querySelectorAll("[name]").forEach((el) => el.setAttribute("form", form.id));
+            const first = body.querySelector("select, input:not([type=hidden]), textarea");
+            if (!card.dataset.rowId && first) first.focus();
+        }
+
+        async function save(card) {
+            const form = document.getElementById(card.dataset.form || "");
+            if (!form) return;
+            const status = card.querySelector("[data-inline-card-status]");
+            card.querySelectorAll(".rcms-inline-card-error").forEach((el) => el.remove());
+            const prefix = card.dataset.prefix || "";
+            const params = new URLSearchParams();
+            for (const [k, v] of new FormData(form)) {
+                params.append(k.startsWith(prefix) ? k.slice(prefix.length) : k, v);
+            }
+            if (status) status.textContent = msg("msgSaving");
+            let out = { ok: false };
+            try {
+                out = await (await post(cardUrl(card), params)).json();
+            } catch (_) { /* reported below */ }
+            if (out.ok) {
+                const wasNew = !card.dataset.rowId;
+                card.dataset.rowId = String(out.id);
+                const title = card.querySelector("[data-inline-row-title]");
+                if (title && out.title) {
+                    title.textContent = out.title;
+                    title.removeAttribute("data-inline-title-auto");
+                }
+                if (status) status.textContent = msg("msgSaved");
+                if (wasNew) {
+                    updateCount();
+                    persistOrder();
+                }
+                return;
+            }
+            if (status) status.textContent = msg("msgNotSaved");
+            (out.errors || []).forEach((e) => {
+                const field = card.querySelector(`[name="${prefix}${e.field}"]`)?.closest(".rcms-field");
+                const p = document.createElement("p");
+                p.className = "rcms-error rcms-inline-card-error";
+                p.textContent = e.message;
+                if (field) field.appendChild(p);
+                else if (status) status.textContent = `${msg("msgNotSaved")}: ${e.message}`;
+            });
+        }
+
+        async function remove(card) {
+            if (!card.dataset.rowId) {
+                card.remove();
+                return;
+            }
+            const ok = window.rcmsConfirm
+                ? await window.rcmsConfirm({ message: msg("msgRemove"), danger: true })
+                : window.confirm(msg("msgRemove"));
+            if (!ok) return;
+            const resp = await post(`${cardUrl(card)}/remove`, new URLSearchParams());
+            if (resp.ok) {
+                document.getElementById(card.dataset.form || "")?.remove();
+                card.remove();
+                updateCount();
+            } else {
+                toast("error", msg("msgNotSaved"));
+            }
+        }
+
+        async function persistOrder() {
+            const ids = cards().map((c) => Number(c.dataset.rowId)).filter((n) => n > 0);
+            const resp = await post(`${endpoint}/order`, new URLSearchParams({ ids: JSON.stringify(ids) }));
+            if (!resp.ok) toast("error", msg("msgNotSaved"));
+        }
+
+        function sibling(card, dir) {
+            let el = card[dir];
+            while (el && !el.matches("[data-inline-row]")) el = el[dir];
+            return el;
+        }
+
+        rowsEl.addEventListener("toggle", (event) => {
+            const card = event.target;
+            if (card.matches && card.matches("[data-inline-row]") && card.open) load(card);
+        }, true);
+
+        rowsEl.addEventListener("click", (event) => {
+            const card = event.target.closest("[data-inline-row]");
+            if (!card) return;
+            if (event.target.closest("[data-inline-card-save]")) {
+                event.preventDefault();
+                save(card);
+            } else if (event.target.closest("[data-inline-remove]")) {
+                event.preventDefault();
+                remove(card);
+            } else if (event.target.closest("[data-inline-up]")) {
+                event.preventDefault();
+                const prev = sibling(card, "previousElementSibling");
+                if (prev) { rowsEl.insertBefore(card, prev); persistOrder(); }
+            } else if (event.target.closest("[data-inline-down]")) {
+                event.preventDefault();
+                const next = sibling(card, "nextElementSibling");
+                if (next) { rowsEl.insertBefore(next, card); persistOrder(); }
+            }
+        });
+
+        // A new card takes the text of the first choice made in it.
+        rowsEl.addEventListener("change", (event) => {
+            const select = event.target.closest("select");
+            if (!select) return;
+            const title = select.closest("[data-inline-row]")?.querySelector("[data-inline-title-auto]");
+            const text = select.selectedOptions[0]?.textContent.trim();
+            if (title && text && select.value) title.textContent = text;
+        });
+
+        const addBtn = panel.querySelector("[data-inline-add]");
+        const tpl = panel.querySelector("template[data-inline-new-card]");
+        if (addBtn && tpl) {
             addBtn.addEventListener("click", (event) => {
                 event.preventDefault();
-                const idx = nextIndex(rowsEl);
-                const row = document.createElement("div");
-                row.className = "rcms-inline-panel-row";
-                row.setAttribute("data-inline-row", "");
-                row.setAttribute("data-row-idx", String(idx));
-                const header = document.createElement("div");
-                header.className = "rcms-inline-panel-row-header";
-                const labelEl = document.createElement("strong");
-                labelEl.textContent = `#${rowsEl.querySelectorAll("[data-inline-row]").length + 1}`;
-                const removeBtn = document.createElement("button");
-                removeBtn.type = "button";
-                removeBtn.className = "rcms-btn rcms-btn-text rcms-btn-small rcms-inline-panel-remove";
-                removeBtn.setAttribute("data-inline-remove", "");
-                removeBtn.innerHTML = `<span class="material-symbols-rounded sm">delete</span> Remove`;
-                header.appendChild(labelEl);
-                header.appendChild(removeBtn);
-                row.appendChild(header);
-                fields.forEach((name) => {
-                    const wrap = document.createElement("div");
-                    wrap.className = "rcms-field";
-                    const label = document.createElement("label");
-                    label.textContent = name;
-                    const input = document.createElement("input");
-                    input.type = "text";
-                    input.name = `inline__${panelName}__${idx}__${name}`;
-                    wrap.appendChild(label);
-                    wrap.appendChild(input);
-                    row.appendChild(wrap);
-                });
-                rowsEl.appendChild(row);
-                wireRemove(row);
-                row.querySelector("input")?.focus();
+                const card = tpl.content.firstElementChild.cloneNode(true);
+                rowsEl.appendChild(card);
+                load(card);
             });
         }
     });

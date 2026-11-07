@@ -50,7 +50,7 @@ async fn superuser(pool: &Pool) -> i64 {
         password_changed_at: None,
         sessions_revoked_at: None,
     };
-    u.save_pool(pool).await.expect("user");
+    u.save(pool).await.expect("user");
     u.id.get().copied().expect("user id")
 }
 
@@ -59,6 +59,7 @@ async fn update_page(pool: &Pool, uid: i64, args: Value) -> Value {
         pool: pool.clone(),
         agent: McpAgent {
             agent_id: 1,
+            org_id: 1,
             tenant: "t".to_owned(),
             skills: Vec::new(),
             tools: vec!["update_page".to_owned()],

@@ -31,7 +31,7 @@ use rustango::login_throttle::{self, LoginRefused, LoginScope};
 use rustango::tenancy::auth::User;
 use rustango::tenancy::member_auth::{self, CurrentMember};
 
-use super::handlers::{add_branding_urls, render_with_csrf};
+use super::handlers::{add_auth_chrome, render_with_csrf};
 use crate::security_log::{self, LoginRequest};
 use super::{AdminError, AdminState};
 
@@ -86,7 +86,7 @@ pub(crate) async fn member_login_form(
         rustango::admin::sso_provider::list_enabled(tenant.pool(), MEMBER_SSO_BASE).await;
     ctx.insert("sso_enabled", &!sso_providers.is_empty());
     ctx.insert("sso_providers", &sso_providers);
-    add_branding_urls(&mut ctx, &tenant).await;
+    add_auth_chrome(&mut ctx, &tenant).await;
     render_with_csrf(&state, &headers, "rcms_admin/member_login.html", &mut ctx)
 }
 
@@ -101,9 +101,14 @@ pub(crate) async fn member_login_submit(
     Form(form): Form<MemberLoginForm>,
 ) -> Response {
     let next = sanitize_next(&form.next);
+    // The throttle and the lock-out are bound to the site by org id too, so
+    // a later site reusing the slug inherits neither.
+    let Some(site) = rustango::tenancy::TenantSlug::of(&tenant.org) else {
+        return (axum::http::StatusCode::NOT_FOUND, "unknown site").into_response();
+    };
     let outcome = authenticate_member(
         tenant.pool(),
-        &tenant.org.slug,
+        &site,
         &request,
         "member",
         &form.identifier,
@@ -111,15 +116,7 @@ pub(crate) async fn member_login_submit(
     )
     .await;
     match outcome {
-        Ok(user) => {
-            let cookie = member_auth::mint_cookie(
-                &ctx.session_secret,
-                &user,
-                &tenant.org.slug,
-                MEMBER_SESSION_TTL,
-            );
-            redirect_with_cookie(&next, &cookie)
-        }
+        Ok(user) => signed_in_redirect(&ctx, &user, &tenant.org, &next),
         Err(e) => {
             let reason = match e {
                 MemberLoginError::Invalid => "invalid_credentials",
@@ -171,7 +168,7 @@ pub(crate) async fn member_signup_form(
     if let Some(err) = q.get("error") {
         ctx.insert("error", err);
     }
-    add_branding_urls(&mut ctx, &tenant).await;
+    add_auth_chrome(&mut ctx, &tenant).await;
     render_with_csrf(&state, &headers, "rcms_admin/member_signup.html", &mut ctx)
 }
 
@@ -216,15 +213,7 @@ pub(crate) async fn member_signup_submit(
     };
 
     match create_member(tenant.pool(), &email, &form.password, &display_name).await {
-        Ok(user) => {
-            let cookie = member_auth::mint_cookie(
-                &ctx.session_secret,
-                &user,
-                &tenant.org.slug,
-                MEMBER_SESSION_TTL,
-            );
-            redirect_with_cookie(&next, &cookie)
-        }
+        Ok(user) => signed_in_redirect(&ctx, &user, &tenant.org, &next),
         Err(e) => {
             tracing::error!(target: "rustango_cms::members", error = %e, "member signup failed");
             bounce("server_error")
@@ -275,7 +264,7 @@ pub enum MemberLoginError {
 /// [`MemberLoginError`].
 pub async fn authenticate_member(
     pool: &rustango::sql::Pool,
-    tenant_slug: &str,
+    site: &rustango::tenancy::TenantSlug,
     request: &LoginRequest,
     source: &'static str,
     identifier: &str,
@@ -285,7 +274,7 @@ pub async fn authenticate_member(
     if ident.is_empty() || password.is_empty() {
         return Err(MemberLoginError::Invalid);
     }
-    let scope = LoginScope::Tenant(tenant_slug.to_owned());
+    let scope = LoginScope::Tenant(site.clone());
     let mut attempt = login_throttle::shared()
         .begin(&scope, &request.ip, ident)
         .await
@@ -314,7 +303,7 @@ pub async fn authenticate_member(
         attempt.succeeded().await;
         let entry = security_log::Entry::new(security_log::EVENT_LOGIN, source, &request.meta)
             .user(user_id, username);
-        security_log::record(pool, tenant_slug, entry).await;
+        security_log::record(pool, &site.slug, entry).await;
         return found.ok_or(MemberLoginError::Invalid);
     }
     attempt.failed().await;
@@ -322,13 +311,13 @@ pub async fn authenticate_member(
     let entry = security_log::Entry::new(security_log::EVENT_LOGIN_FAILED, source, &request.meta)
         .user(user_id, username)
         .reason(reason);
-    security_log::record(pool, tenant_slug, entry).await;
+    security_log::record(pool, &site.slug, entry).await;
     // The gate refuses a locked account before it gets here, so a lock
     // seen now is the one this failure set.
-    if security_log::is_locked(tenant_slug, &[ident, username]).await {
+    if security_log::is_locked(site, &[ident, username]).await {
         let entry = security_log::Entry::new(security_log::EVENT_LOCKOUT, source, &request.meta)
             .user(user_id, username);
-        security_log::record(pool, tenant_slug, entry).await;
+        security_log::record(pool, &site.slug, entry).await;
     }
     Err(MemberLoginError::Invalid)
 }
@@ -391,7 +380,7 @@ async fn create_member(
         password_changed_at: None,
         sessions_revoked_at: None,
     };
-    user.insert_pool(pool).await?;
+    user.insert(pool).await?;
     if user.id.get().is_none() {
         return Err(AdminError::Validation("member insert returned no id".to_owned()));
     }
@@ -402,6 +391,21 @@ async fn create_member(
 /// same-origin path is honored, everything else falls back to `/`.
 fn sanitize_next(next: &str) -> String {
     rustango::auth_decorators::safe_next(next).unwrap_or_else(|| "/".to_owned())
+}
+
+/// Redirect to `next` with a fresh member cookie bound to `org`; a 500 for
+/// an org with no id, which cannot be bound.
+fn signed_in_redirect(
+    ctx: &TenantContext,
+    user: &User,
+    org: &rustango::tenancy::Org,
+    next: &str,
+) -> Response {
+    let Some(tenant) = rustango::tenancy::TenantSlug::of(org) else {
+        return axum::http::StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+    let cookie = member_auth::mint_cookie(&ctx.session_secret, user, &tenant, MEMBER_SESSION_TTL);
+    redirect_with_cookie(next, &cookie)
 }
 
 /// A 303 redirect that also stamps a `Set-Cookie` header.
@@ -424,4 +428,29 @@ mod tests {
             assert_eq!(sanitize_next(hostile), "/", "{hostile:?}");
         }
     }
+
+    #[test]
+    fn the_sign_in_page_renders_with_and_without_an_error() {
+        let mut tera = tera::Tera::default();
+        crate::admin::register_templates(&mut tera).expect("admin templates");
+        for error in [None, Some("throttled"), Some("invalid")] {
+            let mut ctx = tera::Context::new();
+            ctx.insert("LANG", "en");
+            ctx.insert("csrf_token", "t");
+            ctx.insert("action", "/members/login");
+            ctx.insert("signup_url", "/members/signup");
+            ctx.insert("next", "/");
+            ctx.insert("sso_enabled", &false);
+            ctx.insert("sso_providers", &Vec::<serde_json::Value>::new());
+            ctx.insert("site_name", "Acme");
+            if let Some(e) = error {
+                ctx.insert("error", e);
+            }
+            let html = tera
+                .render("rcms_admin/member_login.html", &ctx)
+                .unwrap_or_else(|e| panic!("{error:?}: {e:?}"));
+            assert_eq!(html.contains("rcms-error"), error.is_some(), "{error:?}");
+        }
+    }
+
 }

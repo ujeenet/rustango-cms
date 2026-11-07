@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ "Dashboard" | translate(locale=LANG) }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ "Dashboard" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Dashboard" | translate(locale=LANG) }}{% endblock %}
 
 {% block content %}

@@ -34,7 +34,7 @@ async fn delivery(pool: &Pool, target_id: i64, age_mins: i64, next_in_secs: i64)
         created_at: Auto::Set(Utc::now() - Duration::minutes(age_mins)),
         sent_at: None,
     };
-    row.insert_pool(pool).await.expect("delivery");
+    row.insert(pool).await.expect("delivery");
     row.id.get().copied().expect("delivery id")
 }
 
@@ -59,7 +59,7 @@ async fn backed_off_rows_do_not_starve_a_due_one() {
         enabled: true,
         created_at: Auto::Unset,
     };
-    target.insert_pool(&pool).await.expect("target");
+    target.insert(&pool).await.expect("target");
     let target_id = target.id.get().copied().expect("target id");
 
     // 60 older rows, all backing off: more than one drain window.

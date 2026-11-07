@@ -51,7 +51,7 @@ async fn draft_page(pool: &Pool) -> i64 {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(pool).await.expect("page type");
+    pt.save(pool).await.expect("page type");
     let mut p = Page {
         id: Auto::Unset,
         page_type_id: pt.id.get().copied().expect("type id"),
@@ -85,7 +85,7 @@ async fn draft_page(pool: &Pool) -> i64 {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    p.save_pool(pool).await.expect("page");
+    p.save(pool).await.expect("page");
     p.id.get().copied().expect("page id")
 }
 
@@ -103,10 +103,10 @@ async fn user_with(pool: &Pool, name: &str, page: i64, actions: &[&str]) -> i64 
         password_changed_at: None,
         sessions_revoked_at: None,
     };
-    u.save_pool(pool).await.expect("user");
+    u.save(pool).await.expect("user");
     let uid = u.id.get().copied().expect("user id");
     let mut role = Role { id: Auto::Unset, name: name.to_owned(), description: String::new(), data: json!({}) };
-    role.save_pool(pool).await.expect("role");
+    role.save(pool).await.expect("role");
     let rid = role.id.get().copied().expect("role id");
     for action in actions {
         let mut g = PagePermission {
@@ -116,10 +116,10 @@ async fn user_with(pool: &Pool, name: &str, page: i64, actions: &[&str]) -> i64 
             permission: (*action).to_owned(),
             created_at: Auto::Unset,
         };
-        g.save_pool(pool).await.expect("grant");
+        g.save(pool).await.expect("grant");
     }
     let mut ur = UserRole { id: Auto::Unset, user_id: uid, role_id: rid };
-    ur.save_pool(pool).await.expect("membership");
+    ur.save(pool).await.expect("membership");
     uid
 }
 
@@ -128,6 +128,7 @@ async fn update_page(pool: &Pool, uid: i64, args: Value) -> Result<Value, String
         pool: pool.clone(),
         agent: McpAgent {
             agent_id: 1,
+            org_id: 1,
             tenant: "t".to_owned(),
             skills: Vec::new(),
             tools: vec!["update_page".to_owned()],
@@ -213,12 +214,13 @@ async fn create_page_publishes_through_the_content_edit() {
         password_changed_at: None,
         sessions_revoked_at: None,
     };
-    admin.save_pool(&pool).await.expect("admin");
+    admin.save(&pool).await.expect("admin");
     let uid = admin.id.get().copied().expect("uid");
     let ctx = McpContext {
         pool: pool.clone(),
         agent: McpAgent {
             agent_id: 1,
+            org_id: 1,
             tenant: "t".to_owned(),
             skills: Vec::new(),
             tools: vec!["create_page".to_owned()],
@@ -245,24 +247,7 @@ async fn create_page_publishes_through_the_content_edit() {
 }
 
 fn test_org() -> rustango::tenancy::Org {
-    rustango::tenancy::Org {
-        id: rustango::Auto::Unset,
-        slug: "t".to_owned(),
-        display_name: "t".to_owned(),
-        storage_mode: "database".to_owned(),
-        backend_kind: "sqlite".to_owned(),
-        database_url: None,
-        schema_name: None,
-        host_pattern: None,
-        port: None,
-        path_prefix: None,
-        active: true,
-        created_at: Utc::now(),
-        brand_name: None,
-        brand_tagline: None,
-        logo_path: None,
-        favicon_path: None,
-        primary_color: None,
-        theme_mode: None,
-    }
+    let mut org = rustango::tenancy::Org::new("t");
+    org.backend_kind = "sqlite".to_owned();
+    org
 }

@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{% if mode == "new" %}{{ "New locale" | translate(locale=LANG) }}{% else %}{{ "Edit locale" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% block title %}{% if mode == "new" %}{{ "New locale" | translate(locale=LANG) }}{% else %}{{ "Edit locale" | translate(locale=LANG) }}{% endif %} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{% if mode == "new" %}{{ "Add locale" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} {{ locale.code }} — {{ locale.name }}{% endif %}{% endblock %}
 
 {% block topbar_actions %}

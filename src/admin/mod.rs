@@ -43,6 +43,7 @@ use crate::page::PageStatus;
 use crate::tree_ops::TreeError;
 
 pub mod admin_page;
+pub mod cms_admin;
 
 /// Fill a template context with the admin chrome — sidebar, branding,
 /// locale, the signed-in user.
@@ -58,6 +59,12 @@ pub use handlers::issue_password_reset_link;
 pub mod chooser;
 mod handlers;
 mod i18n;
+
+/// An admin-interface string in the request's admin language, for screens
+/// outside the admin router (the admin bar on public pages).
+pub(crate) fn tr(headers: &axum::http::HeaderMap, source: &str) -> String {
+    i18n::tr(headers, source, &[])
+}
 pub(crate) mod members;
 pub use members::{authenticate_member, MemberLoginError};
 /// Merge host-supplied UI-catalog entries into the shared admin translator
@@ -71,6 +78,8 @@ pub mod resources;
 mod route_perms;
 pub(crate) mod notifications;
 pub(crate) mod sites;
+pub(crate) mod help_center;
+pub(crate) mod site_theme;
 pub(crate) mod template_editor;
 /// Permission codename gating the per-tenant template editor. Re-exported
 /// so seeding and the handler cannot drift apart on the string.
@@ -179,12 +188,15 @@ pub fn router_with_mailer(
     let secret = crate::signing::derived_key(PASSWORD_RESET_KEY_PURPOSE);
     // Queued purge jobs a worker drains without this router fall back to it (#732).
     crate::task_queue::set_default_invalidator(Arc::clone(&invalidator));
+    let from_addr: String = from_addr.into();
+    // The schedule sweep has no admin state; it emails through this (#945).
+    crate::task_queue::set_default_mailer(Arc::clone(&mailer), from_addr.clone());
     router_with_state(AdminState {
         tera,
         signing_secret: Arc::new(secret),
         cache_invalidator: invalidator,
         mailer: Some(mailer),
-        mailer_from: Arc::new(from_addr.into()),
+        mailer_from: Arc::new(from_addr),
     })
 }
 
@@ -694,6 +706,20 @@ fn router_with_state(state: AdminState) -> Router {
             "/cms-admin/pages/{id}/unlock",
             post(handlers::page_unlock_submit),
         )
+        // Per-row inline panels: one card's fields, its save and removal,
+        // and the panel's order (see InlinePanelSpec::per_row).
+        .route(
+            "/cms-admin/pages/{id}/inline/{panel}/order",
+            post(handlers::inline_cards_order),
+        )
+        .route(
+            "/cms-admin/pages/{id}/inline/{panel}/{row}",
+            get(handlers::inline_card_body).post(handlers::inline_card_save),
+        )
+        .route(
+            "/cms-admin/pages/{id}/inline/{panel}/{row}/remove",
+            post(handlers::inline_card_remove),
+        )
         .route(
             "/cms-admin/pages/{id}/lock-release",
             post(handlers::page_lock_release),
@@ -1017,6 +1043,20 @@ fn router_with_state(state: AdminState) -> Router {
             post(template_editor::validate),
         )
         .route("/cms-admin/templates/delete", post(template_editor::delete))
+        // Settings → Site theme: theme packages. Superuser-only, see
+        // `site_theme`'s module docs.
+        // Help → Documentation: the bundled guides, for every signed-in user.
+        .route("/cms-admin/help", get(help_center::index))
+        .route("/cms-admin/help/{slug}", get(help_center::guide))
+        .route("/cms-admin/site-theme", get(site_theme::index))
+        .route("/cms-admin/site-theme/download", get(site_theme::download))
+        .route(
+            "/cms-admin/site-theme/upload",
+            post(site_theme::upload).route_layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024)),
+        )
+        .route("/cms-admin/site-theme/preview", get(site_theme::preview_page))
+        .route("/cms-admin/site-theme/install", post(site_theme::install))
+        .route("/cms-admin/site-theme/restore", post(site_theme::restore))
         // Point a page type at a template. Same permission as the editor
         // — it is template routing, not content modelling.
         .route(
@@ -1322,6 +1362,11 @@ fn router_with_state(state: AdminState) -> Router {
             "/cms-admin/me/language",
             post(handlers::account_language_submit),
         )
+        // Template inspector on the public site (admins only).
+        .route(
+            "/cms-admin/me/show-templates",
+            post(handlers::account_show_templates_submit),
+        )
         // #202 — email + password change.
         .route("/cms-admin/me/email", post(handlers::account_email_submit))
         .route(
@@ -1380,8 +1425,15 @@ fn router_with_state(state: AdminState) -> Router {
         // Custom admin pages (#23) — dispatcher for every
         // `register_admin_page!`-registered handler. The slug path
         // param selects the handler at request time; unknown slugs
-        // return 404.
-        .route("/cms-admin/x/{slug}", get(handlers::admin_page_dispatch))
+        // return 404. GET renders, POST goes to the handler's `post`.
+        .route(
+            "/cms-admin/x/{slug}",
+            get(handlers::admin_page_dispatch).post(handlers::admin_page_dispatch),
+        )
+        .route(
+            "/cms-admin/x/{slug}/{action}",
+            get(handlers::admin_page_dispatch).post(handlers::admin_page_dispatch),
+        )
         // #672 — every matched route needs the role-matrix codename for
         // its section and verb, not just admin access.
         .route_layer(axum::middleware::from_fn(route_perms::gate))
@@ -1896,6 +1948,14 @@ pub fn register_templates(tera: &mut Tera) -> Result<(), tera::Error> {
             include_str!("templates/_widget.html"),
         ),
         (
+            "rcms_admin/_inline_card.html",
+            include_str!("templates/_inline_card.html"),
+        ),
+        (
+            "rcms_admin/_inline_panel.html",
+            include_str!("templates/_inline_panel.html"),
+        ),
+        (
             "rcms_admin/_widget_group.html",
             include_str!("templates/_widget_group.html"),
         ),
@@ -1954,6 +2014,14 @@ pub fn register_templates(tera: &mut Tera) -> Result<(), tera::Error> {
         (
             "rcms_admin/model_admin_list.html",
             include_str!("templates/model_admin_list.html"),
+        ),
+        (
+            "rcms_admin/cms_admin_list.html",
+            include_str!("templates/cms_admin_list.html"),
+        ),
+        (
+            "rcms_admin/cms_admin_form.html",
+            include_str!("templates/cms_admin_form.html"),
         ),
         (
             "rcms_admin/report.html",
@@ -2046,6 +2114,22 @@ pub fn register_templates(tera: &mut Tera) -> Result<(), tera::Error> {
         (
             "rcms_admin/template_list.html",
             include_str!("templates/template_list.html"),
+        ),
+        (
+            "rcms_admin/help_index.html",
+            include_str!("templates/help_index.html"),
+        ),
+        (
+            "rcms_admin/help_page.html",
+            include_str!("templates/help_page.html"),
+        ),
+        (
+            "rcms_admin/site_theme.html",
+            include_str!("templates/site_theme.html"),
+        ),
+        (
+            "rcms_admin/site_theme_preview.html",
+            include_str!("templates/site_theme_preview.html"),
         ),
         (
             "rcms_admin/template_form.html",
@@ -2317,6 +2401,9 @@ pub fn register_templates(tera: &mut Tera) -> Result<(), tera::Error> {
             "blocks/document_chooser.html",
             include_str!("templates/blocks/document_chooser.html"),
         ),
+        ("blocks/cards.html", include_str!("templates/blocks/cards.html")),
+        ("blocks/slider.html", include_str!("templates/blocks/slider.html")),
+        ("blocks/gallery.html", include_str!("templates/blocks/gallery.html")),
     ])?;
 
     // Public error-page default (the built-in ErrorPage type's
@@ -2574,13 +2661,10 @@ impl PageForm {
     /// Parse the `status` field into the typed enum, defaulting to
     /// `Draft` on any unrecognized value rather than failing the
     /// submit. Editors fix the value on the next save.
+    /// The posted status; anything an editor may not set (a tampered or
+    /// stale form, `expired`) saves as a draft — never live.
     fn parsed_status(&self) -> PageStatus {
-        match self.status.as_str() {
-            "published" => PageStatus::Published,
-            "scheduled" => PageStatus::Scheduled,
-            "archived" => PageStatus::Archived,
-            _ => PageStatus::Draft,
-        }
+        PageStatus::parse_editable(&self.status).unwrap_or(PageStatus::Draft)
     }
 
     /// HTML form checkboxes submit `on` when checked, are absent when
@@ -2609,6 +2693,27 @@ impl PageForm {
     fn parsed_expire_at(&self) -> Option<chrono::DateTime<chrono::Utc>> {
         parse_datetime_local(self.expire_at.as_deref())
     }
+
+    /// Whether `go_live_at` was posted to the minute (no seconds).
+    fn go_live_at_in_minutes(&self) -> bool {
+        datetime_input_in_minutes(self.go_live_at.as_deref())
+    }
+
+    /// Whether `expire_at` was posted to the minute (no seconds).
+    fn expire_at_in_minutes(&self) -> bool {
+        datetime_input_in_minutes(self.expire_at.as_deref())
+    }
+}
+
+/// Whether a datetime input value names a minute rather than a second:
+/// `YYYY-MM-DDTHH:MM`, bare or with a `Z`, as the admin's schedule
+/// inputs post it.
+fn datetime_input_in_minutes(raw: Option<&str>) -> bool {
+    let Some(raw) = raw.map(str::trim) else {
+        return false;
+    };
+    let raw = raw.strip_suffix('Z').unwrap_or(raw);
+    chrono::NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M").is_ok()
 }
 
 fn parse_datetime_local(raw: Option<&str>) -> Option<chrono::DateTime<chrono::Utc>> {
@@ -2648,6 +2753,19 @@ mod datetime_input_tests {
         }
         assert_eq!(parse_datetime_local(Some("")), None);
         assert_eq!(parse_datetime_local(Some("tomorrow")), None);
+    }
+
+    /// Only a value without seconds is minute precision.
+    #[test]
+    fn minute_precision_is_read_from_the_posted_text() {
+        use super::datetime_input_in_minutes;
+        for raw in ["2026-12-01T12:00", "2026-12-01T12:00Z", " 2026-12-01T12:00 "] {
+            assert!(datetime_input_in_minutes(Some(raw)), "{raw}");
+        }
+        for raw in ["2026-12-01T12:00:00Z", "2026-12-01T12:00:00", "2026-12-01T09:00:00-03:00", ""] {
+            assert!(!datetime_input_in_minutes(Some(raw)), "{raw}");
+        }
+        assert!(!datetime_input_in_minutes(None));
     }
 }
 

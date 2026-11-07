@@ -215,29 +215,23 @@ async fn page_hits(
     viewer: Option<&rustango::tenancy::auth::User>,
     needle: &str,
 ) -> Result<Vec<serde_json::Value>, rustango::sql::ExecError> {
-    let mut pages: Vec<Page> = Page::objects()
+    // The substring match is Unicode case-folded in Rust (`fold`), which
+    // no SQL `LIKE` does the same way on every backend, so the public rows
+    // are read here and matched in memory. Only the exact filters run in
+    // SQL (#655).
+    let pages: Vec<Page> = Page::objects()
         .where_(Page::status.is_in([
             PageStatus::Published.as_str().to_owned(),
             PageStatus::Archived.as_str().to_owned(),
         ]))
+        .where_(Page::locale_variant_of.is_null())
         .order_by(&[("id", false)])
         .fetch(pool)
         .await?;
-    pages.retain(|p| p.locale_variant_of.is_none());
 
     // #members — drop gated pages before ranking, so search cannot be
     // used to enumerate a member-only section by guessing words.
-    let triples: Vec<(i64, String, i64)> = pages
-        .iter()
-        .map(|p| {
-            (
-                p.id.get().copied().unwrap_or_default(),
-                p.path.clone(),
-                p.page_type_id,
-            )
-        })
-        .collect();
-    let denied = crate::view_restriction::denied_page_ids(pool, viewer, &triples).await;
+    let access = crate::view_restriction::access_context(pool, viewer).await;
 
     // The installed backend (Elasticsearch) when there is one, else
     // Postgres full-text — the same ranking the pages list uses.
@@ -249,7 +243,7 @@ async fn page_hits(
 
     Ok(pages
         .into_iter()
-        .filter(|p| !denied.contains(&p.id.get().copied().unwrap_or_default()))
+        .filter(|p| access.can_view(&p.path, p.page_type_id))
         .filter_map(|p| {
             let id = p.id.get().copied().unwrap_or_default();
             // A backend hit outranks a substring match, and its position
@@ -282,20 +276,35 @@ async fn media_hits(
     needle: &str,
     wanted: &[&str],
 ) -> Result<Vec<serde_json::Value>, rustango::sql::ExecError> {
-    let rows: Vec<Media> = Media::objects().fetch(pool).await?;
-
-    // #members — the same collection gating the media listings apply.
-    let collection_ids: Vec<i64> = rows.iter().filter_map(|m| m.collection_id).collect();
+    // #members — the same collection gating the media listings apply,
+    // in SQL; the collections table is small.
+    let collection_ids: Vec<i64> = crate::media::MediaCollection::objects()
+        .fetch(pool)
+        .await?
+        .iter()
+        .filter_map(|c| c.id.get().copied())
+        .collect();
     let denied =
         crate::collection_view_restriction::denied_collection_ids(pool, viewer, &collection_ids)
             .await;
+    let mut qs = Media::objects();
+    match (wanted.contains(&"image"), wanted.contains(&"document")) {
+        (true, false) => qs = qs.where_(Media::kind.eq("image".to_owned())),
+        (false, true) => qs = qs.where_(Media::kind.ne("image".to_owned())),
+        _ => {}
+    }
+    if !denied.is_empty() {
+        qs = qs.where_(
+            Media::collection_id
+                .is_null()
+                .or(Media::collection_id.not_in(denied.iter().copied())),
+        );
+    }
+    // Matched in memory for the same reason as `page_hits`.
+    let rows: Vec<Media> = qs.fetch(pool).await?;
 
     Ok(rows
         .into_iter()
-        .filter(|m| {
-            m.collection_id
-                .is_none_or(|c| !denied.contains(&c))
-        })
         .filter_map(|m| {
             let kind = if m.kind == "image" { "image" } else { "document" };
             if !wanted.contains(&kind) {
@@ -321,6 +330,7 @@ async fn snippet_hits(
     pool: &rustango::sql::Pool,
     needle: &str,
 ) -> Result<Vec<serde_json::Value>, rustango::sql::ExecError> {
+    // Matched in memory for the same reason as `page_hits`.
     let rows: Vec<Snippet> = Snippet::objects().fetch(pool).await?;
     Ok(rows
         .into_iter()

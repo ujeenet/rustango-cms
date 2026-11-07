@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{% if mode == "new" %}{{ "New role" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} {{ role.name }}{% endif %} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{% if mode == "new" %}{{ "New role" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} {{ role.name }}{% endif %} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{% if mode == "new" %}{{ "New role" | translate(locale=LANG) }}{% else %}{{ "Edit role" | translate(locale=LANG) }}{% endif %}{% endblock %}
 
 {% block topbar_actions %}

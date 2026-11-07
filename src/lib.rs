@@ -60,10 +60,12 @@
 pub mod a11y;
 pub mod access;
 pub mod admin;
+pub mod admin_bar;
 pub mod analytics;
 pub mod api;
 pub mod auto_menu;
 pub mod block;
+pub mod branding;
 // #193 / #428 — opt-in cache-invalidator backends. Each module is
 // gated on its own cargo feature so the default build doesn't pull
 // the backend-specific deps. Feature flags: `cache_cloudflare`,
@@ -109,6 +111,7 @@ pub mod markdown;
 pub mod mcp;
 pub mod media;
 pub mod media_storage;
+pub mod media_usage;
 pub mod menu_item_translation;
 pub mod meta_tags;
 pub mod metrics;
@@ -118,6 +121,7 @@ pub mod navigation;
 pub mod notification_pref;
 pub mod notify;
 pub mod page;
+pub(crate) mod page_baseline;
 pub mod page_builder;
 mod page_delete;
 pub(crate) mod page_form;
@@ -129,6 +133,7 @@ pub mod page_type;
 pub mod page_type_model;
 pub mod page_url;
 pub mod page_view;
+pub mod path_prefix;
 pub mod pending_change;
 pub(crate) mod passwords;
 pub mod perf;
@@ -155,6 +160,8 @@ pub mod seed;
 pub mod signing;
 pub mod site;
 pub mod site_setting;
+pub mod template_inspector;
+pub mod starter;
 pub mod robots;
 pub mod sitemap;
 pub mod snippet;
@@ -200,8 +207,9 @@ pub use menu_item_translation::MenuItemTranslation;
 pub use navigation::{Menu, MenuItem};
 pub use page::{Page, PageStatus};
 pub use page_type::{
-    all_children, default_children, find_handler, published_children, registered_handlers, DisplayField,
-    ExtensionField, ExtensionFieldKind, InlinePanelSpec, PageTypeHandler,
+    all_children, default_children, find_handler, published_children, published_children_page,
+    registered_handlers, ChildOrder, ChildrenPage, DisplayField,
+    ExtensionField, ExtensionFieldKind, InlinePanelSpec, InlineRowSaved, InlineRowSummary, PageTypeHandler,
     PageTypeHandlerRegistration, PageTypeOverrides, TabSpec,
 };
 pub use page_view::{Accept, PageViewKind, PageViewMode};
@@ -230,6 +238,7 @@ pub use rustango_cms_macros::PageType;
 /// Rust's separate macro / type namespaces (same pattern as
 /// `#[derive(PageType)]` alongside [`PageType`](struct@PageType)).
 pub use rustango_cms_macros::Block;
+pub use rustango_cms_macros::CmsAdmin;
 
 /// Re-exports for the `#[derive(PageType)]` macro's generated code.
 /// Not part of the public API — addressing anything in here from user
@@ -239,7 +248,7 @@ pub mod __private {
     pub use async_trait;
     pub use inventory;
     pub use rustango::core::Model;
-    pub use rustango::sql::{ExecError, FetcherPool, Pool};
+    pub use rustango::sql::{CounterPool, ExecError, FetcherPool, Pool};
     pub use serde_json;
 }
 pub use page_type_model::PageType;
@@ -252,8 +261,12 @@ pub use seed::{ensure_seeded, SeedError};
 // context, and section enum so host crates can import the surface
 // they need to implement without reaching into `admin::admin_page`.
 pub use admin::admin_page::{
-    find_admin_page, registered_admin_pages, AdminPageCtx, AdminPageHandler,
-    AdminPageHandlerRegistration, SidebarSection,
+    find_admin_page, registered_admin_pages, AdminForm, AdminPageCtx, AdminPageHandler,
+    AdminPageHandlerRegistration, MessageLevel, SidebarSection,
+};
+// #940 — generic model editor: `#[derive(CmsAdmin)]` and its hooks.
+pub use admin::cms_admin::{
+    delete_record, save_record, CmsAdmin, CmsAdminMeta, CmsAdminOverrides, CmsAdminPage, FieldError,
 };
 pub use block::{
     find_block, registered_blocks, validate_block_registry, Block, BlockCountConstraint,

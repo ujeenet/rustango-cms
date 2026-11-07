@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{% if mode == "new" %}{{ "New SSO provider" | translate(locale=LANG) }}{% else %}{{ "Edit SSO provider" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% block title %}{% if mode == "new" %}{{ "New SSO provider" | translate(locale=LANG) }}{% else %}{{ "Edit SSO provider" | translate(locale=LANG) }}{% endif %} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{% if mode == "new" %}{{ "Add SSO provider" | translate(locale=LANG) }}{% else %}{{ "Edit" | translate(locale=LANG) }} {{ provider.label }}{% endif %}{% endblock %}
 
 {% block topbar_actions %}

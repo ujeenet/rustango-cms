@@ -88,7 +88,7 @@ pub async fn create(
         content_hash,
         uploaded_at: Auto::Unset,
     };
-    row.insert_pool(pool).await?;
+    row.insert(pool).await?;
     Ok(row)
 }
 
@@ -128,7 +128,7 @@ pub async fn delete(
         .await?;
     let mut removed = 0;
     for row in rows {
-        row.delete_pool(pool).await?;
+        row.delete(pool).await?;
         removed += 1;
     }
     Ok(removed)
@@ -155,7 +155,7 @@ pub async fn gc_stale(pool: &rustango::sql::Pool) -> Result<Vec<String>, rustang
             continue;
         }
         let key = row.storage_key.clone();
-        if row.delete_pool(pool).await.is_ok() {
+        if row.delete(pool).await.is_ok() {
             unlinked.push(key);
         }
     }

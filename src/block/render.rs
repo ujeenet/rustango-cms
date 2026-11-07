@@ -141,6 +141,16 @@ pub fn prerender_stream(value: &Value, ctx: &BlockRenderCtx<'_>) -> Result<Strin
         // inventory registry so UI-defined groups render like code blocks.
         match crate::page_builder::resolve_block(ctx.dyn_blocks, type_name) {
             Some(block) => match block.render(inner_value, ctx) {
+                Ok(rendered) if crate::template_inspector::active() => {
+                    // Name the template for an admin inspecting the page.
+                    let template = block.template().map_or_else(|| format!("blocks/{type_name}.html"), str::to_owned);
+                    let template = if ctx.tera.get_template_names().any(|n| n == template) {
+                        template
+                    } else {
+                        format!("{type_name} block (built-in markup)")
+                    };
+                    out.push_str(&crate::template_inspector::mark(&template, &rendered));
+                }
                 Ok(rendered) => out.push_str(&rendered),
                 Err(e) => {
                     tracing::warn!(

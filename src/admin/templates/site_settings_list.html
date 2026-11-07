@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "Site settings" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block title %}{{ "Site settings" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Site settings" | translate(locale=LANG) }}{% endblock %}
 
 {% block topbar_actions %}
@@ -36,14 +36,14 @@
             {% for r in rows %}
                 <tr>
                     <td>
-                        {% if r.typed and r.label %}
-                            <strong>{{ r.label }}</strong>
-                            <span class="rcms-tag">{{ "Typed" | translate(locale=LANG) }}</span>
-                            <div><code class="rcms-text-2xs">{{ r.scope }}</code></div>
-                        {% else %}
-                            <strong>{{ r.scope }}</strong>
-                            {% if r.typed %}<span class="rcms-tag">{{ "Typed" | translate(locale=LANG) }}</span>{% endif %}
-                        {% endif %}
+                        {#- Name, then the scope key with its badge on one
+                            line, so the badge sits in the same place on
+                            every row whatever the name's length. -#}
+                        <strong>{{ r.label }}</strong>
+                        <div class="rcms-flex rcms-items-center rcms-gap-2 rcms-mt-1">
+                            <code class="rcms-text-2xs">{{ r.scope }}</code>
+                            {% if r.typed %}<span class="rcms-tag">{{ "Form" | translate(locale=LANG) }}</span>{% endif %}
+                        </div>
                     </td>
                     <td>
                         {% if r.configured %}

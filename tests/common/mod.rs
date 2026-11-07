@@ -91,7 +91,7 @@ pub async fn fixture() -> Fixture {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(&pool).await.expect("page type");
+    pt.save(&pool).await.expect("page type");
     let type_id = pt.id.get().copied().expect("page type id");
 
     // Locales: `en` default, `fr` active. Ordered so `en` is created
@@ -105,7 +105,7 @@ pub async fn fixture() -> Fixture {
         sort_order: 0,
         created_at: Auto::Unset,
     };
-    en.save_pool(&pool).await.expect("en locale");
+    en.save(&pool).await.expect("en locale");
     let mut fr = Locale {
         id: Auto::Unset,
         code: "fr".to_owned(),
@@ -115,13 +115,13 @@ pub async fn fixture() -> Fixture {
         sort_order: 1,
         created_at: Auto::Unset,
     };
-    fr.save_pool(&pool).await.expect("fr locale");
+    fr.save(&pool).await.expect("fr locale");
     let fr_id = fr.id.get().copied().expect("fr id");
 
     // Pages. `path` is written by hand rather than through `NewPage` so
     // the shape is visible in one place, and so a test reading a
     // `path`-prefix assertion can check it against this table.
-    let mut mk = |title: &str,
+    let mk = |title: &str,
                   slug: &str,
                   path: &str,
                   url: &str,
@@ -163,7 +163,7 @@ pub async fn fixture() -> Fixture {
         };
         async move {
             let mut page = page;
-            page.save_pool(&pool).await.expect("page");
+            page.save(&pool).await.expect("page");
             page.id.get().copied().expect("page id")
         }
     };
@@ -245,7 +245,7 @@ pub async fn fixture() -> Fixture {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    restriction.save_pool(&pool).await.expect("restriction");
+    restriction.save(&pool).await.expect("restriction");
 
     // French titles for two pages only — the rest must fall back to
     // canonical rather than blanking.
@@ -258,7 +258,7 @@ pub async fn fixture() -> Fixture {
             value: value.to_owned(),
             updated_at: Auto::Unset,
         };
-        tr.save_pool(&pool).await.expect("translation");
+        tr.save(&pool).await.expect("translation");
     }
 
     Fixture {
@@ -292,11 +292,11 @@ pub async fn seed_menu(f: &Fixture) -> (i64, Vec<i64>) {
         name: "Main navigation".to_owned(),
         created_at: Auto::Unset,
     };
-    menu.save_pool(&f.pool).await.expect("menu");
+    menu.save(&f.pool).await.expect("menu");
     let menu_id = menu.id.get().copied().expect("menu id");
 
     let mut ids = Vec::new();
-    let mut add = |label: &str,
+    let add = |label: &str,
                    page_id: Option<i64>,
                    external: Option<&str>,
                    parent: Option<i64>,
@@ -314,7 +314,7 @@ pub async fn seed_menu(f: &Fixture) -> (i64, Vec<i64>) {
         };
         async move {
             let mut item = item;
-            item.save_pool(&pool).await.expect("menu item");
+            item.save(&pool).await.expect("menu item");
             item.id.get().copied().expect("item id")
         }
     };
@@ -340,7 +340,7 @@ pub async fn translate_item(f: &Fixture, item_id: i64, field: &str, value: &str)
         value: value.to_owned(),
         updated_at: Auto::Unset,
     };
-    row.save_pool(&f.pool).await.expect("item translation");
+    row.save(&f.pool).await.expect("item translation");
 }
 
 /// Read a `Response` body as JSON.

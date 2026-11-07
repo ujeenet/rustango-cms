@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{% if mode == "new" %}{{ "New Snippet" | translate(locale=LANG) }}{% else %}{{ "Edit Snippet" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% block title %}{% if mode == "new" %}{{ "New Snippet" | translate(locale=LANG) }}{% else %}{{ "Edit Snippet" | translate(locale=LANG) }}{% endif %} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}
 {% if mode == "new" and preselect_type | default(value="") == "form" %}{{ "New form" | translate(locale=LANG) }}{% elif mode == "new" %}{{ "New library snippet" | translate(locale=LANG) }}{% else %}{{ "Edit snippet:" | translate(locale=LANG) }} {{ snippet.title }}{% endif %}
 {% endblock %}

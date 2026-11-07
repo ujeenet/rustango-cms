@@ -232,7 +232,7 @@ mod tests {
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         };
-        pt.save_pool(&pool).await.expect("type");
+        pt.save(&pool).await.expect("type");
         let type_id = pt.id.get().copied().expect("type id");
         (pool, type_id)
     }
@@ -278,7 +278,7 @@ mod tests {
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         };
-        p.save_pool(pool).await.expect("page");
+        p.save(pool).await.expect("page");
         p.id.get().copied().expect("page id")
     }
 
@@ -315,7 +315,7 @@ mod tests {
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         };
-        r.save_pool(&pool).await.expect("restriction");
+        r.save(&pool).await.expect("restriction");
         let titles: Vec<String> = feed_pages(&pool, type_id)
             .await
             .expect("feed pages")

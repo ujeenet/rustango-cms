@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "Library — CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ "Library" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}
 {% if mode == "overview" %}{{ "Library" | translate(locale=LANG) }}{% else %}Library: {{ active_type }}{% endif %}
 {% endblock %}

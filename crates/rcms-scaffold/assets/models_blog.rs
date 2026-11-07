@@ -165,7 +165,7 @@ impl PageTypeHandler for ArticlePage {
             Some(mut r) => {
                 r.body_markdown = body;
                 r.hero_media_id = hero;
-                r.save_pool(pool).await?;
+                r.save(pool).await?;
             }
             None => {
                 let mut r = ArticleBody {
@@ -174,7 +174,7 @@ impl PageTypeHandler for ArticlePage {
                     body_markdown: body,
                     hero_media_id: hero,
                 };
-                r.insert_pool(pool).await?;
+                r.insert(pool).await?;
             }
         }
         Ok(())

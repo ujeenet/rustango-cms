@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ "Compare revisions" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block title %}{{ "Compare revisions" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Compare revisions" | translate(locale=LANG) }}{% endblock %}
 
 {% block topbar_actions %}

@@ -9,6 +9,8 @@ It runs multi-tenant from the start — every tenant gets its own page tree, med
 📚 **Docs:** [cms.rustango.com](https://cms.rustango.com) · [in-repo guides](docs/) · [API reference](https://docs.rs/rustango-cms)
 🏺 **Tutorial:** [Build a ceramics shop](https://cms.rustango.com/shop-overview) — a whole site, step by step, for editors and developers, with a [runnable example](examples/ceramics_shop/).
 
+⭐ **Like it? Star [Rustango-CMS](https://github.com/ujeenet/rustango-cms) and [Rustango](https://github.com/ujeenet/rustango) on GitHub.** Stars help other Rust developers find both projects.
+
 ---
 
 ## Contents
@@ -38,8 +40,8 @@ It runs multi-tenant from the start — every tenant gets its own page tree, med
 
 ```toml
 [dependencies]
-rustango-cms = "0.2"
-rustango     = { version = "0.61", default-features = false, features = ["admin", "auth_flows", "cache", "cache-page", "config", "email", "forms", "manage", "passwords", "runtime", "signals", "signed_url", "tenancy", "template_views"] }
+rustango-cms = "0.4"
+rustango     = { version = "0.65", default-features = false, features = ["admin", "auth_flows", "cache", "cache-page", "config", "email", "forms", "manage", "passwords", "runtime", "signals", "signed_url", "tenancy", "template_views"] }
 axum         = { version = "0.8", default-features = false, features = ["tokio", "http1", "json", "form", "query"] }
 tera         = { version = "1.20", default-features = false }
 serde        = { version = "1", features = ["derive"] }
@@ -47,9 +49,9 @@ serde        = { version = "1", features = ["derive"] }
 
 Pick the database with a feature: `postgres` is the default, and `default-features = false, features = ["sqlite"]` (or `"mysql"`) switches it — on both `rustango-cms` and `rustango`.
 
-Use the same `rustango` minor version as the CMS (0.61 today). Two semver-incompatible copies give you two different `Tenant` and `Pool` types that do not unify. [UPGRADING.md](UPGRADING.md) has the notes for each version.
+Use the same `rustango` minor version as the CMS (0.65 today). Two semver-incompatible copies give you two different `Tenant` and `Pool` types that do not unify. [UPGRADING.md](UPGRADING.md) has the notes for each version.
 
-The fastest start is the scaffolder, which writes a ready project for you; then `cargo run -- quickstart` creates a local SQLite site and starts it, the same in bash and Windows PowerShell. See [Getting started](docs/getting-started.md).
+The fastest start is the scaffolder, which writes a ready project for you; then `cargo run -- quickstart` creates a local SQLite site and starts it, the same in bash and Windows PowerShell. See [Getting started](docs/getting-started.md). Add `--theme blog`, `news`, `portfolio` or `blog-portfolio` for a finished-looking site with pages, menus and colours, and no Rust models: see [Starter themes](docs/themes.md).
 
 ## Quick start
 
@@ -247,6 +249,8 @@ RUST_LOG=info,rustango_cms::render=debug cargo run   # one module in detail
 ## Contributing
 
 Issues and pull requests are welcome — [CONTRIBUTING.md](CONTRIBUTING.md) explains the local checks a change must pass. Please report security problems privately, as described in [SECURITY.md](SECURITY.md).
+
+If Rustango-CMS saves you time, the simplest way to help is a star on [Rustango-CMS](https://github.com/ujeenet/rustango-cms) and on the framework under it, [Rustango](https://github.com/ujeenet/rustango).
 
 ## License
 

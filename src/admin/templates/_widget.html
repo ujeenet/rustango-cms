@@ -145,7 +145,7 @@
         {# Phase 7 — SwitchInput. `variant="switch"`
            flips the checkbox to an iOS-style toggle while keeping
            the same wire shape (checkbox `on` / absent). #}
-        <div class="rcms-checkbox-field{% if w.variant == "switch" %} checkbox-field--switch{% endif %}">
+        <div class="rcms-checkbox-field{% if w.variant == "switch" %} rcms-checkbox-field--switch{% endif %}">
             <input type="checkbox" id="w_{{ w.name }}" name="{{ w.name }}"
                    value="on"
                    {% if w.value == "on" or w.value == "true" or w.value == "1" %}checked{% endif %}

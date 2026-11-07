@@ -129,7 +129,7 @@ pub async fn upsert_taxonomy(
         row.icon = handler.icon().unwrap_or_default().to_owned();
         row.description = handler.description().unwrap_or_default().to_owned();
         row.ext_table = handler.ext_table().unwrap_or_default().to_owned();
-        row.save_pool(pool).await?;
+        row.save(pool).await?;
     } else {
         let mut row = Taxonomy {
             id: Auto::Unset,
@@ -143,7 +143,7 @@ pub async fn upsert_taxonomy(
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         };
-        row.insert_pool(pool).await?;
+        row.insert(pool).await?;
     }
     Ok(())
 }

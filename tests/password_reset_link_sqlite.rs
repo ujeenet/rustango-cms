@@ -26,17 +26,25 @@ async fn pool_with_users() -> Pool {
             password_changed_at: None,
             sessions_revoked_at: None,
         }
-        .insert_pool(&pool)
+        .insert(&pool)
         .await
         .expect("insert user");
     }
     pool
 }
 
+fn blog() -> rustango::tenancy::Org {
+    let mut org = rustango::tenancy::Org::new("blog");
+    org.id = Auto::Set(1);
+    org.display_name = "Blog".to_owned();
+    org.backend_kind = "sqlite".to_owned();
+    org
+}
+
 #[tokio::test]
 async fn an_account_without_email_still_gets_a_link() {
     let pool = pool_with_users().await;
-    let link = rustango_cms::admin::issue_password_reset_link(&pool, "blog", "admin")
+    let link = rustango_cms::admin::issue_password_reset_link(&pool, &blog(), "admin")
         .await
         .expect("query")
         .expect("a link for an active user");
@@ -49,7 +57,7 @@ async fn unknown_and_inactive_users_get_none() {
     let pool = pool_with_users().await;
     for name in ["nobody", "gone"] {
         assert_eq!(
-            rustango_cms::admin::issue_password_reset_link(&pool, "blog", name)
+            rustango_cms::admin::issue_password_reset_link(&pool, &blog(), name)
                 .await
                 .expect("query"),
             None,

@@ -4,7 +4,138 @@ What to change in a host application when upgrading rustango-cms. Find
 your symptom below; each entry names the change and the fix. The full list
 is in [CHANGELOG.md](CHANGELOG.md).
 
-## Unreleased
+## 0.4.0
+
+### `inline_panels` no longer compiles
+
+`PageTypeHandler::inline_panels(&self)` is now
+`async fn inline_panels(&self, pool: &Pool, page_id: i64) -> Result<Vec<InlinePanelSpec>, ExecError>`.
+Wrap the old list in `Ok(…)`. With `#[derive(PageType)]`, implement it on
+`PageTypeOverrides` instead. An `InlinePanelSpec { … }` literal needs the new
+fields; use `InlinePanelSpec::new` or `with_widgets`.
+
+### "clashes with the page editor's own field"
+
+A `#[field]` named `status`, `title`, `slug`, `tags`, `categories` or another
+page-editor field is now refused. Rename the Rust field and keep the column:
+`#[rustango(column = "status")] pub campaign_status: String`. Add
+`#[serde(rename = "status")]` if templates read the old name.
+
+### rustango 0.65
+
+Bump `rustango` to `0.65` and `rustango-cms` to `0.4`, then follow
+rustango's own 0.62.0 to 0.65.0 UPGRADING notes. The one most hosts hit: `Org` is `#[non_exhaustive]`, so an
+`Org { … }` literal (usually in tests) becomes
+`let mut org = Org::new(slug); org.field = …;`.
+
+### Your page-type hooks loaded their own row
+
+`public_context` and `route_context` now run on the page's stored row:
+`self.<field>` is the page's value. Code that loaded the row by `page_id`
+inside these hooks can use `self` instead. A hook that relied on `self`
+being `Default::default()` now sees the real values.
+
+### A `ModelAdmin { … }` literal no longer compiles
+
+`ModelAdmin::list_rows` is now `fn(Pool, i64, i64)` (limit, offset) and
+returns `(rows, total)`, so the generic model admin can page. Register
+models with `register_model_admin!`, which builds it for you.
+
+### A `BlockRegistration { … }` literal no longer compiles
+
+`BlockRegistration` gained `origin`. Use `register_block!` (it fills it in),
+or add `origin: module_path!()`.
+
+### A block with the name of a built-in block now replaces it
+
+Before, which of two same-named blocks won depended on link order. If your
+block was meant to sit next to the built-in one, give it another name; the
+log line "a site block replaces the built-in block" names the block.
+
+### Editors lost a custom admin page
+
+`/cms-admin/x/<slug>` now checks `<permission_resource>.view` (and `.edit`
+for a form sent to it). Tick the page's row in **Management → Roles** for
+the roles that use it. Pages without `permission_resource` are unchanged.
+
+### `AdminPageCtx { … }` in a test no longer compiles
+
+It gained `uri` and `action`. Pass the request URI and `None`.
+
+### `verify_rendition_sig` no longer compiles
+
+Use `rendition::check_rendition_sig(spec, id, sig)` and refuse only
+`RenditionSig::Rejected`. Image URLs the CMS renders now end in `?s=…`
+even without `RCMS_RENDITION_SIGNING_KEY`; a test comparing whole URLs
+should drop that parameter.
+
+### Your publish, serve, search or dashboard hook no longer compiles
+
+The four behavioural hooks are async and take a `HookCtx` first:
+
+```rust
+use rustango_cms::hooks::{HookCtx, HookFuture};
+use rustango_cms::page::Page;
+
+fn purge_cdn<'a>(ctx: HookCtx<'a>, page: &'a Page) -> HookFuture<'a, ()> {
+    Box::pin(async move {
+        // ctx.tenant, ctx.pool, ctx.user_id; await freely
+    })
+}
+rustango_cms::register_after_publish_page!(purge_cdn);
+```
+
+`BeforeServePage` takes `(ctx, page, headers)` and returns
+`HookFuture<Option<Response>>`; `AdminSearchArea::search` takes
+`(ctx, query)`; a `DashboardWidget` gives a `render: fn(HookCtx) ->
+HookFuture<String>` instead of a static `html`.
+
+### Everyone signs in again
+
+From rustango 0.63 on, member cookies, member API tokens,
+open password-reset links and preview tokens end once: users sign in again.
+
+### A custom `PageCacheInvalidator` no longer compiles
+
+Its methods take `tenant: &rustango::tenancy::TenantSlug` instead of a slug;
+read `tenant.slug`. Callers of `purge_urls`, `invalidate_urls_on_commit` and
+`run_schedule_sweep_and_purge` pass `TenantSlug::of(&org)`. A `CachePurgeJob`
+literal needs `org_id`; jobs queued before the upgrade purge nothing.
+
+### `issue_password_reset_link` expects an `Org`
+
+Load the tenant's `rustango::tenancy::Org` from the registry and pass `&org`
+instead of its slug.
+
+### `authenticate_member` and `security_log` expect a `TenantSlug`
+
+`admin::members::authenticate_member`, `security_log::is_locked` and
+`security_log::unlock` take the site's `rustango::tenancy::TenantSlug`
+(`TenantSlug::of(&org)`) instead of its slug, so a locked-out name stays
+bound to that site even if a new site later reuses the slug.
+
+### New in 0.4.0, nothing to change
+
+Starter themes, theme packages, Branding as the one place for the site's
+name, logo and icon (uploaded logos move into the media library on their
+own), the admin bar and the template inspector need no changes in an
+existing project. A project made with an older `rcms new` keeps working; to
+get the new blocks' styles and the admin bar's links, compare its
+`templates/` with a newly generated project.
+
+### Sites under a path (optional)
+
+To serve a tenant under a path on the main domain (`create-tenant acme
+--path-prefix /acme`), wrap the router in `main.rs`:
+
+```rust
+rustango::manage::Cli::new()
+    .tenancy()
+    .tenant_header(rustango_cms::path_prefix::tenant_header())
+    .api(rustango_cms::path_prefix::serve(api))
+```
+
+Sites on their own host are not affected either way.
 
 ## 0.3.0
 

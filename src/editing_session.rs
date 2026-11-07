@@ -100,7 +100,7 @@ pub async fn touch(
         if is_editing {
             row.is_editing = true;
         }
-        row.save_pool(pool).await?;
+        row.save(pool).await?;
     } else {
         let mut row = EditingSession {
             id: Auto::Unset,
@@ -109,7 +109,7 @@ pub async fn touch(
             last_seen_at: Utc::now(),
             is_editing,
         };
-        row.insert_pool(pool).await?;
+        row.insert(pool).await?;
     }
     Ok(())
 }
@@ -156,7 +156,7 @@ pub async fn gc_stale(pool: &rustango::sql::Pool) -> Result<usize, rustango::sql
         .await?;
     let count = stale.len();
     for row in stale {
-        row.delete_pool(pool).await?;
+        row.delete(pool).await?;
     }
     Ok(count)
 }

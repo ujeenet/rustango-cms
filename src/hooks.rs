@@ -14,55 +14,120 @@
 //!
 //! | Hook | When | Signature |
 //! |---|---|---|
-//! | [`AfterPublishPage`]    | After `page_edit_submit` saves a Published row | `fn(&Page)` |
-//! | [`BeforeServePage`]     | Just before the public renderer fires | `fn(&Page, &HeaderMap) -> Option<Response>` |
+//! | [`AfterPublishPage`]    | When a page goes live | `async fn(HookCtx, &Page)` |
+//! | [`BeforeServePage`]     | Just before the public renderer fires | `async fn(HookCtx, &Page, &HeaderMap) -> Option<Response>` |
 //! | [`AdminMenuItem`]       | Registers a sidebar entry | static struct |
 //! | [`PageActionMenuItem`]  | Registers a kebab-menu entry on the page editor | static struct |
 //! | [`PageListingButton`]   | Registers a per-row action on the page tree | static struct |
-//! | [`AdminSearchArea`]     | Registers an extra source for global search | static fn returning hits |
+//! | [`AdminSearchArea`]     | Registers an extra source for global search | async fn returning hits |
 //!
 //! ## Registering
 //!
+//! The four behavioural hooks ([`AfterPublishPage`], [`BeforeServePage`],
+//! [`AdminSearchArea`], [`DashboardWidget`]) are async and get a
+//! [`HookCtx`]: the tenant's pool, its slug and the acting user. The rest
+//! are static descriptors.
+//!
 //! ```ignore
-//! use rustango_cms::hooks::{register_after_publish_page, AfterPublishPage};
-//! use rustango_cms::Page;
+//! use rustango_cms::hooks::{HookCtx, HookFuture};
+//! use rustango_cms::page::Page;
 //!
-//! fn warm_cdn_cache(page: &Page) {
-//!     tracing::info!("warming CDN for {}", page.url_path);
+//! fn purge_cdn<'a>(ctx: HookCtx<'a>, page: &'a Page) -> HookFuture<'a, ()> {
+//!     Box::pin(async move {
+//!         tracing::info!(tenant = ctx.tenant, "purging {}", page.url_path);
+//!         // …an async HTTP call, a query on ctx.pool…
+//!     })
 //! }
-//!
-//! register_after_publish_page!(warm_cdn_cache);
+//! rustango_cms::register_after_publish_page!(purge_cdn);
 //! ```
 //!
 //! ## Failure semantics
 //!
 //! Hooks fire in registration order. A panicking hook does NOT abort
-//! the request — the call site catches the panic, logs it, and
-//! continues to the next handler. The only exception is
-//! [`BeforeServePage`], which can return `Some(Response)` to
-//! short-circuit the renderer.
+//! the request — the panic is caught (across its awaits too), logged,
+//! and the next handler runs. [`BeforeServePage`] can return
+//! `Some(Response)` to short-circuit the renderer.
+
+use std::future::Future;
+use std::pin::Pin;
 
 use axum::http::HeaderMap;
 use axum::response::Response;
+use futures_util::FutureExt as _;
+use rustango::sql::Pool;
 
 use crate::page::Page;
+
+/// The boxed future an async hook returns. It may borrow the context
+/// and its other arguments.
+pub type HookFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+/// What an async hook is told about the request it runs in (#686).
+///
+/// `#[non_exhaustive]`, so a field added later breaks no registered
+/// hook; a caller outside the crate builds one with [`HookCtx::new`].
+#[derive(Clone, Copy)]
+#[non_exhaustive]
+pub struct HookCtx<'a> {
+    /// The tenant's database.
+    pub pool: &'a Pool,
+    /// The tenant's slug. A hook that caches must key on it: the pool
+    /// is tenant-specific, a process-wide cache is not.
+    pub tenant: &'a str,
+    /// The signed-in user the hook runs for, if any: an admin user on
+    /// admin paths, an admin or a member on public page views (both live
+    /// in the tenant's user table). `None` for anonymous visitors and the
+    /// schedule sweep.
+    pub user_id: Option<i64>,
+}
+
+impl<'a> HookCtx<'a> {
+    #[must_use]
+    pub fn new(pool: &'a Pool, tenant: &'a str, user_id: Option<i64>) -> Self {
+        Self { pool, tenant, user_id }
+    }
+}
+
+/// How long one hook may run. Hooks sit on request paths (a page view, a
+/// save), so a hung call in one must not hang the request.
+pub const HOOK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Await `fut` for at most [`HOOK_TIMEOUT`], turning a panic or a timeout
+/// into `None` and a warning. A hook that panics while holding a
+/// `std::sync::Mutex` poisons it; keep locks out of hooks or use tokio's.
+async fn guarded<T>(hook: &str, fut: HookFuture<'_, T>) -> Option<T> {
+    let caught = std::panic::AssertUnwindSafe(fut).catch_unwind();
+    match rustango::__private_runtime::tokio::time::timeout(HOOK_TIMEOUT, caught).await {
+        Ok(Ok(v)) => Some(v),
+        Ok(Err(e)) => {
+            tracing::warn!(target: "rustango_cms::hooks", hook, error = ?e, "hook panicked (continuing)");
+            None
+        }
+        Err(_) => {
+            tracing::warn!(target: "rustango_cms::hooks", hook, "hook timed out after {HOOK_TIMEOUT:?} (continuing)");
+            None
+        }
+    }
+}
 
 // ---------------------------------------------------------------
 // AfterPublishPage
 // ---------------------------------------------------------------
 
-/// Fired after a page transitions to (or stays in) Published
-/// following `page_edit_submit`. Use for fire-and-forget side
-/// effects: warm a CDN, ping a webhook, push to a feed indexer.
-#[derive(Debug, Clone, Copy)]
-pub struct AfterPublishPage(pub fn(&Page));
+/// Fired when a page goes live: an editor's save, a bulk publish, a
+/// workflow approval or the schedule sweep. Use for side effects —
+/// purge a CDN, ping a webhook, push to a feed indexer.
+#[derive(Clone, Copy)]
+pub struct AfterPublishPage(pub for<'a> fn(HookCtx<'a>, &'a Page) -> HookFuture<'a, ()>);
 
 inventory::collect!(AfterPublishPage);
 
 /// Register an [`AfterPublishPage`] handler at compile time.
 ///
 /// ```ignore
-/// fn my_handler(page: &Page) { /* ... */ }
+/// fn my_handler<'a>(ctx: HookCtx<'a>, page: &'a Page) -> HookFuture<'a, ()> {
+///     Box::pin(async move { /* ... */ })
+/// }
 /// register_after_publish_page!(my_handler);
 /// ```
 #[macro_export]
@@ -74,20 +139,12 @@ macro_rules! register_after_publish_page {
     };
 }
 
-/// Fan out: call every registered `AfterPublishPage` handler in
-/// registration order. Panics are caught + logged so one buggy
-/// plugin can't break the publish path.
-pub fn fire_after_publish_page(page: &Page) {
+/// Run every registered `AfterPublishPage` handler in registration
+/// order. Panics are caught + logged so one buggy plugin can't break
+/// the publish path.
+pub async fn fire_after_publish_page(ctx: HookCtx<'_>, page: &Page) {
     for hook in inventory::iter::<AfterPublishPage>() {
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (hook.0)(page)));
-        if let Err(e) = result {
-            tracing::warn!(
-                target: "rustango_cms::hooks",
-                hook = "after_publish_page",
-                error = ?e,
-                "hook panicked (continuing)"
-            );
-        }
+        guarded("after_publish_page", (hook.0)(ctx, page)).await;
     }
 }
 
@@ -102,8 +159,10 @@ pub fn fire_after_publish_page(page: &Page) {
 ///
 /// Multiple hooks register in order; the first one to return
 /// `Some(Response)` wins.
-#[derive(Debug, Clone, Copy)]
-pub struct BeforeServePage(pub fn(&Page, &HeaderMap) -> Option<Response>);
+#[derive(Clone, Copy)]
+pub struct BeforeServePage(
+    pub for<'a> fn(HookCtx<'a>, &'a Page, &'a HeaderMap) -> HookFuture<'a, Option<Response>>,
+);
 
 inventory::collect!(BeforeServePage);
 
@@ -117,21 +176,10 @@ macro_rules! register_before_serve_page {
 }
 
 /// Fan out: returns the first short-circuit response or `None`.
-pub fn fire_before_serve_page(page: &Page, headers: &HeaderMap) -> Option<Response> {
+pub async fn fire_before_serve_page(ctx: HookCtx<'_>, page: &Page, headers: &HeaderMap) -> Option<Response> {
     for hook in inventory::iter::<BeforeServePage>() {
-        let result =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (hook.0)(page, headers)));
-        match result {
-            Ok(Some(resp)) => return Some(resp),
-            Ok(None) => continue,
-            Err(e) => {
-                tracing::warn!(
-                    target: "rustango_cms::hooks",
-                    hook = "before_serve_page",
-                    error = ?e,
-                    "hook panicked (continuing)"
-                );
-            }
+        if let Some(Some(resp)) = guarded("before_serve_page", (hook.0)(ctx, page, headers)).await {
+            return Some(resp);
         }
     }
     None
@@ -293,28 +341,29 @@ pub fn userbar_items() -> Vec<&'static UserbarItem> {
 // DashboardWidget (#144)
 // ---------------------------------------------------------------
 
-/// One widget contributed to /cms-admin/dashboard. Pre-rendered
-/// HTML; hosts compose whatever data shape they like (charts,
-/// counts, recent rows, etc.) and emit the fragment.
-#[derive(Debug, Clone, Copy)]
+/// One widget contributed to /cms-admin/dashboard. `render` builds its
+/// HTML fragment per request, with the tenant's pool and the viewer, so
+/// it can show live numbers (charts, counts, recent rows…). The HTML is
+/// inserted as is: escape anything that came from users.
+#[derive(Clone, Copy)]
 pub struct DashboardWidget {
     pub key: &'static str,
     pub label: &'static str,
     pub icon: &'static str,
-    pub html: &'static str,
+    pub render: for<'a> fn(HookCtx<'a>) -> HookFuture<'a, String>,
 }
 
 inventory::collect!(DashboardWidget);
 
 #[macro_export]
 macro_rules! register_dashboard_widget {
-    ($key:expr, $label:expr, $icon:expr, $html:expr) => {
+    ($key:expr, $label:expr, $icon:expr, $render:expr) => {
         ::rustango_cms::inventory::submit! {
             $crate::hooks::DashboardWidget {
                 key: $key,
                 label: $label,
                 icon: $icon,
-                html: $html,
+                render: $render,
             }
         }
     };
@@ -325,6 +374,18 @@ pub fn dashboard_widgets() -> Vec<&'static DashboardWidget> {
     let mut items: Vec<&'static DashboardWidget> = inventory::iter::<DashboardWidget>().collect();
     items.sort_by_key(|i| i.key);
     items
+}
+
+/// Render every dashboard widget, sorted by key: `(widget, html)`. A
+/// widget whose render panics is left out.
+pub async fn render_dashboard_widgets(ctx: HookCtx<'_>) -> Vec<(&'static DashboardWidget, String)> {
+    let mut out = Vec::new();
+    for w in dashboard_widgets() {
+        if let Some(html) = guarded("dashboard_widget", (w.render)(ctx)).await {
+            out.push((w, html));
+        }
+    }
+    out
 }
 
 #[must_use]
@@ -423,7 +484,8 @@ inventory::submit! {
         key: "docs",
         label: "Documentation",
         icon: "menu_book",
-        href: "https://rustango-cms.dev/docs",
+        // The guides, read inside the admin (`admin::help_center`).
+        href: "/cms-admin/help",
     }
 }
 inventory::submit! {
@@ -643,13 +705,13 @@ pub struct AdminSearchHit {
 }
 
 /// Plugin-contributed search source for `/cms-admin/search`.
-/// Receives the query string; returns up to N hits to merge into
-/// the global search response.
-#[derive(Debug, Clone, Copy)]
+/// Receives the query string (and the tenant's pool, so it can query);
+/// returns up to N hits to merge into the global search response.
+#[derive(Clone, Copy)]
 pub struct AdminSearchArea {
     pub key: &'static str,
     pub label: &'static str,
-    pub search: fn(&str) -> Vec<AdminSearchHit>,
+    pub search: for<'a> fn(HookCtx<'a>, &'a str) -> HookFuture<'a, Vec<AdminSearchHit>>,
 }
 
 inventory::collect!(AdminSearchArea);
@@ -670,20 +732,10 @@ macro_rules! register_admin_search_area {
 /// Run every registered AdminSearchArea against `query` and return
 /// a flattened `(area_label, hits)` list.
 #[must_use]
-pub fn run_admin_search_areas(query: &str) -> Vec<(&'static str, Vec<AdminSearchHit>)> {
+pub async fn run_admin_search_areas(ctx: HookCtx<'_>, query: &str) -> Vec<(&'static str, Vec<AdminSearchHit>)> {
     let mut out = Vec::new();
     for area in inventory::iter::<AdminSearchArea>() {
-        let hits = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| (area.search)(query)))
-            .unwrap_or_else(|e| {
-                tracing::warn!(
-                    target: "rustango_cms::hooks",
-                    hook = "admin_search_area",
-                    area = %area.key,
-                    error = ?e,
-                    "search area panicked (continuing)"
-                );
-                Vec::new()
-            });
+        let hits = guarded("admin_search_area", (area.search)(ctx, query)).await.unwrap_or_default();
         if !hits.is_empty() {
             out.push((area.label, hits));
         }

@@ -30,27 +30,11 @@ async fn a_job_finds_an_unregistered_tenant_through_the_registry() {
 
     let registry = Pool::connect(&format!("sqlite:{}?mode=rwc", reg_path.display())).await.expect("registry");
     ddl(&registry, &Org::SCHEMA).await;
-    let mut org = Org {
-        id: rustango::Auto::Unset,
-        slug: "acme".to_owned(),
-        display_name: "Acme".to_owned(),
-        storage_mode: "database".to_owned(),
-        backend_kind: "sqlite".to_owned(),
-        database_url: Some(tenant_url),
-        schema_name: None,
-        host_pattern: None,
-        port: None,
-        path_prefix: None,
-        active: true,
-        created_at: chrono::Utc::now(),
-        brand_name: None,
-        brand_tagline: None,
-        logo_path: None,
-        favicon_path: None,
-        primary_color: None,
-        theme_mode: None,
-    };
-    org.save_pool(&registry).await.expect("org");
+    let mut org = Org::new("acme");
+    org.display_name = "Acme".to_owned();
+    org.backend_kind = "sqlite".to_owned();
+    org.database_url = Some(tenant_url);
+    org.save(&registry).await.expect("org");
     rustango_cms::task_queue::set_registry(registry);
 
     let job = ReferenceIndexJob {

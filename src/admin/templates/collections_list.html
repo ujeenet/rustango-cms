@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ "Collections — CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ "Collections" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Media collections" | translate(locale=LANG) }}{% endblock %}
 
 {% block topbar_actions %}
@@ -57,7 +57,7 @@
                 </tr>
             </thead>
             <tbody>
-            {% for c in collections %}
+            {% for c in collection_rows %}
                 <tr>
                     <td>
                         {% for _ in range(end=c.depth) %}<span class="rcms-text-muted-2">↳&nbsp;</span>{% endfor %}
@@ -128,5 +128,6 @@
             </tbody>
         </table>
     </div>
+    {% include "rcms_admin/_pagination.html" %}
 {% endif %}
 {% endblock %}

@@ -1,0 +1,561 @@
+{
+  "name": "Blog + Portfolio",
+  "site": {
+    "tagline": "Designer & writer",
+    "footer": "© 2026 Alex Morgan. Built with Rustango-CMS.",
+    "footer_logo": "@media:rustango-cms-logo"
+  },
+  "branding": {
+    "site_name": "Alex Morgan",
+    "logo": "@media:rustango-cms-icon",
+    "favicon": "@media:rustango-cms-icon"
+  },
+  "theme": {
+    "base": "forest",
+    "slug": "starter-blog-portfolio",
+    "name": "Starter: Blog + Portfolio",
+    "tokens": {
+      "color_link": "#0f766e",
+      "font_heading": "'DM Serif Display', Georgia, serif",
+      "font_body": "'DM Sans', system-ui, sans-serif",
+      "font_url": "https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;700&display=swap"
+    }
+  },
+  "page_types": [
+    "Home",
+    "Page",
+    "Blog",
+    "Post",
+    "Projects",
+    "Project"
+  ],
+  "pages": [
+    {
+      "key": "home",
+      "type": "Home",
+      "title": "Home",
+      "slug": "",
+      "data": {
+        "headline": "Hi, I'm Alex. I design products and write about it.",
+        "intro": "Selected work, and notes from the studio.",
+        "cta_label": "See my work",
+        "cta_url": "/work",
+        "body": [
+          {
+            "type": "rich_text",
+            "value": {
+              "body": "<p>This is the <strong>Blog + Portfolio</strong> starter theme: a portfolio of projects and a blog, side by side.</p>"
+            }
+          },
+          {
+            "type": "slider",
+            "value": {
+              "heading": "Selected work",
+              "style": "slides",
+              "slides": [
+                {
+                  "type": "slide",
+                  "id": "home-slide-0",
+                  "value": {
+                    "image": "@media:coffee",
+                    "alt": "A cup of coffee with latte art, seen from above on a wooden table",
+                    "heading": "Harbour Coffee",
+                    "text": "A warmer brand for a seaside café.",
+                    "link_label": "See the project",
+                    "url": "/work/harbour-coffee"
+                  }
+                },
+                {
+                  "type": "slide",
+                  "id": "home-slide-1",
+                  "value": {
+                    "image": "@media:studio",
+                    "alt": "A red circle, a blue rectangle and a yellow triangle on a shelf",
+                    "heading": "Fieldnote",
+                    "text": "A calm notes app for researchers.",
+                    "link_label": "See the project",
+                    "url": "/work/fieldnote-app"
+                  }
+                },
+                {
+                  "type": "slide",
+                  "id": "home-slide-2",
+                  "value": {
+                    "image": "@media:books",
+                    "alt": "Three shelves of books in muted colours",
+                    "heading": "City Library",
+                    "text": "Wayfinding across four floors.",
+                    "link_label": "See the project",
+                    "url": "/work/city-library-wayfinding"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "children": [
+        {
+          "key": "work",
+          "type": "Projects",
+          "title": "Work",
+          "slug": "work",
+          "in_menu": true,
+          "data": {
+            "intro": "Selected projects."
+          },
+          "children": [
+            {
+              "key": "project-1",
+              "type": "Project",
+              "title": "Harbour Coffee rebrand",
+              "slug": "harbour-coffee",
+              "seo_description": "A fresh identity and website for a neighbourhood coffee roaster.",
+              "in_menu": true,
+              "data": {
+                "summary": "A fresh identity and website for a neighbourhood coffee roaster.",
+                "client": "Harbour Coffee",
+                "year": "2026",
+                "services": "Brand identity, Website",
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>The challenge</h2><p>Harbour Coffee had outgrown its hand-drawn logo and a site nobody could update.</p>"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>What we did</h2><p>We designed a new identity and a simple website the team edits themselves.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "We finally have a website we're proud to send people to.",
+                      "attribution": "Harbour Coffee"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>The result</h2><p>Online orders doubled in the first three months.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:coffee"
+              }
+            },
+            {
+              "key": "project-2",
+              "type": "Project",
+              "title": "Fieldnote mobile app",
+              "slug": "fieldnote-app",
+              "seo_description": "A note-taking app for researchers working offline in the field.",
+              "in_menu": true,
+              "data": {
+                "summary": "A note-taking app for researchers working offline in the field.",
+                "client": "Fieldnote",
+                "year": "2025",
+                "services": "Product design, iOS, Android",
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>The challenge</h2><p>Researchers needed to capture notes, photos and locations without a signal.</p>"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>What we did</h2><p>We designed an offline-first app that syncs when a connection returns.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "It just works, even on a mountain.",
+                      "attribution": "Fieldnote"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>The result</h2><p>Used by 40 research teams in its first year.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:studio"
+              }
+            },
+            {
+              "key": "project-3",
+              "type": "Project",
+              "title": "City Library wayfinding",
+              "slug": "city-library-wayfinding",
+              "seo_description": "Clear signs and maps for a five-floor public library.",
+              "in_menu": true,
+              "data": {
+                "summary": "Clear signs and maps for a five-floor public library.",
+                "client": "City Library",
+                "year": "2025",
+                "services": "Signage, Print",
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>The challenge</h2><p>Visitors kept getting lost between the five floors and two entrances.</p>"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>What we did</h2><p>We created a colour-coded signage system and printed and digital maps.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "People stop asking for directions now.",
+                      "attribution": "City Library"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<h2>The result</h2><p>Help-desk questions about directions dropped by half.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:books"
+              }
+            }
+          ]
+        },
+        {
+          "key": "blog",
+          "type": "Blog",
+          "title": "Writing",
+          "slug": "writing",
+          "in_menu": true,
+          "data": {
+            "intro": "Notes on design, work and making things."
+          },
+          "children": [
+            {
+              "key": "post-3",
+              "type": "Post",
+              "title": "Writing every week, one year later",
+              "slug": "writing-every-week",
+              "seo_description": "What a year of weekly posts taught me about habits, drafts and hitting publish.",
+              "in_menu": true,
+              "data": {
+                "excerpt": "What a year of weekly posts taught me about habits, drafts and hitting publish.",
+                "published": "2026-10-28",
+                "author": "Alex Morgan",
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>A year ago I promised myself one post a week. Some weeks it was easy; most weeks it was not.</p><p>The trick turned out to be lowering the bar: a short, honest post beats a perfect one that never ships.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "Publishing is a muscle. The more often you use it, the less it hurts.",
+                      "attribution": "Alex Morgan"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>If you are thinking about starting, start small, and start this week.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:paper"
+              }
+            },
+            {
+              "key": "post-2",
+              "type": "Post",
+              "title": "A calmer way to plan the week",
+              "slug": "calmer-week-planning",
+              "seo_description": "Three questions on a Sunday evening that make the week ahead feel lighter.",
+              "in_menu": true,
+              "data": {
+                "excerpt": "Three questions on a Sunday evening that make the week ahead feel lighter.",
+                "published": "2026-10-14",
+                "author": "Alex Morgan",
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Planning used to mean a long list I never finished. Now it means three questions.</p><p>What must happen? What would make the week good? What can wait? Everything else is noise.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "A plan is a promise to your future self. Keep it small enough to keep.",
+                      "attribution": "Alex Morgan"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Try it this Sunday and see how Monday feels.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:leaves"
+              }
+            },
+            {
+              "key": "post-1",
+              "type": "Post",
+              "title": "Hello, world",
+              "slug": "hello-world",
+              "seo_description": "The first post on this blog: why it exists and what you'll find here.",
+              "in_menu": true,
+              "data": {
+                "excerpt": "The first post on this blog: why it exists and what you'll find here.",
+                "published": "2026-10-01",
+                "author": "Alex Morgan",
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Welcome! This blog is where I write about the things I'm learning and making.</p><p>Expect notes on work, tools, books and the occasional side project.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "Writing things down is the best way I know to think clearly.",
+                      "attribution": "Alex Morgan"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Thanks for reading. Subscribe or say hello on the contact page.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:hills"
+              }
+            }
+          ]
+        },
+        {
+          "key": "about",
+          "type": "Page",
+          "title": "About",
+          "slug": "about",
+          "in_menu": true,
+          "data": {
+            "intro": "A little about me.",
+            "body": [
+              {
+                "type": "hero",
+                "value": {
+                  "heading": "Designer and writer",
+                  "text": "I design products and write about the craft behind them.",
+                  "height": "medium",
+                  "image": "@media:sea"
+                }
+              },
+              {
+                "type": "rich_text",
+                "value": {
+                  "body": "<p>This is a sample page. Edit it in the CMS admin under <strong>Pages</strong>: change the text, add images, quotes or a call to action from the <em>Content</em> field.</p>"
+                }
+              },
+              {
+                "type": "quote",
+                "value": {
+                  "text": "Simple things should be simple, complex things should be possible.",
+                  "attribution": "Alan Kay"
+                }
+              },
+              {
+                "type": "rich_text",
+                "value": {
+                  "body": "<h2>What this site is for</h2><p>Replace this text with your own story. Every page here is yours to rewrite or delete.</p>"
+                }
+              },
+              {
+                "type": "media_text",
+                "value": {
+                  "image_side": "left",
+                  "heading": "A bit about me",
+                  "text": "Ten years of designing for the web, and a habit of writing down what I learn along the way.\n\n*Change this text and the picture in the admin.*",
+                  "image": "@media:paper",
+                  "image_alt": "Two sheets of ruled paper and a pencil on a desk"
+                }
+              },
+              {
+                "type": "media_text",
+                "value": {
+                  "image_side": "right",
+                  "heading": "What I do",
+                  "text": "Product design, design systems and the occasional website, for small teams and independent makers.",
+                  "button_label": "Get in touch",
+                  "url": "/contact",
+                  "image": "@media:studio",
+                  "image_alt": "A red circle, a blue rectangle and a yellow triangle on a shelf"
+                }
+              },
+              {
+                "type": "cards",
+                "value": {
+                  "heading": "Find your way",
+                  "columns": "3",
+                  "cards": [
+                    {
+                      "type": "card",
+                      "id": "about-card-0",
+                      "value": {
+                        "title": "Work",
+                        "text": "Selected projects and case studies.",
+                        "url": "/work",
+                        "image": "@media:studio"
+                      }
+                    },
+                    {
+                      "type": "card",
+                      "id": "about-card-1",
+                      "value": {
+                        "title": "Writing",
+                        "text": "Notes on design and craft.",
+                        "url": "/writing",
+                        "image": "@media:paper"
+                      }
+                    },
+                    {
+                      "type": "card",
+                      "id": "about-card-2",
+                      "value": {
+                        "title": "Contact",
+                        "text": "Open for new projects.",
+                        "url": "/contact",
+                        "image": "@media:coffee"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "jumbo",
+                "value": {
+                  "heading": "Let's work together",
+                  "text": "Open for new projects from next month.",
+                  "button_label": "See my work",
+                  "url": "/work",
+                  "style": "accent"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "key": "contact",
+          "type": "Page",
+          "title": "Contact",
+          "slug": "contact",
+          "in_menu": true,
+          "data": {
+            "intro": "Questions, ideas or a project in mind? Get in touch.",
+            "body": [
+              {
+                "type": "rich_text",
+                "value": {
+                  "body": "<p>Write to <a href=\"mailto:hello@example.com\">hello@example.com</a> and we'll reply within two working days.</p>"
+                }
+              },
+              {
+                "type": "cta",
+                "value": {
+                  "heading": "Prefer a call?",
+                  "text": "Book a short introduction call and we'll take it from there.",
+                  "button_label": "Book a call",
+                  "url": "mailto:hello@example.com"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "menus": [
+    {
+      "slug": "header",
+      "name": "Header",
+      "items": [
+        {
+          "page": "work"
+        },
+        {
+          "page": "blog"
+        },
+        {
+          "page": "about"
+        },
+        {
+          "page": "contact"
+        }
+      ]
+    },
+    {
+      "slug": "footer",
+      "name": "Footer",
+      "items": [
+        {
+          "label": "Site",
+          "children": [
+            {
+              "page": "work"
+            },
+            {
+              "page": "blog"
+            },
+            {
+              "page": "about"
+            },
+            {
+              "page": "contact"
+            }
+          ]
+        },
+        {
+          "label": "Elsewhere",
+          "children": [
+            {
+              "label": "GitHub",
+              "url": "https://github.com/ujeenet/rustango-cms"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "error_pages": [
+    {
+      "status": 404,
+      "title": "Lost the thread",
+      "slug": "page-not-found",
+      "body": [
+        {
+          "type": "paragraph",
+          "value": {
+            "body": "Nothing lives at this address. It may have moved, or the link may be mistyped.\n\nWriting and work are both a click away on the home page."
+          }
+        }
+      ]
+    }
+  ]
+}

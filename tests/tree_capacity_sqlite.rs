@@ -59,7 +59,7 @@ async fn pages_can_be_created_after_ids_pass_65535() {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(&pool).await.expect("page type");
+    pt.save(&pool).await.expect("page type");
     let type_id = pt.id.get().copied().expect("page type id");
 
     let root = Page::create_root_pool(&pool, new_page(type_id, "Home", "home"))

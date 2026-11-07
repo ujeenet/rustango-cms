@@ -206,18 +206,18 @@ impl AzureCdnInvalidator {
 
 #[async_trait]
 impl PageCacheInvalidator for AzureCdnInvalidator {
-    async fn invalidate_url(&self, _tenant_slug: &str, url_path: &str) {
+    async fn invalidate_url(&self, _tenant: &rustango::tenancy::TenantSlug, url_path: &str) {
         self.purge(&[url_path.to_owned()]).await;
     }
 
-    async fn invalidate_subtree(&self, _tenant_slug: &str, url_path: &str) {
+    async fn invalidate_subtree(&self, _tenant: &rustango::tenancy::TenantSlug, url_path: &str) {
         // Azure accepts a trailing `/*` glob to drop the page + every
         // descendant in one call.
         let glob = format!("{}/*", url_path.trim_end_matches('/'));
         self.purge(&[glob]).await;
     }
 
-    async fn invalidate_urls(&self, _tenant_slug: &str, url_paths: &[String]) {
+    async fn invalidate_urls(&self, _tenant: &rustango::tenancy::TenantSlug, url_paths: &[String]) {
         // #428 — one purge carrying every path's contentPaths (chunked
         // by `purge`) instead of one request per path.
         self.purge(url_paths).await;
@@ -254,7 +254,7 @@ mod tests {
             then.status(200);
         });
         inv(server.base_url())
-            .invalidate_url("acme", "/about")
+            .invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/about")
             .await;
         mock.assert();
     }
@@ -269,7 +269,7 @@ mod tests {
             then.status(202);
         });
         inv(server.base_url())
-            .invalidate_urls("acme", &["/a".to_owned(), "/b".to_owned(), "/c".to_owned()])
+            .invalidate_urls(&rustango::tenancy::TenantSlug::new(1, "acme"), &["/a".to_owned(), "/b".to_owned(), "/c".to_owned()])
             .await;
         assert_eq!(mock.calls(), 1, "three paths should batch into one POST");
     }
@@ -283,7 +283,7 @@ mod tests {
             then.status(200);
         });
         inv(server.base_url())
-            .invalidate_subtree("acme", "/blog")
+            .invalidate_subtree(&rustango::tenancy::TenantSlug::new(1, "acme"), "/blog")
             .await;
         mock.assert();
     }
@@ -297,7 +297,7 @@ mod tests {
             then.status(200);
         });
         let paths: Vec<String> = (0..51).map(|i| format!("/p{i}")).collect();
-        inv(server.base_url()).invalidate_urls("acme", &paths).await;
+        inv(server.base_url()).invalidate_urls(&rustango::tenancy::TenantSlug::new(1, "acme"), &paths).await;
         assert_eq!(mock.calls(), 2, "51 paths should split into 50 + 1");
     }
 
@@ -310,7 +310,7 @@ mod tests {
                 .body(r#"{"error": {"code": "AuthenticationFailed"}}"#);
         });
         inv(server.base_url())
-            .invalidate_url("acme", "/about")
+            .invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/about")
             .await;
     }
 
@@ -330,7 +330,7 @@ mod tests {
         });
         AzureCdnInvalidator::new("s", "r", "p", "e", Arc::new(NoToken))
             .with_api_base(server.base_url())
-            .invalidate_url("acme", "/about")
+            .invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/about")
             .await;
         assert_eq!(mock.calls(), 0, "no token should mean no HTTP");
     }

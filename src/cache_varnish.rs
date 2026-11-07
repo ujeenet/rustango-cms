@@ -193,7 +193,7 @@ impl VarnishInvalidator {
 
 #[async_trait]
 impl PageCacheInvalidator for VarnishInvalidator {
-    async fn invalidate_url(&self, _tenant_slug: &str, url_path: &str) {
+    async fn invalidate_url(&self, _tenant: &rustango::tenancy::TenantSlug, url_path: &str) {
         // Tenant slug doesn't gate Varnish — the URL itself is
         // already tenant-scoped via the public host the request
         // arrived on, and Varnish keys cache entries by
@@ -203,7 +203,7 @@ impl PageCacheInvalidator for VarnishInvalidator {
         self.ban(url_path).await;
     }
 
-    async fn invalidate_subtree(&self, _tenant_slug: &str, url_path: &str) {
+    async fn invalidate_subtree(&self, _tenant: &rustango::tenancy::TenantSlug, url_path: &str) {
         // Varnish bans match exact `req.url ==` by default. Subtree
         // semantics require a different VCL rule (`req.url ~`).
         // For v1 we fall back to a single-URL BAN — callers that
@@ -236,7 +236,7 @@ mod tests {
             // httpmock parses standard HTTP methods cleanly; use POST
             // so the mock matcher fires. Production deploys keep BAN.
             .with_method("POST");
-        inv.invalidate_url("acme", "/about").await;
+        inv.invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/about").await;
         mock_a.assert();
         mock_b.assert();
     }
@@ -245,7 +245,7 @@ mod tests {
     async fn empty_backend_list_is_noop() {
         let inv = VarnishInvalidator::new(vec![]);
         // Should return immediately without panicking.
-        inv.invalidate_url("acme", "/about").await;
+        inv.invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/about").await;
     }
 
     #[tokio::test]
@@ -257,7 +257,7 @@ mod tests {
         });
         let inv = VarnishInvalidator::new(vec![server.base_url()]).with_method("POST");
         // Should swallow the error per the trait contract.
-        inv.invalidate_url("acme", "/about").await;
+        inv.invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/about").await;
     }
 
     #[tokio::test]
@@ -273,7 +273,7 @@ mod tests {
         let mut base = server.base_url();
         base.push('/');
         let inv = VarnishInvalidator::new(vec![base]).with_method("POST");
-        inv.invalidate_url("acme", "/about").await;
+        inv.invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/about").await;
         mock.assert();
     }
 
@@ -301,7 +301,7 @@ mod tests {
             then.status(200);
         });
         let inv = VarnishInvalidator::new(vec![server.base_url()]).with_method("POST");
-        inv.invalidate_subtree("acme", "/blog").await;
+        inv.invalidate_subtree(&rustango::tenancy::TenantSlug::new(1, "acme"), "/blog").await;
         mock.assert();
     }
 }

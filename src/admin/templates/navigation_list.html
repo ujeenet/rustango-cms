@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "Navigation" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block title %}{{ "Navigation" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Navigation menus" | translate(locale=LANG) }}{% endblock %}
 
 {% block description %}

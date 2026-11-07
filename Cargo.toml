@@ -1,6 +1,6 @@
 [package]
 name = "rustango-cms"
-version = "0.3.0"
+version = "0.4.0"
 description = "A page-tree content management system for Rust, built on rustango"
 readme = "README.md"
 keywords = ["cms", "content", "headless", "rustango", "web"]
@@ -88,16 +88,18 @@ search_elasticsearch = ["rustango/http-client"]
 storage_s3 = ["rustango/storage-s3"]
 
 [dependencies]
-rustango = { version = "0.61.14", default-features = false, features = [
+rustango = { version = "0.65", default-features = false, features = [
     "admin", "admin-sso", "auth_flows", "cache", "cache-page", "config", "email", "forms", "jobs", "manage", "passwords", "runtime", "signals", "signed_url", "storage", "tenancy", "template_views", "websocket", "mcp", "http-client",
 ] }
 # In-tree proc-macro crate for `#[derive(PageType)]` — re-exported
 # from the lib via `pub use rustango_cms_macros::PageType` so users
 # only depend on `rustango-cms`.
-rustango-cms-macros = { path = "crates/rustango-cms-macros", version = "0.3.0" }
+rustango-cms-macros = { path = "crates/rustango-cms-macros", version = "0.4.0" }
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json", "form", "query", "multipart", "ws"] }
 tera = { version = "1.20", default-features = false, features = ["builtins"] }
 pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
+# Theme packages (`rustango_cms::starter::package`): theme.json + templates as a .zip.
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 ammonia = { version = "4", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_urlencoded = "0.7"
@@ -105,6 +107,8 @@ serde_json = "1"
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
 async-trait = "0.1"
 inventory = "0.3"
+# Catches a panic inside an async hook across its awaits (src/hooks.rs).
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 # Already in the tree through rustango's http-client; declared to build the
 # notification channels' egress-guarded client: redirects off and the
 # vetted address pinned, which the framework's wrapper doesn't expose.
@@ -119,6 +123,9 @@ mime_guess = "2"
 # precompiled tables) is unnecessary for the typically-tiny set of
 # route patterns hosts will define.
 regex = { version = "1", default-features = false, features = ["std", "unicode-perl"] }
+# `ServiceExt::oneshot`: `path_prefix::serve` hands a request to the host's
+# router. Axum already pulls tower into the build graph.
+tower = { version = "0.5", default-features = false, features = ["util"] }
 # Process-local secret for signing flash-message cookies. The
 # framework's `rustango::messages::push` / `drain` are HMAC-SHA256
 # over the payload; we seed the secret from `OsRng` at first call.
@@ -150,11 +157,6 @@ aws-sdk-cloudfront = { version = "1", optional = true, default-features = false,
 # do — `#[tokio::test]` is a proc-macro that resolves `::tokio::*`
 # against the *test* crate's deps, not the framework's re-export.
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-# Test-only — `ServiceExt::oneshot` for router-level HTTP tests
-# (anonymous-redirect smoke test). Axum already pulls tower
-# into the build graph; this just makes the trait import work in
-# the test crate.
-tower = { version = "0.5", default-features = false, features = ["util"] }
 # httpmock for the Cloudflare / Varnish backend tests. Mock
 # server stubs the upstream API so the tests run offline.
 httpmock = "0.8"

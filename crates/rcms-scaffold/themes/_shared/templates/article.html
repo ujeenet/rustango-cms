@@ -1,0 +1,19 @@
+{% extends "_base.html" %}
+{% import "_macros.html" as m %}
+{% block content %}
+<article class="wrap">
+  <header class="page-head measure">
+    {%- if ancestors | length > 0 %}{% set parent = ancestors | last %}<div class="page-head__kicker"><a href="{{ parent.url_path }}">{{ parent.title }}</a></div>{% endif %}
+    <h1>{{ page.title }}</h1>
+    {%- if builder.standfirst %}<p class="page-head__intro">{{ builder.standfirst }}</p>{% endif %}
+  </header>
+  <div class="meta">
+    {%- if builder.author %}<span>By {{ builder.author }}</span>{% endif %}
+    {%- if builder.published %}<span>{{ m::date(value=builder.published) }}</span>{% endif %}
+  </div>
+  {%- if builder.cover %}
+  <figure class="cover"><img src="{{ rcms_image_url(media_id=builder.cover, filter='width-1600') }}" alt=""></figure>
+  {%- endif %}
+  <div class="prose">{{ stream_render(name="body") | safe }}</div>
+</article>
+{% endblock content %}

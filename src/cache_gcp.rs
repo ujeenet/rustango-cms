@@ -221,17 +221,17 @@ impl GoogleCloudCdnInvalidator {
 
 #[async_trait]
 impl PageCacheInvalidator for GoogleCloudCdnInvalidator {
-    async fn invalidate_url(&self, tenant_slug: &str, url_path: &str) {
-        for host in self.hosts_for(tenant_slug) {
+    async fn invalidate_url(&self, tenant: &rustango::tenancy::TenantSlug, url_path: &str) {
+        for host in self.hosts_for(&tenant.slug) {
             self.invalidate(url_path, host).await;
         }
     }
 
-    async fn invalidate_subtree(&self, tenant_slug: &str, url_path: &str) {
+    async fn invalidate_subtree(&self, tenant: &rustango::tenancy::TenantSlug, url_path: &str) {
         // Cloud CDN accepts a trailing `/*` glob on the path to drop
         // the page + every descendant in one call.
         let glob = format!("{}/*", url_path.trim_end_matches('/'));
-        for host in self.hosts_for(tenant_slug) {
+        for host in self.hosts_for(&tenant.slug) {
             self.invalidate(&glob, host).await;
         }
     }
@@ -261,7 +261,7 @@ mod tests {
         });
         inv(server.base_url())
             .with_origin_host("example.com")
-            .invalidate_url("acme", "/about")
+            .invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/about")
             .await;
         mock.assert();
     }
@@ -277,7 +277,7 @@ mod tests {
         });
         // No origin host registered → host field omitted entirely.
         inv(server.base_url())
-            .invalidate_url("acme", "/about")
+            .invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/about")
             .await;
         mock.assert();
     }
@@ -292,7 +292,7 @@ mod tests {
         inv(server.base_url())
             .with_tenant_host("acme", "acme.example.com")
             .with_tenant_host("acme", "acme.com")
-            .invalidate_url("acme", "/pricing")
+            .invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/pricing")
             .await;
         assert_eq!(mock.calls(), 2, "one invalidateCache per registered host");
     }
@@ -307,7 +307,7 @@ mod tests {
         });
         inv(server.base_url())
             .with_origin_host("example.com")
-            .invalidate_subtree("acme", "/blog")
+            .invalidate_subtree(&rustango::tenancy::TenantSlug::new(1, "acme"), "/blog")
             .await;
         mock.assert();
     }
@@ -321,7 +321,7 @@ mod tests {
         });
         inv(server.base_url())
             .with_origin_host("example.com")
-            .invalidate_url("acme", "/about")
+            .invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/about")
             .await;
     }
 
@@ -344,7 +344,7 @@ mod tests {
         GoogleCloudCdnInvalidator::new("proj", "umap", Arc::new(NoToken))
             .with_origin_host("example.com")
             .with_api_base(server.base_url())
-            .invalidate_url("acme", "/about")
+            .invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/about")
             .await;
         assert_eq!(mock.calls(), 0, "no token should mean no HTTP");
     }

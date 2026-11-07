@@ -1,0 +1,51 @@
+{#- The add / edit screen of a `#[derive(CmsAdmin)]` model editor. -#}
+{% extends "rcms_admin/_base.html" %}
+{% import "rcms_admin/_widget.html" as widget %}
+{% block title %}{% if record_id %}{{ record_title }}{% else %}{{ "Add" | translate(locale=LANG) }} {{ meta.singular | translate(locale=LANG) }}{% endif %} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
+{% block heading %}{% if record_id %}{{ record_title }}{% else %}{{ "Add" | translate(locale=LANG) }} {{ meta.singular | translate(locale=LANG) }}{% endif %}{% endblock %}
+
+{% block breadcrumbs %}
+<nav class="rcms-breadcrumbs">
+    <a href="{{ meta.url }}">{{ meta.label | translate(locale=LANG) }}</a>
+    <span class="rcms-sep">›</span>
+    <span>{% if record_id %}{{ "Edit" | translate(locale=LANG) }}{% else %}{{ "New" | translate(locale=LANG) }}{% endif %}</span>
+</nav>
+{% endblock %}
+
+{% block content %}
+{% if errors["_form"] %}
+<div class="rcms-alert rcms-alert--error rcms-mb-3 rcms-maxw-760" role="alert">
+    <span class="material-symbols-rounded">error</span>
+    <div class="rcms-alert-body">{% for m in errors["_form"] %}{{ m | translate(locale=LANG) }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
+</div>
+{% endif %}
+
+<form method="post" action="{{ meta.url }}/{% if record_id %}edit{% else %}new{% endif %}" class="rcms-card rcms-maxw-760">
+    {{ csrf_token | csrf_input | safe }}
+    {% if record_id %}<input type="hidden" name="id" value="{{ record_id }}">{% endif %}
+    {% for w in fields %}
+        {{ widget::render(w=w) }}
+        {% if errors[w.name] %}
+            {% for m in errors[w.name] %}<p class="rcms-error">{{ m | translate(locale=LANG) }}</p>{% endfor %}
+        {% endif %}
+    {% endfor %}
+    <div class="rcms-form-actions">
+        <a href="{{ meta.url }}" class="rcms-btn rcms-btn-text">{% if can_save %}{{ "Cancel" | translate(locale=LANG) }}{% else %}{{ "Back" | translate(locale=LANG) }}{% endif %}</a>
+        {% if can_save %}
+            <button type="submit" name="_continue" value="1" class="rcms-btn rcms-btn-outlined">{{ "Save and continue editing" | translate(locale=LANG) }}</button>
+            <button type="submit" class="rcms-btn"><span class="material-symbols-rounded sm">save</span> {{ "Save" | translate(locale=LANG) }}</button>
+        {% endif %}
+    </div>
+</form>
+
+{% if can_delete %}
+<form method="post" action="{{ meta.url }}/delete" class="rcms-maxw-760 rcms-mt-3"
+      data-confirm="{{ "Delete “{name}”?" | translate(locale=LANG, name=record_title) }}" data-confirm-style="danger">
+    {{ csrf_token | csrf_input | safe }}
+    <input type="hidden" name="id" value="{{ record_id }}">
+    <button type="submit" class="rcms-btn rcms-btn-danger rcms-btn-small">
+        <span class="material-symbols-rounded sm">delete</span> {{ "Delete" | translate(locale=LANG) }}
+    </button>
+</form>
+{% endif %}
+{% endblock %}

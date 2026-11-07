@@ -454,7 +454,7 @@ pub(crate) async fn assign_save(
     }
 
     row.default_template = chosen;
-    row.save_pool(tenant.pool()).await?;
+    row.save(tenant.pool()).await?;
     Ok(Redirect::to("/cms-admin/page-types").into_response())
 }
 

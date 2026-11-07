@@ -14,32 +14,20 @@
 //!
 //! Two built-in invalidators ship:
 //!
-//! - [`BoxedCacheInvalidator`] — calls [`Cache::delete`](rustango::cache::Cache::delete)
-//!   on the same key shape `CachePageLayer` writes. Use when the
-//!   admin handler holds an `Arc<BoxedCache>` to the same cache the
-//!   public layer is using.
+//! - [`BoxedCacheInvalidator`] — purges through
+//!   [`CachePageLayer::invalidate`](rustango::cache_page::CachePageLayer::invalidate).
+//!   Use when the admin handler holds an `Arc<BoxedCache>` to the same
+//!   cache the public layer is using.
 //! - [`Noop`] — does nothing. Returned from `default()` so the
 //!   trait object can be unconditionally invoked from handler code
 //!   without `Option` plumbing.
-//!
-//! ## Key shape
-//!
-//! Mirrors the private `compute_cache_key` in `rustango::cache_page`:
-//!
-//! ```text
-//! <prefix>|<method-len>:<method>|<path-len>:<path>|<query-len>:<query>|<host-len>:<host>|...vary_on...
-//! ```
-//!
-//! For v0 we only target the unadorned GET path: query = "", no
-//! `vary_on` headers. Hosts that configure their public layer with
-//! `vary_on(...)` would need to invalidate every header
-//! combination — declare those upfront via
-//! [`BoxedCacheInvalidator::with_vary_values`].
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use rustango::cache::BoxedCache;
+use rustango::cache_page::{CachePageLayer, PageKey};
+use rustango::tenancy::TenantSlug;
 
 /// Hook called by admin handlers after a page-content mutation.
 /// Implementations should fan out to whatever cache backend the
@@ -52,20 +40,20 @@ use rustango::cache::BoxedCache;
 #[async_trait]
 pub trait PageCacheInvalidator: Send + Sync + 'static {
     /// Drop the cache entry for the public render of `url_path` on
-    /// the given tenant. Hosts pass the unprefixed page URL —
-    /// the implementation appends the configured URL prefix +
-    /// host(s) before computing the cache key.
-    async fn invalidate_url(&self, tenant_slug: &str, url_path: &str);
+    /// the given tenant (slug and org id, as the page cache keys it).
+    /// Hosts pass the unprefixed page URL — the implementation appends
+    /// the configured URL prefix + host(s) before computing the cache key.
+    async fn invalidate_url(&self, tenant: &TenantSlug, url_path: &str);
 
     /// Drop every cache entry whose URL starts with `url_path` /
     /// (the page itself + every descendant). Called after a slug
     /// rename, a move, or a subtree delete.
-    async fn invalidate_subtree(&self, tenant_slug: &str, url_path: &str) {
+    async fn invalidate_subtree(&self, tenant: &TenantSlug, url_path: &str) {
         // Default: fan out by enumerating the explicit URL list at
         // the call site. Implementations that can do efficient
         // prefix purges (Cloudflare wildcard purge, Redis SCAN +
         // DEL on the key pattern) should override.
-        self.invalidate_url(tenant_slug, url_path).await;
+        self.invalidate_url(tenant, url_path).await;
     }
 
     /// Drop the cache entries for many page URLs at once. The
@@ -75,9 +63,9 @@ pub trait PageCacheInvalidator: Send + Sync + 'static {
     /// this to issue a single request instead of N. The purge fan-out
     /// in [`crate::task_queue::purge_urls`] calls this so a batch
     /// backend collapses a multi-URL save into one round-trip.
-    async fn invalidate_urls(&self, tenant_slug: &str, url_paths: &[String]) {
+    async fn invalidate_urls(&self, tenant: &TenantSlug, url_paths: &[String]) {
         for url in url_paths {
-            self.invalidate_url(tenant_slug, url).await;
+            self.invalidate_url(tenant, url).await;
         }
     }
 }
@@ -121,7 +109,7 @@ pub struct Noop;
 
 #[async_trait]
 impl PageCacheInvalidator for Noop {
-    async fn invalidate_url(&self, _tenant_slug: &str, _url_path: &str) {}
+    async fn invalidate_url(&self, _tenant: &TenantSlug, _url_path: &str) {}
 }
 
 /// Convenience constructor — returns an `Arc<dyn PageCacheInvalidator>`
@@ -153,7 +141,7 @@ pub fn noop() -> Arc<dyn PageCacheInvalidator> {
 /// never fire. See [`rustango::sql::on_commit`].
 pub fn invalidate_urls_on_commit(
     invalidator: Arc<dyn PageCacheInvalidator>,
-    tenant_slug: String,
+    tenant: TenantSlug,
     url_paths: Vec<String>,
 ) {
     if url_paths.is_empty() {
@@ -161,20 +149,19 @@ pub fn invalidate_urls_on_commit(
     }
     rustango::sql::on_commit(move || {
         rustango::__private_runtime::tokio::spawn(async move {
-            crate::task_queue::purge_urls(invalidator, tenant_slug, url_paths).await;
+            crate::task_queue::purge_urls(invalidator, tenant, url_paths).await;
         });
     });
 }
 
-/// Built-in invalidator that drops keys directly from a
-/// [`BoxedCache`]. Use when the host wires the same cache instance
-/// into both [`CachePageLayer`](rustango::cache_page::CachePageLayer) and the admin state. The key shape
-/// mirrors what [`rustango::cache_page`] writes.
+/// Built-in invalidator over the same [`BoxedCache`] the public
+/// [`CachePageLayer`] uses. Keys come from the framework's own
+/// [`CachePageLayer::invalidate`], which purges every cached variant of
+/// a path (any query, any vary value), under the tenant it is given.
 pub struct BoxedCacheInvalidator {
-    cache: BoxedCache,
-    /// Same value passed to `CachePageLayer::key_prefix(...)`.
-    key_prefix: String,
-    /// Tenant-slug → public Host header values that should be
+    /// Keyed like the public layer: same cache and `key_prefix`.
+    layer: CachePageLayer,
+    /// Tenant slug → public Host header values that should be
     /// invalidated. Most apps map each tenant to one host; some
     /// (apex + subdomain) supply multiple. If a tenant slug isn't
     /// in the map, the invalidator falls back to `default_hosts`.
@@ -183,8 +170,7 @@ pub struct BoxedCacheInvalidator {
     /// map). Useful for single-tenant deployments where every URL
     /// lives under the same Host.
     default_hosts: Vec<String>,
-    /// Vary-on header values to invalidate per combo. Empty means
-    /// the public layer didn't configure `vary_on(...)`.
+    /// Vary-on header values for the exact entry deleted with each path.
     vary_values: Vec<(String, String)>,
 }
 
@@ -194,8 +180,7 @@ impl BoxedCacheInvalidator {
     #[must_use]
     pub fn new(cache: BoxedCache, key_prefix: impl Into<String>) -> Self {
         Self {
-            cache,
-            key_prefix: key_prefix.into(),
+            layer: CachePageLayer::new(cache).key_prefix(key_prefix),
             hosts_by_tenant: std::collections::HashMap::new(),
             default_hosts: Vec::new(),
             vary_values: Vec::new(),
@@ -225,107 +210,60 @@ impl BoxedCacheInvalidator {
         self
     }
 
-    /// Mirror the public layer's `vary_on(...)` declarations. The
-    /// invalidator will purge the cross-product of (vary-name,
-    /// vary-value) for each URL.
+    /// Mirror the public layer's `vary_on(...)` declarations. The path's
+    /// every variant is purged anyway; these pick the exact entry that is
+    /// also deleted at once.
     #[must_use]
     pub fn with_vary_values(mut self, pairs: impl IntoIterator<Item = (String, String)>) -> Self {
         self.vary_values = pairs.into_iter().collect();
+        let names: Vec<String> = self.vary_values.iter().map(|(n, _)| n.clone()).collect();
+        self.layer = self.layer.vary_on(&names);
         self
     }
 
-    fn hosts_for(&self, tenant_slug: &str) -> &[String] {
+    /// The page keys to purge for `url_path` on `tenant`.
+    fn pages_for(&self, tenant: &TenantSlug, url_path: &str) -> Vec<PageKey> {
         self.hosts_by_tenant
-            .get(tenant_slug)
-            .map(Vec::as_slice)
+            .get(&tenant.slug)
             .unwrap_or(&self.default_hosts)
-    }
-
-    fn compute_key(&self, path: &str, host: &str, tenant_slug: &str) -> String {
-        use std::fmt::Write as _;
-        let mut k = String::with_capacity(self.key_prefix.len() + 128);
-        let _ = write!(&mut k, "{}|", self.key_prefix);
-        write_lp(&mut k, "GET");
-        write_lp(&mut k, path);
-        write_lp(&mut k, "");
-        write_lp(&mut k, host);
-        // The layer keys every page on the resolved tenant after the host;
-        // without it no delete matches and pages wait out the TTL.
-        write_lp(&mut k, tenant_slug);
-        for (name, value) in &self.vary_values {
-            write_lp(&mut k, name);
-            write_lp(&mut k, value);
-        }
-        k
-    }
-}
-
-fn write_lp(buf: &mut String, s: &str) {
-    use std::fmt::Write as _;
-    let _ = write!(buf, "{}:{}|", s.len(), s);
-}
-
-#[cfg(test)]
-mod key_shape_tests {
-    use super::*;
-    use rustango::cache::NullCache;
-
-    fn fake_invalidator() -> BoxedCacheInvalidator {
-        BoxedCacheInvalidator::new(Arc::new(NullCache), "rcms:page")
-    }
-
-    /// Locks in the key shape so a framework-side change to
-    /// `compute_cache_key` becomes a hard test failure here.
-    /// The format mirrors `rustango::cache_page::compute_cache_key`:
-    ///   `<prefix>|<method-len>:<method>|<path-len>:<path>|<query-len>:<query>|<host-len>:<host>|<tenant-len>:<tenant>|`
-    /// followed by any `vary_on` pairs. `tests/cache_purge_roundtrip.rs`
-    /// checks the same thing against the real layer.
-    #[test]
-    fn key_shape_matches_cache_page_layer() {
-        let inv = fake_invalidator();
-        let key = inv.compute_key("/about", "acme.localhost:8090", "acme");
-        assert_eq!(key, "rcms:page|3:GET|6:/about|0:|19:acme.localhost:8090|4:acme|");
-    }
-
-    #[test]
-    fn key_with_vary_values_appends_pairs() {
-        let inv = fake_invalidator()
-            .with_vary_values(vec![("accept-language".to_owned(), "en".to_owned())]);
-        let key = inv.compute_key("/about", "acme.localhost", "acme");
-        assert_eq!(
-            key,
-            "rcms:page|3:GET|6:/about|0:|14:acme.localhost|4:acme|15:accept-language|2:en|"
-        );
+            .iter()
+            .map(|host| {
+                let mut page = PageKey::new(url_path, host.as_str()).tenant(tenant);
+                for (name, value) in &self.vary_values {
+                    page = page.vary(name, value.as_str());
+                }
+                page
+            })
+            .collect()
     }
 }
 
 #[async_trait]
 impl PageCacheInvalidator for BoxedCacheInvalidator {
-    async fn invalidate_url(&self, tenant_slug: &str, url_path: &str) {
-        let hosts = self.hosts_for(tenant_slug);
-        if hosts.is_empty() {
+    async fn invalidate_url(&self, tenant: &TenantSlug, url_path: &str) {
+        let pages = self.pages_for(tenant, url_path);
+        if pages.is_empty() {
             tracing::debug!(
                 target: "rustango_cms::cache_invalidate",
-                tenant = %tenant_slug,
+                tenant = %tenant.slug,
                 "no hosts configured — skipping cache invalidation"
             );
             return;
         }
-        for host in hosts {
-            let key = self.compute_key(url_path, host, tenant_slug);
-            match self.cache.delete(&key).await {
-                Ok(()) => tracing::debug!(
-                    target: "rustango_cms::cache_invalidate",
-                    %key,
-                    "purged"
-                ),
-                Err(e) => tracing::warn!(
-                    target: "rustango_cms::cache_invalidate",
-                    %key,
-                    error = %e,
-                    "cache delete failed (continuing — TTL will catch up)"
-                ),
-            }
+        match self.layer.invalidate(&pages).await {
+            Ok(()) => tracing::debug!(
+                target: "rustango_cms::cache_invalidate",
+                tenant = %tenant.slug,
+                path = %url_path,
+                "purged"
+            ),
+            Err(e) => tracing::warn!(
+                target: "rustango_cms::cache_invalidate",
+                tenant = %tenant.slug,
+                path = %url_path,
+                error = %e,
+                "cache purge failed (continuing — TTL will catch up)"
+            ),
         }
     }
 }
@@ -338,7 +276,7 @@ mod on_commit_tests {
     fn empty_url_list_is_a_noop_outside_atomic() {
         // No URLs → returns before touching `on_commit`, so it must not
         // panic even though we're not inside an `atomic` scope.
-        invalidate_urls_on_commit(noop(), "acme".to_owned(), vec![]);
+        invalidate_urls_on_commit(noop(), TenantSlug::new(1, "acme"), vec![]);
     }
 
     #[test]
@@ -347,7 +285,7 @@ mod on_commit_tests {
         // A non-empty list registers an `on_commit` callback, which the
         // framework rejects outside an `atomic` scope — proof the helper
         // is wired to the commit hook (and won't silently drop a purge).
-        invalidate_urls_on_commit(noop(), "acme".to_owned(), vec!["/about".to_owned()]);
+        invalidate_urls_on_commit(noop(), TenantSlug::new(1, "acme"), vec!["/about".to_owned()]);
     }
 }
 
@@ -366,7 +304,7 @@ mod on_commit_db_tests {
 
     #[async_trait]
     impl PageCacheInvalidator for Recorder {
-        async fn invalidate_url(&self, _tenant_slug: &str, url_path: &str) {
+        async fn invalidate_url(&self, _tenant: &rustango::tenancy::TenantSlug, url_path: &str) {
             self.0
                 .lock()
                 .expect("recorder mutex")
@@ -404,7 +342,7 @@ mod on_commit_db_tests {
         rustango::atomic!(&pool, |_tx| {
             invalidate_urls_on_commit(
                 inv.clone(),
-                "acme".to_owned(),
+                TenantSlug::new(1, "acme"),
                 vec!["/about".to_owned(), "/news".to_owned()],
             );
             assert_eq!(rustango::sql::on_commit_pending(), 1, "one callback queued");
@@ -426,7 +364,7 @@ mod on_commit_db_tests {
         let inv: Arc<dyn PageCacheInvalidator> = Arc::new(Recorder(urls.clone()));
 
         let res = rustango::atomic!(&pool, |_tx| {
-            invalidate_urls_on_commit(inv.clone(), "acme".to_owned(), vec!["/about".to_owned()]);
+            invalidate_urls_on_commit(inv.clone(), TenantSlug::new(1, "acme"), vec!["/about".to_owned()]);
             assert_eq!(
                 rustango::sql::on_commit_pending(),
                 1,

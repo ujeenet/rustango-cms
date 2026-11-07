@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "Styleguide — CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ "Styleguide" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Styleguide" | translate(locale=LANG) }}{% endblock %}
 
 {% block description %}

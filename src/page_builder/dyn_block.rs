@@ -178,10 +178,6 @@ impl Block for DynBlockDef {
     }
 }
 
-/// Template-free fallback render: a `<section>` wrapping one `<div>` per
-/// field, class-hooked (`pb-group--<type>`, `pb-field--<name>`) so hosts
-/// can style without templates. Nested arrays (from any nested stream
-/// values) recurse through [`prerender_with`].
 /// A block field as the [`crate::widget::Widget`] the value renderer reads.
 fn as_widget(
     name: &str,
@@ -192,6 +188,10 @@ fn as_widget(
     crate::widget::Widget::new(kind, name, label).with_options(options.iter().cloned())
 }
 
+/// Template-free fallback render: a `<section>` wrapping one `<div>` per
+/// field, class-hooked (`pb-group--<type>`, `pb-field--<name>`) so hosts
+/// can style without templates. Nested arrays (from any nested stream
+/// values) recurse through [`crate::block::render::prerender_stream`].
 fn generic_render(def: &DynBlockDef, value: &Value, ctx: &BlockRenderCtx<'_>) -> String {
     let obj = value.as_object();
     let mut out = format!(

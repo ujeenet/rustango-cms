@@ -1,0 +1,22 @@
+{#- Cards: a grid of cards (`value.cards`, `card` items). A card links
+    through its link text, or through its title when it has a link but no
+    link text. Unstyled: the site's stylesheet lays out the grid. -#}
+<section class="rcms-block-cards rcms-block-cards--{% if value.columns in ['2', '4'] %}{{ value.columns }}{% else %}3{% endif %}">
+    {%- if value.heading %}<h2 class="rcms-block-cards__heading">{{ value.heading }}</h2>{% endif %}
+    <ul class="rcms-block-cards__list">
+    {%- for entry in value.cards | default(value=[]) %}
+        {%- if entry.type == "card" and entry.value %}
+        {%- set c = entry.value %}
+        {%- set href = c.url | default(value="") | safe_href %}
+        <li class="rcms-card">
+            {%- if c.image %}<img class="rcms-card__image" src="{{ rcms_image_url(media_id=c.image, filter='fill-800x500') }}" alt="" loading="lazy">{% endif %}
+            <div class="rcms-card__body">
+                <h3 class="rcms-card__title">{% if href and not c.link_label %}<a href="{{ href }}">{{ c.title | default(value="") }}</a>{% else %}{{ c.title | default(value="") }}{% endif %}</h3>
+                {%- if c.text %}<p class="rcms-card__text">{{ c.text }}</p>{% endif %}
+                {%- if href and c.link_label %}<a class="rcms-card__link" href="{{ href }}">{{ c.link_label }}</a>{% endif %}
+            </div>
+        </li>
+        {%- endif %}
+    {%- endfor %}
+    </ul>
+</section>

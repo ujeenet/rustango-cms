@@ -26,6 +26,11 @@ pages = [
 ]
 
 [[section]]
+title = "Themes"
+slug = "themes"
+pages = ["themes.md"]
+
+[[section]]
 title = "Build a ceramics shop"
 slug = "shop"
 pages = [
@@ -48,6 +53,7 @@ pages = [
     "shop-ai-agent.md",
     "shop-dev-templates.md",
     "shop-dev-helper-traits.md",
+    "shop-dev-admin-screens.md",
     "shop-dev-headless.md",
     "shop-dev-headless-preview.md",
 ]

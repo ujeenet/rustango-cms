@@ -47,7 +47,7 @@
     </script>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}{{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}</title>
+    <title>{% block title %}{{ site_name | default(value="CMS Admin") }}{% endblock %}</title>
     {% include "rcms_admin/_brand_icons.html" %}
     {# Fonts — Hanken Grotesk for UI + Literata for editor body
        surfaces. The per-tenant `theme_font_url` (loaded second)
@@ -80,26 +80,18 @@
 
     <aside class="rcms-sidebar">
         <div class="rcms-sidebar-brand has-logo">
-            {# #199 — per-tenant logo. Falls back to the brand name
-               text when no logo is uploaded. #}
-            {% if branding_logo_url %}
-                <a href="{{ url(name='rcms-admin:dashboard') }}" class="rcms-sidebar-brand-logo" aria-label="{{ brand_name | default(value='Rustango CMS') }}">
-                    {# Explicit height (not just max-height): a block img with
-                       only max-height collapses to 0×0 inside the flex
-                       `.sidebar-brand`. width:auto keeps the aspect ratio;
-                       object-fit:contain avoids distortion if max-width clamps. #}
-                    <img src="{{ branding_logo_url }}" alt="{{ brand_name | default(value='Rustango CMS') }}"
-                         class="rcms-maxw-full rcms-block" style="height: 48px; width: auto; object-fit: contain;">
-                </a>
-            {% else %}
-                {# No tenant logo: the Rustango CMS icon, light or dark with the theme. #}
-                <a href="{{ url(name='rcms-admin:dashboard') }}" class="rcms-sidebar-brand-mark" aria-hidden="true" tabindex="-1">
-                    <img src="/cms-admin/static/brand/icon-light.png?v={{ cms_asset_version() }}" alt="" class="rcms-brand-for-light" width="36" height="36">
-                    <img src="/cms-admin/static/brand/icon-dark.png?v={{ cms_asset_version() }}" alt="" class="rcms-brand-for-dark" width="36" height="36">
-                </a>
-                <h1>{{ brand_name | default(value="Rustango CMS") }}</h1>
-            {% endif %}
-            <div class="rcms-tenant">{{ tenant_slug | default(value="") }}</div>
+            {#- The site's mark and name: the logo uploaded under Settings →
+                Branding, else the Rustango CMS icon (light or dark with the
+                theme), always beside the site name. -#}
+            <a href="{{ url(name='rcms-admin:dashboard') }}" class="rcms-sidebar-brand-mark" aria-hidden="true" tabindex="-1">
+                {%- if branding_logo_url %}
+                <img src="{{ branding_logo_url }}" alt="" width="36" height="36">
+                {%- else %}
+                <img src="/cms-admin/static/brand/icon-light.png?v={{ cms_asset_version() }}" alt="" class="rcms-brand-for-light" width="36" height="36">
+                <img src="/cms-admin/static/brand/icon-dark.png?v={{ cms_asset_version() }}" alt="" class="rcms-brand-for-dark" width="36" height="36">
+                {%- endif %}
+            </a>
+            <h1>{{ site_name | default(value="Rustango CMS") }}</h1>
             {# #271 — collapse / expand toggle. Sits at the top of
                the sidebar (right of the brand); clicking shrinks the
                sidebar to an icons-only rail
@@ -371,6 +363,11 @@
                 <span class="material-symbols-rounded">code_blocks</span> {{ "Templates" | translate(locale=LANG) }}
             </a>
             {% endif %}
+            {% if not sidebar_gating or user_is_superuser %}
+            <a href="{{ url(name='rcms-admin:site-theme') }}" class="rcms-sidebar-link{% if active_tab == "site-theme" %} active{% endif %}">
+                <span class="material-symbols-rounded">palette</span> {{ "Site theme" | translate(locale=LANG) }}
+            </a>
+            {% endif %}
             <a href="{{ url(name='rcms-admin:site-settings:list') }}" class="rcms-sidebar-link{% if active_tab == "site-settings" %} active{% endif %}">
                 <span class="material-symbols-rounded">settings_applications</span> {{ "Site settings" | translate(locale=LANG) }}
             </a>
@@ -459,6 +456,10 @@
                     <span class="rcms-text-xs">{{ user_display_name | default(value=user_username) }}</span>
                 </a>
             {% endif %}
+            {#- Back to the public site, at its home page. -#}
+            <a href="/" class="rcms-sidebar-logout" title="{{ site_name | default(value='') }}">
+                <span class="material-symbols-rounded">home</span> {{ "View site" | translate(locale=LANG) }}
+            </a>
             <a href="{{ url(name='rcms-admin:account') }}" class="rcms-sidebar-logout" title="{{ "Appearance, text size, accessibility" | translate(locale=LANG) }}">
                 <span class="material-symbols-rounded">tune</span> {{ "Preferences" | translate(locale=LANG) }}
             </a>

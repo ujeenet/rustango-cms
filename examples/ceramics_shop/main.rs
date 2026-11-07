@@ -39,6 +39,7 @@
 //! `examples/ceramics_shop/headless/`.
 
 mod models;
+mod stockists;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -59,12 +60,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = std::any::type_name::<models::Workshop>();
     let _ = std::any::type_name::<models::Information>();
     let _ = std::any::type_name::<models::Clay>();
+    let _ = std::any::type_name::<rustango_cms::CmsAdminPage<stockists::Stockist>>();
+    let _ = std::any::type_name::<stockists::StockistImport>();
     // The Form Builder's `form` block, so the order form can be placed on pages.
     let _ = std::any::type_name::<rustango_cms::forms::block::FormBlock>();
 
     let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/ceramics_shop");
     let mut tera = Tera::new(&format!("{}/templates/**/*.html", base.display()))?;
     rustango_cms::admin::register_templates(&mut tera)?;
+    // Admin pages of our own extend the admin's base template, so they are
+    // added after it, and live outside `templates/` (the public glob).
+    tera.add_raw_template(
+        "stockist_import.html",
+        include_str!("templates_admin/stockist_import.html"),
+    )?;
     rustango_cms::block::tera_helpers::register_tera_function(&mut tera);
     // `shop_css_version()` — a hash of the compiled stylesheet, so a rebuilt
     // `static/shop.css` gets a new URL instead of the browser's cached copy.

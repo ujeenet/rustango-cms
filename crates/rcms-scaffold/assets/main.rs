@@ -43,6 +43,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if std::env::args().nth(1).as_deref() == Some(quickstart::COMMAND) {
         return quickstart::run();
     }
+    // `theme pack|install|check`: theme packages (see docs/themes.md).
+    if std::env::args().nth(1).as_deref() == Some(rustango_cms::starter::cli::COMMAND) {
+        let args: Vec<String> = std::env::args().skip(2).collect();
+        return rustango_cms::starter::cli::run(&args).await;
+    }
 
     // Public templates live in ./templates; the bundled admin templates
     // are registered on top by `register_templates`.
@@ -90,7 +95,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/login",
         ),
     );
-    let api = cms_admin.merge(rustango_cms::router(tera));
+    // Each site can have its own templates in `templates_tenants/<site>/`,
+    // falling back to `templates/`. The admin's Templates editor and
+    // Site theme screen (theme packages) write there, live, no restart.
+    let tenant_templates = Arc::new(
+        rustango_cms::tenant_templates::TenantTemplates::new(
+            tera.clone(),
+            site_dir().join(rustango_cms::tenant_templates::DEFAULT_DIR),
+        )
+        .with_global_dir(site_dir().join("templates")),
+    );
+    rustango_cms::tenant_templates::install(Arc::clone(&tenant_templates));
+    let public = rustango_cms::PublicRouter::new(tera)
+        .tenant_templates_shared(tenant_templates)
+        .build();
+    // `/__media__/…`: uploaded images (resized on demand) and files. Every
+    // `rcms_image_url` and image block points here; without it they 404.
+    let api = cms_admin
+        .merge(rustango_cms::rendition_route::router())
+        .merge(public);
 
     // The bundled admin forms emit `{{ csrf_token | csrf_input | safe }}`;
     // wire the matching CSRF middleware so tokens are validated on submit.
@@ -111,7 +134,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     rustango::manage::Cli::new()
         .tenancy()
-        .api(api)
+        // A site can also live under a path on the main domain
+        // (`create-tenant acme --path-prefix /acme` → example.com/acme/).
+        .tenant_header(rustango_cms::path_prefix::tenant_header())
+        .api(rustango_cms::path_prefix::serve(api))
         .migrations_dir(migrations_dir)
         .with_csrf_config(csrf_cfg)
         .seed(|registry| {

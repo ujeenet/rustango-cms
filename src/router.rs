@@ -705,11 +705,41 @@ pub(crate) fn host_header(headers: &axum::http::HeaderMap) -> &str {
         .map_or("", |h| h.split(':').next().unwrap_or(""))
 }
 
+/// The context the public router's hooks run with.
+fn hook_ctx<'a>(tenant: &'a Tenant, viewer: Option<&rustango::tenancy::auth::User>) -> crate::hooks::HookCtx<'a> {
+    crate::hooks::HookCtx::new(tenant.pool(), &tenant.org.slug, viewer.and_then(|u| u.id.get().copied()))
+}
+
 async fn handle_page_request(
     tenant: Tenant,
     State(state): State<PublicState>,
     rustango::extractors::SessionUser(session_user): rustango::extractors::SessionUser,
     rustango::tenancy::member_auth::CurrentMember(member): rustango::tenancy::member_auth::CurrentMember,
+    headers: axum::http::HeaderMap,
+    uri: Uri,
+) -> Response {
+    // An admin (not a member session) gets the admin bar, and with "Show
+    // templates on the site" turned on, the template inspector.
+    let admin = if member.is_none() { session_user.as_ref() } else { None };
+    let inspect = admin.is_some_and(crate::template_inspector::wanted);
+    let bar = admin.map(|_| crate::admin_bar::Labels {
+        edit: crate::admin::tr(&headers, "Edit this page"),
+        admin: crate::admin::tr(&headers, "Admin"),
+        hide: crate::admin::tr(&headers, "Show or hide the admin bar"),
+        templates: crate::admin::tr(&headers, "Templates"),
+    });
+    crate::admin_bar::scope(
+        bar,
+        crate::template_inspector::scope(inspect, serve_page(tenant, state, session_user, member, headers, uri)),
+    )
+    .await
+}
+
+async fn serve_page(
+    tenant: Tenant,
+    state: PublicState,
+    session_user: Option<rustango::tenancy::auth::User>,
+    member: Option<rustango::tenancy::auth::User>,
     headers: axum::http::HeaderMap,
     uri: Uri,
 ) -> Response {
@@ -805,7 +835,7 @@ async fn handle_page_request(
             }
             // #107 — plugin `before_serve_page` hook. First handler
             // to return `Some(Response)` short-circuits the renderer.
-            if let Some(resp) = crate::hooks::fire_before_serve_page(&page, &headers) {
+            if let Some(resp) = crate::hooks::fire_before_serve_page(hook_ctx(&tenant, viewer), &page, &headers).await {
                 return resp;
             }
             // #401 — stash the per-page language-switcher data for the
@@ -865,7 +895,7 @@ async fn handle_page_request(
                     {
                         return styled_denial(&tenant, &state, blocked, locale_code.as_deref()).await;
                     }
-                    if let Some(resp) = crate::hooks::fire_before_serve_page(&page, &headers) {
+                    if let Some(resp) = crate::hooks::fire_before_serve_page(hook_ctx(&tenant, viewer), &page, &headers).await {
                         return resp;
                     }
                     let tera = state.tera_for(&tenant.org.slug).await;
@@ -887,7 +917,9 @@ async fn handle_page_request(
                         state.fragment_cache.as_ref().map(|(c, ttl)| (c, *ttl)),
                     )
                     .await;
-                    let resp = if resp.status().is_server_error() {
+                    // A route whose record is missing answers a bare 404
+                    // (`RouteOutcome::NotFound`): serve the site's 404 page.
+                    let resp = if resp.status().is_server_error() || resp.status() == StatusCode::NOT_FOUND {
                         crate::error_pages::respond(
                             &tenant,
                             &state,
@@ -1047,6 +1079,9 @@ async fn fallthrough_to_redirect(
                 crate::redirect::serve_wildcard(tenant, cache, raw_path, query).await
             {
                 return resp;
+            }
+            if raw_path.trim_matches('/').is_empty() && crate::error_pages::site_is_empty(tenant.pool()).await {
+                return crate::error_pages::empty_site_response();
             }
             crate::error_pages::respond(tenant, state, StatusCode::NOT_FOUND, locale_code).await
         }

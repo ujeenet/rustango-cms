@@ -125,3 +125,32 @@ fn block_field_constructors_round_trip() {
         panic!("expected Repeat variant");
     }
 }
+
+// ---- #937: a site block replaces the built-in of the same name ------
+
+#[derive(Default)]
+struct SiteRichText;
+impl Block for SiteRichText {
+    fn type_name(&self) -> &'static str {
+        "rich_text"
+    }
+    fn verbose_name(&self) -> &'static str {
+        "Site rich text"
+    }
+    fn fields(&self) -> Vec<BlockField> {
+        vec![BlockField::widget("html", "Text", WidgetKind::Textarea)]
+    }
+}
+register_block!(SiteRichText);
+
+#[test]
+fn a_site_block_replaces_the_builtin_of_the_same_name() {
+    let b = rustango_cms::find_block("rich_text").expect("rich_text resolves");
+    assert_eq!(b.verbose_name(), "Site rich text", "the site's block wins over the built-in");
+    let named: Vec<_> = rustango_cms::registered_blocks().filter(|b| b.type_name() == "rich_text").collect();
+    assert_eq!(named.len(), 1, "the replaced built-in is not listed");
+    assert!(
+        rustango_cms::block::registry::duplicate_block_names().is_empty(),
+        "an override is not a duplicate"
+    );
+}

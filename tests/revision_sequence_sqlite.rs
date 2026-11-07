@@ -35,9 +35,9 @@ async fn file_pool(tag: &str) -> Pool {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(&pool).await.expect("page type");
+    pt.save(&pool).await.expect("page type");
     for id in [3, 7, 8] {
-        page(id).insert_pool(&pool).await.expect("page");
+        page(id).insert(&pool).await.expect("page");
     }
     pool
 }
@@ -100,7 +100,7 @@ async fn raw_revision(pool: &Pool, page_id: i64, sequence: i32) -> Result<(), ru
         created_by: None,
         created_at: Auto::Unset,
     };
-    r.insert_pool(pool).await
+    r.insert(pool).await
 }
 
 #[tokio::test]

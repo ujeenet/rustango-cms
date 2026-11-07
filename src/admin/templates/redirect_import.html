@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "Import redirects" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block title %}{{ "Import redirects" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Import redirects" | translate(locale=LANG) }}{% endblock %}
 
 {% block topbar_actions %}

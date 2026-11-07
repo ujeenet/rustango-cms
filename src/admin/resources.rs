@@ -304,7 +304,7 @@ pub fn all_resources() -> Vec<AdminResource> {
                 label: handler.label().to_owned(),
                 codename_prefix: prefix.to_owned(),
                 section: ResourceSection::Custom,
-                actions: VIEW_EDIT,
+                actions: handler.permission_actions(),
             });
         }
     }

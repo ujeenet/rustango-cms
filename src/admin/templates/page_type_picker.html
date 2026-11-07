@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ "Choose a page type" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block title %}{{ "Choose a page type" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}
 {% if parent %}{{ "Add child under" | translate(locale=LANG) }} "{{ parent.title }}"{% else %}{{ "New root page" | translate(locale=LANG) }}{% endif %}
 {% endblock %}

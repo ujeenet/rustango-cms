@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ model_label }} — CMS Admin{% endblock %}
+{% block title %}{{ model_label }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ model_label }}{% endblock %}
 
 {% block description %}
@@ -31,5 +31,6 @@
         </tbody>
     </table>
     </div>
+    {% include "rcms_admin/_pagination.html" %}
 {% endif %}
 {% endblock %}

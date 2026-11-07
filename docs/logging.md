@@ -1,4 +1,4 @@
-# Logging in rustango-cms
+# Logging in Rustango-CMS
 
 `#[rustango::main]` auto-installs a `tracing_subscriber::fmt` subscriber
 with `EnvFilter` defaulting to `info,sqlx=warn`. This page covers what

@@ -267,28 +267,28 @@ impl StructConfig {
     }
 }
 
-fn string_lit(meta: &syn::meta::ParseNestedMeta<'_>) -> Result<String> {
+pub(crate) fn string_lit(meta: &syn::meta::ParseNestedMeta<'_>) -> Result<String> {
     let value = meta.value()?;
     let lit: syn::LitStr = value.parse()?;
     Ok(lit.value())
 }
 
 /// One `#[field(...)]`-tagged column.
-struct FieldConfig {
+pub(crate) struct FieldConfig {
     /// Rust field name (Ident).
-    name: syn::Ident,
+    pub(crate) name: syn::Ident,
     /// Original Rust type — used to pick the form-parse + value
     /// stringifier.
-    ty: Type,
+    pub(crate) ty: Type,
     /// `WidgetKind` variant identifier (e.g. `Markdown`).
-    widget: syn::Ident,
-    label: String,
+    pub(crate) widget: syn::Ident,
+    pub(crate) label: String,
     help: Option<String>,
     placeholder: Option<String>,
-    required: bool,
+    pub(crate) required: bool,
     /// `#[field(default = "…")]` — used as the widget's `value` when
     /// no row exists yet.
-    default_value: Option<String>,
+    pub(crate) default_value: Option<String>,
     min: Option<TokenStream>,
     max: Option<TokenStream>,
     /// `#[field(step = "0.1")]` — kept as a literal string so users
@@ -309,7 +309,7 @@ impl FieldConfig {
     /// Parse one struct field. Returns `Ok(None)` when there's no
     /// `#[field(...)]` attr — that column is data-only (e.g. `id`,
     /// `page_id`, `updated_at`) and doesn't surface in the editor.
-    fn parse(field: &syn::Field) -> Result<Option<Self>> {
+    pub(crate) fn parse(field: &syn::Field) -> Result<Option<Self>> {
         let mut found_attr = None;
         for attr in &field.attrs {
             if attr.path().is_ident("field") {
@@ -479,6 +479,15 @@ impl Parse for AllowedName {
 }
 
 /// Top-level expand.
+/// Names the page editor's own form already uses (`PageForm` in
+/// rustango-cms, plus its action and CSRF fields).
+const PAGE_FORM_FIELDS: &[&str] = &[
+    "title", "slug", "page_type_id", "status", "action", "seo_title", "seo_description",
+    "robots_index", "sitemap_priority", "show_in_menus", "parent_id", "theme_id", "go_live_at",
+    "expire_at", "preview_path", "template_override", "og_title", "og_description",
+    "og_image_media_id", "twitter_card", "tags", "categories", "_action", "_csrf",
+];
+
 pub fn expand(input: DeriveInput) -> Result<TokenStream> {
     let cfg = StructConfig::parse(&input)?;
     let ident = &input.ident;
@@ -505,6 +514,22 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream> {
             ))
         }
     };
+
+    // The page editor posts its own fields in the same form; an extension
+    // field with one of their names would overwrite it (a `status` field
+    // silently unpublished the page on every save).
+    for f in &fields {
+        let name = f.name.to_string();
+        if PAGE_FORM_FIELDS.contains(&name.as_str()) {
+            return Err(syn::Error::new(
+                f.name.span(),
+                format!(
+                    "#[field] `{name}` clashes with the page editor's own `{name}` field; \
+                     rename it (keep the column with #[rustango(column = \"{name}\")])"
+                ),
+            ));
+        }
+    }
 
     let app = cfg.app.as_deref().unwrap();
     let type_name = &cfg.type_name;
@@ -726,6 +751,25 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream> {
         }
     };
 
+    // #934 — the hooks run on the page's stored row, not on the
+    // registered (default) handler, so `self.<field>` is the page's value.
+    let stored_row = if has_ext {
+        quote! {
+            {
+                use ::rustango::core::Column as _;
+                use ::rustango::sql::FetcherPool as _;
+                let __pid = page.id.get().copied().unwrap_or_default();
+                #ident::objects()
+                    .where_(#ident::page_id.eq(__pid))
+                    .fetch(pool)
+                    .await?
+                    .into_iter()
+                    .next()
+            }
+        }
+    } else {
+        quote! { ::core::option::Option::<#ident>::None }
+    };
     Ok(quote! {
         #[::rustango_cms::__private::async_trait::async_trait]
         impl ::rustango_cms::PageTypeHandler for #ident {
@@ -771,6 +815,95 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream> {
                 <Self as ::rustango_cms::PageTypeOverrides>::extra_tabs(self, pool, page_id).await
             }
 
+            async fn inline_panels(
+                &self,
+                pool: &::rustango_cms::__private::Pool,
+                page_id: i64,
+            ) -> ::core::result::Result<
+                ::std::vec::Vec<::rustango_cms::InlinePanelSpec>,
+                ::rustango_cms::__private::ExecError,
+            > {
+                <Self as ::rustango_cms::PageTypeOverrides>::inline_panels(self, pool, page_id).await
+            }
+
+            async fn load_inline_panel(
+                &self,
+                pool: &::rustango_cms::__private::Pool,
+                page_id: i64,
+                panel_name: &str,
+            ) -> ::core::result::Result<
+                ::std::vec::Vec<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+                ::rustango_cms::__private::ExecError,
+            > {
+                <Self as ::rustango_cms::PageTypeOverrides>::load_inline_panel(self, pool, page_id, panel_name).await
+            }
+
+            async fn save_inline_panel(
+                &self,
+                pool: &::rustango_cms::__private::Pool,
+                page_id: i64,
+                panel_name: &str,
+                rows: &[::serde_json::Map<::std::string::String, ::serde_json::Value>],
+            ) -> ::core::result::Result<(), ::rustango_cms::__private::ExecError> {
+                <Self as ::rustango_cms::PageTypeOverrides>::save_inline_panel(self, pool, page_id, panel_name, rows).await
+            }
+
+            async fn inline_rows(
+                &self,
+                pool: &::rustango_cms::__private::Pool,
+                page_id: i64,
+                panel: &str,
+            ) -> ::core::result::Result<
+                ::std::vec::Vec<::rustango_cms::InlineRowSummary>,
+                ::rustango_cms::__private::ExecError,
+            > {
+                <Self as ::rustango_cms::PageTypeOverrides>::inline_rows(self, pool, page_id, panel).await
+            }
+
+            async fn inline_row(
+                &self,
+                pool: &::rustango_cms::__private::Pool,
+                page_id: i64,
+                panel: &str,
+                row_id: ::core::option::Option<i64>,
+            ) -> ::core::result::Result<
+                ::core::option::Option<::serde_json::Map<::std::string::String, ::serde_json::Value>>,
+                ::rustango_cms::__private::ExecError,
+            > {
+                <Self as ::rustango_cms::PageTypeOverrides>::inline_row(self, pool, page_id, panel, row_id).await
+            }
+
+            async fn save_inline_row(
+                &self,
+                pool: &::rustango_cms::__private::Pool,
+                page_id: i64,
+                panel: &str,
+                row_id: ::core::option::Option<i64>,
+                values: &::serde_json::Map<::std::string::String, ::serde_json::Value>,
+            ) -> ::core::result::Result<::rustango_cms::InlineRowSaved, ::rustango_cms::__private::ExecError> {
+                <Self as ::rustango_cms::PageTypeOverrides>::save_inline_row(self, pool, page_id, panel, row_id, values).await
+            }
+
+            async fn delete_inline_row(
+                &self,
+                pool: &::rustango_cms::__private::Pool,
+                page_id: i64,
+                panel: &str,
+                row_id: i64,
+            ) -> ::core::result::Result<bool, ::rustango_cms::__private::ExecError> {
+                <Self as ::rustango_cms::PageTypeOverrides>::delete_inline_row(self, pool, page_id, panel, row_id).await
+            }
+
+            async fn reorder_inline_rows(
+                &self,
+                pool: &::rustango_cms::__private::Pool,
+                page_id: i64,
+                panel: &str,
+                ids: &[i64],
+            ) -> ::core::result::Result<(), ::rustango_cms::__private::ExecError> {
+                <Self as ::rustango_cms::PageTypeOverrides>::reorder_inline_rows(self, pool, page_id, panel, ids).await
+            }
+
             // #246 — handler-injected template ctx. Forwards to
             // `PageTypeOverrides::public_context`; default returns
             // an empty map.
@@ -782,7 +915,11 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream> {
                 ::serde_json::Map<::std::string::String, ::serde_json::Value>,
                 ::rustango_cms::__private::ExecError,
             > {
-                <Self as ::rustango_cms::PageTypeOverrides>::public_context(self, pool, page).await
+                let __row: ::core::option::Option<#ident> = #stored_row;
+                <Self as ::rustango_cms::PageTypeOverrides>::public_context(
+                    __row.as_ref().unwrap_or(self), pool, page,
+                )
+                .await
             }
 
             // Children listing. Forwards to
@@ -825,8 +962,19 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream> {
                 ::serde_json::Map<::std::string::String, ::serde_json::Value>,
                 ::rustango_cms::__private::ExecError,
             > {
-                <Self as ::rustango_cms::PageTypeOverrides>::route_context(self, pool, page, matched)
-                    .await
+                let __row: ::core::option::Option<#ident> = #stored_row;
+                <Self as ::rustango_cms::PageTypeOverrides>::route_context(
+                    __row.as_ref().unwrap_or(self), pool, page, matched,
+                )
+                .await
+            }
+
+            fn route_outcome(
+                &self,
+                matched: &::rustango_cms::routable::RouteMatch,
+                route_ctx: &::serde_json::Map<::std::string::String, ::serde_json::Value>,
+            ) -> ::rustango_cms::routable::RouteOutcome {
+                <Self as ::rustango_cms::PageTypeOverrides>::route_outcome(self, matched, route_ctx)
             }
 
             #m2m_relations_method
@@ -852,11 +1000,11 @@ fn emit_widgets_body(
     let ext_part = if has_ext {
         let with_row: Vec<TokenStream> = fields
             .iter()
-            .map(|f| emit_widget_call(struct_ident, f, true))
+            .map(|f| emit_widget_call(f, emit_value_stringify(&f.ty, &f.name)))
             .collect::<Result<_>>()?;
         let no_row: Vec<TokenStream> = fields
             .iter()
-            .map(|f| emit_widget_call(struct_ident, f, false))
+            .map(|f| emit_widget_call(f, default_value_expr(f)))
             .collect::<Result<_>>()?;
         quote! {
             let row: ::core::option::Option<#struct_ident> = #struct_ident::objects()
@@ -940,27 +1088,22 @@ fn emit_widgets_body(
     })
 }
 
-/// Emit one Widget constructor + builder chain.
-fn emit_widget_call(
-    _struct_ident: &syn::Ident,
-    f: &FieldConfig,
-    with_row: bool,
-) -> Result<TokenStream> {
+/// The widget value for a form with no row yet: the field's
+/// `#[field(default = …)]`, else empty.
+fn default_value_expr(f: &FieldConfig) -> TokenStream {
+    match &f.default_value {
+        Some(d) => quote! { ::std::string::String::from(#d) },
+        None => quote! { ::std::string::String::new() },
+    }
+}
+
+/// Emit one Widget constructor + builder chain, pushed onto `widgets`.
+/// `value_expr` is the pre-fill value, an expression giving a `String`.
+pub(crate) fn emit_widget_call(f: &FieldConfig, value_expr: TokenStream) -> Result<TokenStream> {
     let name_str = f.name.to_string();
     let label = &f.label;
     let widget_ident = &f.widget;
     let widget_str = widget_ident.to_string();
-
-    // Pre-compute the per-field value-stringification used by the
-    // editor's "pre-fill" path. Differs per Rust type.
-    let value_expr = if with_row {
-        emit_value_stringify(&f.ty, &f.name)
-    } else {
-        match &f.default_value {
-            Some(d) => quote! { ::std::string::String::from(#d) },
-            None => quote! { ::std::string::String::new() },
-        }
-    };
 
     let is_stream = widget_str == "Stream";
     let is_custom = widget_str == "Custom";
@@ -1234,14 +1377,14 @@ fn emit_save_body(
                     .next();
                 if let ::core::option::Option::Some(mut row) = existing {
                     #(#assigns_update)*
-                    row.save_pool(pool).await?;
+                    row.save(pool).await?;
                 } else {
                     let mut row = #struct_ident {
                         page_id,
                         #(#assigns_insert)*
                         ..::core::default::Default::default()
                     };
-                    row.save_pool(pool).await?;
+                    row.save(pool).await?;
                 }
             }
         }
@@ -1331,7 +1474,7 @@ fn emit_form_parse(ty: &Type, key: &str) -> TokenStream {
 }
 
 #[derive(Debug, Clone, Copy)]
-enum TypeCat {
+pub(crate) enum TypeCat {
     String,
     OptionString,
     Int,
@@ -1342,7 +1485,7 @@ enum TypeCat {
     Unknown,
 }
 
-fn classify_type(ty: &Type) -> TypeCat {
+pub(crate) fn classify_type(ty: &Type) -> TypeCat {
     let last = path_last_segment(ty);
     match last.as_deref() {
         Some("String") => TypeCat::String,
@@ -1395,7 +1538,7 @@ fn option_inner(ty: &Type) -> Option<String> {
 /// `"categories"` → `"Categories"`, `"featured_authors"` → `"Featured
 /// Authors"`. Used as the SnippetM2M widget label when the author
 /// declares the relation at the struct level (no per-field label).
-fn humanize_label(s: &str) -> String {
+pub(crate) fn humanize_label(s: &str) -> String {
     s.split(['_', '-', ' '])
         .filter(|w| !w.is_empty())
         .map(|w| {

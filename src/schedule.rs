@@ -80,7 +80,9 @@ where
                 continue;
             }
         };
-        match crate::page::run_schedule_sweep_and_purge(&pool, &org.slug, Arc::clone(invalidator)).await {
+        // Registry orgs always carry an id; one without cannot be keyed.
+        let Some(tenant) = rustango::tenancy::TenantSlug::of(&org) else { continue };
+        match crate::page::run_schedule_sweep_and_purge(&pool, &tenant, Arc::clone(invalidator)).await {
             Ok(r) if r.published + r.expired > 0 => tracing::info!(
                 target: "rustango_cms::schedule",
                 tenant = %org.slug, published = r.published, expired = r.expired,

@@ -1,0 +1,8 @@
+{% import "_macros.html" as m %}
+{#- The "Jumbo box" content block: one message, large, on a coloured box,
+    with an optional button. -#}
+<section class="jumbo jumbo--{% if value.style in ['soft', 'dark'] %}{{ value.style }}{% else %}accent{% endif %}">
+  <h2 class="jumbo__heading">{{ value.heading }}</h2>
+  {%- if value.text %}<p class="jumbo__text">{{ value.text }}</p>{% endif %}
+  {{ m::button(label=value.button_label | default(value=""), url=value.url | default(value="")) | safe }}
+</section>

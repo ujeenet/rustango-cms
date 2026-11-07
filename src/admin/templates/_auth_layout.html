@@ -17,10 +17,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block page_title %}{{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}</title>
+<title>{% block page_title %}{{ site_name | default(value="CMS Admin") }}{% endblock %}</title>
 <link rel="stylesheet" href="/cms-admin/static/fonts.css?v={{ cms_asset_version() }}">
 <link rel="stylesheet" href="/cms-admin/static/cms.css?v={{ cms_asset_version() }}">
 {% include "rcms_admin/_brand_icons.html" %}
+{#- #918 — the tenant's admin theme, as in the admin itself. -#}
+{{ theme_css | default(value="") | safe }}
 {% block extra_head %}{% endblock %}
 </head>
 <body class="rcms-admin rcms-auth-body">
@@ -32,9 +34,9 @@
             {% if branding_logo_url or branding_favicon_url %}
             <span class="rcms-brand-icon rcms-brand-icon--img">
                 {% if branding_logo_url %}
-                    <img class="rcms-brand-icon-img" src="{{ branding_logo_url }}" alt="{{ brand_name | default(value='CMS Admin') }}">
+                    <img class="rcms-brand-icon-img" src="{{ branding_logo_url }}" alt="{{ site_name | default(value='CMS Admin') }}">
                 {% else %}
-                    <img class="rcms-brand-icon-img" src="{{ branding_favicon_url }}" alt="{{ brand_name | default(value='CMS Admin') }}">
+                    <img class="rcms-brand-icon-img" src="{{ branding_favicon_url }}" alt="{{ site_name | default(value='CMS Admin') }}">
                 {% endif %}
             </span>
             {% else %}{% block brand_mark %}
@@ -44,7 +46,7 @@
             </span>
             {% endblock %}{% endif %}
             <div>
-                <div class="rcms-brand-name">{% block brand_name %}{{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}</div>
+                <div class="rcms-brand-name">{% block brand_name %}{{ site_name | default(value="CMS Admin") }}{% endblock %}</div>
                 <div class="rcms-brand-sub">{% block brand_sub %}{{ "Sign in to manage your content" | translate(locale=LANG) }}{% endblock %}</div>
             </div>
         </div>

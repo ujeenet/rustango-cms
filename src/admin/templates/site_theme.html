@@ -1,0 +1,65 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Site theme" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
+{% block heading %}{{ "Site theme" | translate(locale=LANG) }}{% endblock %}
+{% block description %}{{ "Download this site's look as a theme package, or install a package to change how the site looks." | translate(locale=LANG) }}{% endblock %}
+{% block body %}
+{% if not_configured %}
+<div class="rcms-card rcms-maxw-760">
+    <div class="rcms-empty">
+        <p><strong>{{ "Per-tenant templates are not configured" | translate(locale=LANG) }}</strong></p>
+        <p class="rcms-hint">{{ "Themes are stored as this site's own templates. The host application has not enabled a template directory for sites, so themes can't be installed here." | translate(locale=LANG) }}</p>
+    </div>
+</div>
+{% else %}
+<div class="rcms-card rcms-maxw-760 rcms-mb-4">
+    <h2 class="rcms-m-0 rcms-mb-3 rcms-text-lg">{{ "Current look" | translate(locale=LANG) }}</h2>
+    <dl class="rcms-kv rcms-mb-3">
+        <dt>{{ "Theme" | translate(locale=LANG) }}</dt>
+        <dd>{% if applied and applied.theme %}{{ applied.theme }}{% else %}{{ "None installed" | translate(locale=LANG) }}{% endif %}</dd>
+        <dt>{{ "Colours" | translate(locale=LANG) }}</dt>
+        <dd>{{ colours | default(value="—") }}</dd>
+        <dt>{{ "Templates" | translate(locale=LANG) }}</dt>
+        <dd>{{ "{n} customised for this site" | translate(locale=LANG, n=customised_count) }}</dd>
+    </dl>
+    {% if can_restore %}
+    <form method="post" action="{{ url(name='rcms-admin:site-theme:restore') }}"
+          onsubmit="return confirm('{{ "Swap back to the templates and colours from before the last install?" | translate(locale=LANG) }}');">
+        {{ csrf_token | csrf_input | safe }}
+        <button type="submit" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+            <span class="material-symbols-rounded sm">undo</span> {{ "Restore previous look" | translate(locale=LANG) }}
+        </button>
+    </form>
+    {% endif %}
+</div>
+
+<form method="get" action="{{ url(name='rcms-admin:site-theme:download') }}" class="rcms-card rcms-maxw-760 rcms-mb-4">
+    <h2 class="rcms-m-0 rcms-mb-3 rcms-text-lg">{{ "Download as a theme" | translate(locale=LANG) }}</h2>
+    <p class="rcms-hint">{{ "A .zip with this site's templates, page types, colours and site settings. Install it on another site to give it the same look." | translate(locale=LANG) }}</p>
+    <label class="rcms-checkbox-option">
+        <input type="checkbox" name="pages" value="1">
+        {{ "Include pages and menus (images are left out)" | translate(locale=LANG) }}
+    </label>
+    <div class="rcms-form-actions">
+        <button type="submit" class="rcms-btn">
+            <span class="material-symbols-rounded sm">download</span> {{ "Download" | translate(locale=LANG) }}
+        </button>
+    </div>
+</form>
+
+<form method="post" action="{{ url(name='rcms-admin:site-theme:upload') }}" enctype="multipart/form-data"
+      class="rcms-card rcms-maxw-760">
+    {{ csrf_token | csrf_input | safe }}
+    <h2 class="rcms-m-0 rcms-mb-3 rcms-text-lg">{{ "Install a theme" | translate(locale=LANG) }}</h2>
+    <div class="rcms-field">
+        <label for="theme-package">{{ "Theme package (.zip)" | translate(locale=LANG) }} <span class="rcms-req">*</span></label>
+        <input id="theme-package" type="file" name="package" required accept=".zip,application/zip">
+        <div class="rcms-hint">{{ "You'll see what changes before anything is installed. Only install packages from people you trust: a theme's templates run on this server." | translate(locale=LANG) }}</div>
+    </div>
+    <div class="rcms-form-actions">
+        <button type="submit" class="rcms-btn">
+            <span class="material-symbols-rounded sm">upload</span> {{ "Upload and preview" | translate(locale=LANG) }}
+        </button>
+    </div>
+</form>
+{% endif %}
+{% endblock %}

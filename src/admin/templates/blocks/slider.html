@@ -1,0 +1,25 @@
+{#- Slider: slides (`value.slides`, `slide` items) in a track that scrolls
+    sideways with snap points, so it works without JavaScript (swipe,
+    trackpad, keyboard). `data-rcms-slider` lets a site add previous/next
+    buttons. Style `slides` shows one at a time, `scroller` several. -#}
+<section class="rcms-block-slider rcms-block-slider--{% if value.style == 'scroller' %}scroller{% else %}slides{% endif %}" data-rcms-slider>
+    {%- if value.heading %}<h2 class="rcms-block-slider__heading">{{ value.heading }}</h2>{% endif %}
+    <div class="rcms-block-slider__track" tabindex="0" role="region" aria-label="{{ value.heading | default(value='Slides') }}">
+    {%- for entry in value.slides | default(value=[]) %}
+        {%- if entry.type == "slide" and entry.value %}
+        {%- set s = entry.value %}
+        {%- set href = s.url | default(value="") | safe_href %}
+        <figure class="rcms-slide{% if not s.image %} rcms-slide--plain{% endif %}">
+            {%- if s.image %}<img class="rcms-slide__image" src="{{ rcms_image_url(media_id=s.image, filter='width-1600') }}" alt="{{ s.alt | default(value='') }}" loading="lazy">{% endif %}
+            {%- if s.heading or s.text or (href and s.link_label) %}
+            <figcaption class="rcms-slide__caption">
+                {%- if s.heading %}<h3 class="rcms-slide__heading">{{ s.heading }}</h3>{% endif %}
+                {%- if s.text %}<p class="rcms-slide__text">{{ s.text }}</p>{% endif %}
+                {%- if href and s.link_label %}<a class="rcms-slide__link button" href="{{ href }}">{{ s.link_label }}</a>{% endif %}
+            </figcaption>
+            {%- endif %}
+        </figure>
+        {%- endif %}
+    {%- endfor %}
+    </div>
+</section>

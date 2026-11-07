@@ -91,7 +91,7 @@ pub async fn subscribe(
         comment_notifications: false,
         created_at: Auto::Unset,
     };
-    row.insert_pool(pool).await?;
+    row.insert(pool).await?;
     Ok(row)
 }
 
@@ -114,7 +114,7 @@ pub async fn unsubscribe(
         .await?;
     let mut removed = 0;
     for row in existing {
-        row.delete_pool(pool).await?;
+        row.delete(pool).await?;
         removed += 1;
     }
     Ok(removed)

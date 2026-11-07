@@ -1,0 +1,24 @@
+{% extends "rcms_admin/_base.html" %}
+{% block title %}Import stockists — CMS Admin{% endblock %}
+{% block heading %}Import stockists{% endblock %}
+
+{% block content %}
+{% if errors | length > 0 %}
+<div class="rcms-alert rcms-alert--error rcms-mb-3 rcms-maxw-760" role="alert">
+    <span class="material-symbols-rounded">error</span>
+    <div class="rcms-alert-body">{% for e in errors %}{{ e }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
+</div>
+{% endif %}
+<form method="post" action="/cms-admin/x/stockist-import" class="rcms-card rcms-maxw-760">
+    {{ csrf_token | csrf_input | safe }}
+    <div class="rcms-field">
+        <label for="lines">Stockists</label>
+        <textarea id="lines" name="lines" rows="10" placeholder="Café Lune, Le Mans, https://cafe-lune.example">{{ lines }}</textarea>
+        <div class="rcms-hint">One shop per line: the name, the city and (if it has one) the website, separated by commas.</div>
+    </div>
+    <div class="rcms-form-actions">
+        <a href="/cms-admin/x/stockists" class="rcms-btn rcms-btn-text">Cancel</a>
+        <button type="submit" class="rcms-btn"><span class="material-symbols-rounded sm">upload</span> Import</button>
+    </div>
+</form>
+{% endblock %}

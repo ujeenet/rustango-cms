@@ -112,6 +112,7 @@ pub async fn pages_in_category(
 /// Replace all of a page's assignments **within one taxonomy** with
 /// `category_ids` (order preserved), leaving other vocabularies' links
 /// intact. Diff-based — mirrors [`crate::page_snippet_m2m::replace_all`].
+/// Returns whether anything changed.
 ///
 /// # Errors
 /// Propagates query / write failures.
@@ -120,17 +121,19 @@ pub async fn replace_for_taxonomy(
     page_id: i64,
     taxonomy_id: i64,
     category_ids: &[i64],
-) -> Result<(), rustango::sql::ExecError> {
+) -> Result<bool, rustango::sql::ExecError> {
     let existing: Vec<PageCategory> = PageCategory::objects()
         .where_(PageCategory::page_id.eq(page_id))
         .where_(PageCategory::taxonomy_id.eq(taxonomy_id))
         .fetch(pool)
         .await?;
     let desired: std::collections::HashSet<i64> = category_ids.iter().copied().collect();
+    let mut changed = false;
 
     for row in &existing {
         if !desired.contains(&row.category_id) {
-            row.clone().delete_pool(pool).await?;
+            row.clone().delete(pool).await?;
+            changed = true;
         }
     }
     let have: std::collections::HashMap<i64, PageCategory> =
@@ -141,7 +144,8 @@ pub async fn replace_for_taxonomy(
             if row.sort_order != idx as i32 {
                 let mut r = row.clone();
                 r.sort_order = idx as i32;
-                r.save_pool(pool).await?;
+                r.save(pool).await?;
+                changed = true;
             }
         } else {
             let mut r = PageCategory {
@@ -152,10 +156,11 @@ pub async fn replace_for_taxonomy(
                 sort_order: idx as i32,
                 created_at: Auto::Unset,
             };
-            r.insert_pool(pool).await?;
+            r.insert(pool).await?;
+            changed = true;
         }
     }
-    Ok(())
+    Ok(changed)
 }
 
 /// Delete every assignment referencing `category_id` (category deletion
@@ -187,7 +192,7 @@ pub async fn delete_for_page(pool: &Pool, page_id: i64) -> Result<(), rustango::
         .fetch(pool)
         .await?;
     for row in rows {
-        row.delete_pool(pool).await?;
+        row.delete(pool).await?;
     }
     Ok(())
 }
@@ -273,7 +278,8 @@ pub async fn prefetch_for_pages(
 /// a JSON array of category ids across every vocabulary. `None` (the
 /// field wasn't posted, e.g. a partial MCP save) leaves the page's
 /// categories alone; an empty array clears them. Ids that aren't
-/// categories are dropped rather than trusted.
+/// categories are dropped rather than trusted. Returns whether anything
+/// changed.
 ///
 /// # Errors
 /// Propagates query / write failures.
@@ -281,9 +287,9 @@ pub async fn save_from_form(
     pool: &Pool,
     page_id: i64,
     raw: Option<&str>,
-) -> Result<(), rustango::sql::ExecError> {
+) -> Result<bool, rustango::sql::ExecError> {
     let Some(raw) = raw else {
-        return Ok(());
+        return Ok(false);
     };
     let wanted = parse_id_list(raw);
     let cats: Vec<Category> = if wanted.is_empty() {
@@ -298,6 +304,7 @@ pub async fn save_from_form(
         .iter()
         .filter_map(|c| c.id.get().copied().map(|id| (id, c.taxonomy_id)))
         .collect();
+    let mut changed = false;
     for tax in crate::category::taxonomies(pool).await? {
         let Some(tax_id) = tax.id.get().copied() else {
             continue;
@@ -307,9 +314,50 @@ pub async fn save_from_form(
             .copied()
             .filter(|id| taxonomy_of.get(id) == Some(&tax_id))
             .collect();
-        replace_for_taxonomy(pool, page_id, tax_id, &ids).await?;
+        changed |= replace_for_taxonomy(pool, page_id, tax_id, &ids).await?;
     }
-    Ok(())
+    Ok(changed)
+}
+
+/// Whether [`save_from_form`] with `raw` would change the page's
+/// categories (membership or order within a vocabulary), judged without
+/// writing.
+///
+/// # Errors
+/// Propagates query failures.
+pub async fn form_differs(pool: &Pool, page_id: i64, raw: &str) -> Result<bool, rustango::sql::ExecError> {
+    use std::collections::BTreeMap;
+    let wanted = parse_id_list(raw);
+    let cats: Vec<Category> = if wanted.is_empty() {
+        Vec::new()
+    } else {
+        Category::objects()
+            .where_(Category::id.is_in(wanted.iter().copied()))
+            .fetch(pool)
+            .await?
+    };
+    let taxonomy_of: std::collections::HashMap<i64, i64> = cats
+        .iter()
+        .filter_map(|c| c.id.get().copied().map(|id| (id, c.taxonomy_id)))
+        .collect();
+    let mut want: BTreeMap<i64, Vec<(i64, i32)>> = BTreeMap::new();
+    for id in wanted {
+        if let Some(tax) = taxonomy_of.get(&id) {
+            let list = want.entry(*tax).or_default();
+            let idx = i32::try_from(list.len()).unwrap_or(i32::MAX);
+            list.push((id, idx));
+        }
+    }
+    let mut rows: Vec<PageCategory> = PageCategory::objects()
+        .where_(PageCategory::page_id.eq(page_id))
+        .fetch(pool)
+        .await?;
+    rows.sort_by_key(|r| (r.taxonomy_id, r.sort_order));
+    let mut have: BTreeMap<i64, Vec<(i64, i32)>> = BTreeMap::new();
+    for r in rows {
+        have.entry(r.taxonomy_id).or_default().push((r.category_id, r.sort_order));
+    }
+    Ok(want != have)
 }
 
 /// One vocabulary's choices in the page editor.
@@ -391,7 +439,7 @@ pub const FORM_KEY: &str = "categories";
 
 /// A JSON array of ids, as numbers or strings; anything else is ignored,
 /// duplicates keep their first position.
-fn parse_id_list(raw: &str) -> Vec<i64> {
+pub(crate) fn parse_id_list(raw: &str) -> Vec<i64> {
     let Ok(serde_json::Value::Array(items)) = serde_json::from_str::<serde_json::Value>(raw) else {
         return Vec::new();
     };

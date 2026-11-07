@@ -1,4 +1,4 @@
-# rustango-cms i18n / l10n design
+# Rustango-CMS i18n / l10n design
 
 **Decided 2026-05-11** before implementing v0.2 Slice 4. The decision
 locks the migration shape; revisiting requires a new migration chain.

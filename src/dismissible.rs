@@ -85,7 +85,7 @@ pub async fn dismiss(
         key: key.to_owned(),
         dismissed_at: Auto::Unset,
     };
-    row.insert_pool(pool).await?;
+    row.insert(pool).await?;
     Ok(row)
 }
 
@@ -108,7 +108,7 @@ pub async fn undismiss(
         .await?;
     let mut removed = 0;
     for row in rows {
-        row.delete_pool(pool).await?;
+        row.delete(pool).await?;
         removed += 1;
     }
     Ok(removed)

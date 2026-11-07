@@ -2,9 +2,8 @@
 //! rendering.
 //!
 //! Pairs with [`crate::library::LibraryTypeHandler::render_template`]:
-//! handlers that declare a template have their rows pre-rendered
-//! through it at public-render time. Templates fetch the rendered
-//! HTML via this function keyed on `(type, id)`.
+//! a page template asks for a row of such a type by `(type, id)` and
+//! gets it rendered through that template.
 //!
 //! A type may instead let each element name its own template, by
 //! returning `true` from
@@ -14,18 +13,18 @@
 //! its content and its markup travel together — and it needs no
 //! migration, because `cms_snippet.data` is already free-form JSON.
 //!
-//! The name resolves against the Tera instance handed to [`prefetch`],
+//! The name resolves against the Tera instance handed to [`fill`],
 //! which the public router has already overlaid with the tenant's
 //! templates (`router.rs` `tera_for`). So a template written into
 //! `templates_tenants/<org>/…` — by the admin editor or the
 //! `write_template` MCP tool — is renderable by name here, with no
 //! per-render `add_raw_template`.
 //!
-//! Same thread-local install pattern as [`crate::page_url`] /
-//! [`crate::auto_menu`] / [`crate::children_filtered`] / [`crate::richtext`]:
-//! the public-render pipeline pre-fetches + pre-renders into a
-//! `{(type, id) → html}` map, installs it in a thread-local for the
-//! duration of `tera.render`, and clears on guard drop.
+//! Rendering is lazy and scoped (#731). While the page renders, each
+//! `snippet_html(...)` call is recorded and leaves a marker; afterwards
+//! [`fill`] fetches only the recorded rows — one query per type — renders
+//! them and puts the HTML in place of the markers. A page pays for the
+//! snippets it shows, not for every row of every templated type.
 //!
 //! ## Usage in templates
 //!
@@ -33,46 +32,56 @@
 //! {{ snippet_html(type="Category", id=4) | safe }}
 //! ```
 //!
-//! Missing entries (unknown type, unknown id, type without a
-//! `render_template`) → empty string.
+//! Unknown type, unknown id, or a type without a template → empty. Use
+//! the call's output as it is: the marker is replaced in the finished
+//! page, so a filter applied to it (`| escape`, `| truncate`) mangles the
+//! marker instead of the snippet.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use tera::{Function, Tera, Value};
 
-/// Composite key for the per-snippet HTML map.
+/// Composite key for one snippet: `(type name, id)`.
 type Key = (String, i64);
 
+/// How deep a snippet's template may itself call `snippet_html`.
+const MAX_NESTING: usize = 4;
+
+/// Ceiling on the HTML snippets may add to one page. Fan-out nesting
+/// (a snippet that names 50 snippets that each name 50 more) grows
+/// geometrically; past this the remaining markers render empty.
+const MAX_FILLED_BYTES: usize = 4 * 1024 * 1024;
+
 thread_local! {
-    static CURRENT_SNIPPETS_HTML: RefCell<Option<Arc<HashMap<Key, String>>>>
-        = const { RefCell::new(None) };
+    static RECORDING: RefCell<Option<BTreeSet<Key>>> = const { RefCell::new(None) };
 }
 
-/// RAII guard. While in scope `snippet_html(...)` resolves against
-/// the installed map; on drop the thread-local clears.
-#[must_use = "the guard clears the thread-local on drop; bind it to a local"]
-pub struct SnippetHtmlGuard {
+/// RAII guard: while in scope, `snippet_html(...)` records its key and
+/// returns a marker. [`SnippetRecorder::take`] ends the recording.
+#[must_use = "the guard stops recording on drop; bind it to a local"]
+pub struct SnippetRecorder {
     _priv: (),
 }
 
-impl Drop for SnippetHtmlGuard {
-    fn drop(&mut self) {
-        CURRENT_SNIPPETS_HTML.with(|cell| {
-            *cell.borrow_mut() = None;
-        });
+impl SnippetRecorder {
+    /// The keys recorded so far, ending the recording.
+    pub fn take(self) -> BTreeSet<Key> {
+        RECORDING.with(|cell| cell.borrow_mut().take()).unwrap_or_default()
     }
 }
 
-/// Install a `(type, id) → html` map for the duration of the
-/// returned guard. Bound by the public-render pipeline right before
-/// `tera.render`.
-pub fn install(map: HashMap<Key, String>) -> SnippetHtmlGuard {
-    CURRENT_SNIPPETS_HTML.with(|cell| {
-        *cell.borrow_mut() = Some(Arc::new(map));
-    });
-    SnippetHtmlGuard { _priv: () }
+impl Drop for SnippetRecorder {
+    fn drop(&mut self) {
+        RECORDING.with(|cell| *cell.borrow_mut() = None);
+    }
+}
+
+/// Start recording `snippet_html(...)` calls on this thread. Bind it
+/// right before `tera.render`, with no `.await` in between.
+pub fn record() -> SnippetRecorder {
+    RECORDING.with(|cell| *cell.borrow_mut() = Some(BTreeSet::new()));
+    SnippetRecorder { _priv: () }
 }
 
 /// Register the `snippet_html` Tera function. Wired from
@@ -81,67 +90,160 @@ pub fn register_tera_function(tera: &mut Tera) {
     tera.register_function("snippet_html", SnippetHtmlFn);
 }
 
-/// `is_safe = true` — output is sanitized HTML produced by the
-/// snippet's own template (which itself can apply `| safe` on
-/// trusted body fields). Autoescape would mangle the rendered
-/// tags into entities otherwise.
+/// The placeholder `snippet_html` leaves for [`fill`].
+fn marker(type_name: &str, id: i64) -> String {
+    format!("<!--rcms-snippet:{type_name}:{id}-->")
+}
+
+/// A type name the marker can carry: anything that cannot close the
+/// HTML comment or break the `:<id>` suffix parse.
+fn valid_type_name(ty: &str) -> bool {
+    !ty.is_empty() && !ty.contains("--") && !ty.contains('>') && !ty.contains('\n')
+}
+
+fn marker_re() -> &'static regex::Regex {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| regex::Regex::new(r"<!--rcms-snippet:([^\n>]+?):([0-9]+)-->").expect("marker regex"))
+}
+
+/// `is_safe = true`: the output is a marker that [`fill`] replaces with
+/// the snippet template's own HTML; autoescaping would mangle both.
 struct SnippetHtmlFn;
 
 impl Function for SnippetHtmlFn {
     fn call(&self, args: &HashMap<String, Value>) -> tera::Result<Value> {
         let ty = args.get("type").and_then(Value::as_str).unwrap_or("");
         let id = args.get("id").and_then(Value::as_i64).unwrap_or(0);
-        if ty.is_empty() || id <= 0 {
+        if !valid_type_name(ty) || id <= 0 {
             return Ok(Value::String(String::new()));
         }
-        let html = CURRENT_SNIPPETS_HTML.with(|cell| {
-            cell.borrow()
-                .as_ref()
-                .and_then(|m| m.get(&(ty.to_owned(), id)).cloned())
-                .unwrap_or_default()
+        let recorded = RECORDING.with(|cell| {
+            cell.borrow_mut()
+                .as_mut()
+                .map(|keys| keys.insert((ty.to_owned(), id)))
+                .is_some()
         });
-        Ok(Value::String(html))
+        Ok(Value::String(if recorded { marker(ty, id) } else { String::new() }))
     }
     fn is_safe(&self) -> bool {
         true
     }
 }
 
-/// Pre-render every snippet whose handler declares a
-/// `render_template`. Returns a `(type, id) → html` map ready to
-/// `install` for the render duration.
+/// Render the `keys` a page recorded and put each snippet's HTML in
+/// place of its marker in `html`. Snippets whose own templates call
+/// `snippet_html` are filled the same way, up to [`MAX_NESTING`] levels.
 ///
-/// Failures during a single template render are best-effort: the
-/// row's slot is left empty rather than crashing the whole render
-/// (the snippet is missing in the output, the rest of the page
-/// still ships).
-///
-/// # Errors
-/// None — degrades to an empty map on snippet-fetch failure (the
-/// whole call short-circuits, every `snippet_html(...)` returns
-/// empty).
-pub async fn prefetch(
+/// Best effort: a failed fetch or template render leaves that snippet
+/// empty and logs it; the rest of the page still ships.
+pub async fn fill(
     pool: &rustango::sql::Pool,
     tera: &Tera,
     locale_id: Option<i64>,
-) -> HashMap<Key, String> {
+    html: String,
+    mut keys: BTreeSet<Key>,
+) -> String {
+    let mut rendered: HashMap<Key, String> = HashMap::new();
+    for _ in 0..MAX_NESTING {
+        keys.retain(|k| !rendered.contains_key(k));
+        if keys.is_empty() {
+            break;
+        }
+        let rows = fetch_rows(pool, locale_id, &keys).await;
+        // Render with a recorder on: a snippet template may call
+        // `snippet_html` itself. No await until `take`.
+        let recorder = record();
+        for key in std::mem::take(&mut keys) {
+            let out = rows
+                .get(&key)
+                .and_then(|(template, value)| render_one(tera, &key, template, value))
+                .unwrap_or_default();
+            rendered.insert(key, out);
+        }
+        keys = recorder.take();
+    }
+    let mut expanded: HashMap<Key, String> = HashMap::new();
+    let mut budget = MAX_FILLED_BYTES;
+    let mut stack = Vec::new();
+    expand_markers(&html, &rendered, &mut expanded, &mut stack, &mut budget)
+}
+
+/// Replace every marker in `html` with its snippet's HTML, itself
+/// expanded. A snippet that (indirectly) names itself gets an empty
+/// slot for the repeat; markers with no rendered snippet (unknown, or
+/// nested past [`MAX_NESTING`]) are removed; past `budget` bytes the
+/// rest render empty.
+fn expand_markers(
+    html: &str,
+    rendered: &HashMap<Key, String>,
+    expanded: &mut HashMap<Key, String>,
+    stack: &mut Vec<Key>,
+    budget: &mut usize,
+) -> String {
+    let re = marker_re();
+    if !html.contains("<!--rcms-snippet:") {
+        return html.to_owned();
+    }
+    let mut out = String::with_capacity(html.len());
+    let mut last = 0;
+    for caps in re.captures_iter(html) {
+        let whole = caps.get(0).expect("match");
+        out.push_str(&html[last..whole.start()]);
+        last = whole.end();
+        let Ok(id) = caps[2].parse::<i64>() else { continue };
+        let key = (caps[1].to_owned(), id);
+        if stack.contains(&key) {
+            continue;
+        }
+        let piece = if let Some(done) = expanded.get(&key) {
+            done.clone()
+        } else if let Some(raw) = rendered.get(&key) {
+            stack.push(key.clone());
+            let done = expand_markers(raw, rendered, expanded, stack, budget);
+            stack.pop();
+            expanded.insert(key, done.clone());
+            done
+        } else {
+            String::new()
+        };
+        if piece.len() > *budget {
+            *budget = 0;
+            continue;
+        }
+        *budget -= piece.len();
+        out.push_str(&piece);
+    }
+    out.push_str(&html[last..]);
+    out
+}
+
+/// Fetch and prepare the recorded rows: `(template name, snippet JSON)`
+/// per key, translations applied. Keys of a type with no template, or of
+/// a missing row, are absent.
+async fn fetch_rows(
+    pool: &rustango::sql::Pool,
+    locale_id: Option<i64>,
+    keys: &BTreeSet<Key>,
+) -> HashMap<Key, (String, Value)> {
     use rustango::core::Column as _;
     use rustango::sql::FetcherPool as _;
-    let mut out: HashMap<Key, String> = HashMap::new();
-    // Walk every registered library handler that declares a
-    // template; for each, fetch every row of that type and render
-    // it through the template.
-    for handler in crate::library::registered_handlers() {
+    let mut by_type: BTreeMap<&str, Vec<i64>> = BTreeMap::new();
+    for (ty, id) in keys {
+        by_type.entry(ty.as_str()).or_default().push(*id);
+    }
+    let mut out = HashMap::new();
+    for (type_name, ids) in by_type {
+        let Some(handler) = crate::library::find_handler(type_name) else {
+            continue;
+        };
         let type_default = handler.render_template();
         let per_element = handler.allows_element_template();
-        // Nothing to render: no type-wide template, and rows of this
-        // type aren't allowed to name one either.
         if type_default.is_none() && !per_element {
             continue;
         }
-        let type_name = handler.type_name();
         let rows = match crate::snippet::Snippet::objects()
             .where_(crate::snippet::Snippet::type_name.eq(type_name.to_owned()))
+            .where_(crate::snippet::Snippet::id.is_in(ids.clone()))
             .fetch(pool)
             .await
         {
@@ -151,64 +253,58 @@ pub async fn prefetch(
                     target: "rustango_cms::snippet_render",
                     error = %e,
                     type_name = %type_name,
-                    "snippet prefetch failed for type; skipping",
+                    "snippet fetch failed for type; leaving its slots empty",
                 );
                 continue;
             }
         };
-        // #409 — per-locale field overrides for this type's rows (one
-        // batched fetch). Empty on the default locale.
+        // #409 — per-locale field overrides, one batched fetch.
         let translations = match locale_id {
-            Some(lid) => {
-                let ids: Vec<i64> = rows.iter().filter_map(|r| r.id.get().copied()).collect();
-                crate::snippet_translation::fetch_for_snippets(pool, &ids, lid)
-                    .await
-                    .unwrap_or_default()
-            }
+            Some(lid) => crate::snippet_translation::fetch_for_snippets(pool, &ids, lid)
+                .await
+                .unwrap_or_default(),
             None => HashMap::new(),
         };
         for row in rows {
             let Some(id) = row.id.get().copied() else {
                 continue;
             };
-            let mut ctx = tera::Context::new();
-            let mut snippet_value = serde_json::to_value(&row).unwrap_or(serde_json::Value::Null);
+            let mut value = serde_json::to_value(&row).unwrap_or(Value::Null);
             if let Some(overrides) = translations.get(&id) {
-                apply_overrides(&mut snippet_value, overrides);
+                apply_overrides(&mut value, overrides);
             }
-            // Resolve after the translation overlay: a locale may
-            // override `data.template` to swap markup per language.
-            let template = match per_element
-                .then(|| element_template(&snippet_value))
+            // After the translation overlay: a locale may override
+            // `data.template` to swap markup per language.
+            let template = per_element
+                .then(|| element_template(&value))
                 .flatten()
-            {
-                Some(name) => name,
-                None => match type_default {
-                    Some(t) => t.to_owned(),
-                    // Per-element type, and this row names nothing.
-                    // Not an error: rows opt in one at a time.
-                    None => continue,
-                },
-            };
-            ctx.insert("snippet", &snippet_value);
-            match tera.render(&template, &ctx) {
-                Ok(html) => {
-                    out.insert((type_name.to_owned(), id), html);
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        target: "rustango_cms::snippet_render",
-                        error = %e,
-                        type_name = %type_name,
-                        id,
-                        template = %template,
-                        "snippet template render failed; leaving slot empty",
-                    );
-                }
+                .or_else(|| type_default.map(str::to_owned));
+            // A per-element type whose row names nothing: not an error.
+            if let Some(template) = template {
+                out.insert((type_name.to_owned(), id), (template, value));
             }
         }
     }
     out
+}
+
+fn render_one(tera: &Tera, key: &Key, template: &str, value: &Value) -> Option<String> {
+    let mut ctx = tera::Context::new();
+    ctx.insert("snippet", value);
+    match tera.render(template, &ctx) {
+        Ok(html) => Some(html),
+        Err(e) => {
+            tracing::warn!(
+                target: "rustango_cms::snippet_render",
+                error = %e,
+                type_name = %key.0,
+                id = key.1,
+                template = %template,
+                "snippet template render failed; leaving slot empty",
+            );
+            None
+        }
+    }
 }
 
 /// The template an individual element names in its `data.template`,
@@ -355,85 +451,51 @@ mod tests {
     }
 
     #[test]
-    fn returns_empty_when_nothing_installed() {
+    fn without_a_recorder_the_call_is_empty() {
         let tera = fresh_tera();
         let out = render(&tera, r#"x{{ snippet_html(type="Category", id=1) }}y"#);
         assert_eq!(out, "xy");
     }
 
     #[test]
-    fn resolves_known_type_and_id() {
-        let mut m = HashMap::new();
-        m.insert(
-            ("Category".to_owned(), 4i64),
-            "<span>rust</span>".to_owned(),
-        );
-        let _g = install(m);
+    fn a_recorded_call_leaves_a_marker_and_its_key() {
+        let rec = record();
         let tera = fresh_tera();
-        let out = render(&tera, r#"{{ snippet_html(type="Category", id=4) }}"#);
-        assert_eq!(out, "<span>rust</span>");
+        let out = render(&tera, r#"a{{ snippet_html(type="Category", id=4) }}b{{ snippet_html(type="Category", id=4) }}"#);
+        assert_eq!(out, format!("a{m}b{m}", m = marker("Category", 4)));
+        assert_eq!(rec.take(), BTreeSet::from([("Category".to_owned(), 4)]));
     }
 
     #[test]
-    fn unknown_type_returns_empty() {
-        let mut m = HashMap::new();
-        m.insert(
-            ("Category".to_owned(), 4i64),
-            "<span>rust</span>".to_owned(),
-        );
-        let _g = install(m);
+    fn bad_arguments_record_nothing() {
+        let rec = record();
         let tera = fresh_tera();
-        let out = render(&tera, r#"x{{ snippet_html(type="Author", id=4) }}y"#);
-        assert_eq!(out, "xy");
+        for call in [
+            r#"{{ snippet_html(type="Category") }}"#,
+            r#"{{ snippet_html(id=4) }}"#,
+            r#"{{ snippet_html(type="Category", id=0) }}"#,
+            r#"{{ snippet_html(type="x-->y", id=1) }}"#,
+            r#"{{ snippet_html(type="a>b", id=1) }}"#,
+        ] {
+            assert_eq!(render(&tera, call), "", "{call}");
+        }
+        assert!(rec.take().is_empty());
     }
 
     #[test]
-    fn unknown_id_returns_empty() {
-        let mut m = HashMap::new();
-        m.insert(
-            ("Category".to_owned(), 4i64),
-            "<span>rust</span>".to_owned(),
-        );
-        let _g = install(m);
-        let tera = fresh_tera();
-        let out = render(&tera, r#"x{{ snippet_html(type="Category", id=99) }}y"#);
-        assert_eq!(out, "xy");
-    }
-
-    #[test]
-    fn missing_args_return_empty() {
-        let _g = install(HashMap::new());
-        let tera = fresh_tera();
-        let out = render(&tera, r#"x{{ snippet_html(type="Category") }}y"#);
-        assert_eq!(out, "xy");
-        let out2 = render(&tera, r#"x{{ snippet_html(id=4) }}y"#);
-        assert_eq!(out2, "xy");
-    }
-
-    #[test]
-    fn output_is_marked_safe() {
-        // Without is_safe, `<span>` would land as `&lt;span&gt;`.
-        let mut m = HashMap::new();
-        m.insert(("X".to_owned(), 1i64), "<b>ok</b>".to_owned());
-        let _g = install(m);
+    fn the_marker_is_not_escaped() {
+        let _rec = record();
         let tera = fresh_tera();
         let out = render(&tera, r#"{{ snippet_html(type="X", id=1) }}"#);
-        assert!(out.contains("<b>ok</b>"), "got `{out}`");
+        assert!(out.starts_with("<!--"), "got `{out}`");
     }
 
     #[test]
-    fn guard_clears_thread_local() {
+    fn dropping_the_recorder_stops_recording() {
         {
-            let mut m = HashMap::new();
-            m.insert(("X".to_owned(), 1i64), "y".to_owned());
-            let _g = install(m);
-            let tera = fresh_tera();
-            assert_eq!(render(&tera, r#"{{ snippet_html(type="X", id=1) }}"#), "y");
+            let _rec = record();
         }
         let tera = fresh_tera();
-        assert_eq!(
-            render(&tera, r#"x{{ snippet_html(type="X", id=1) }}y"#),
-            "xy"
-        );
+        assert_eq!(render(&tera, r#"x{{ snippet_html(type="X", id=1) }}y"#), "xy");
     }
 }

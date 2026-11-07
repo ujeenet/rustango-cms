@@ -712,6 +712,120 @@ impl TenantTemplates {
         }
         Ok(())
     }
+
+    /// Validate a whole set of templates together, then write them all,
+    /// or nothing.
+    ///
+    /// A theme's templates refer to each other — `home.html` extends a
+    /// `_base.html` that is in the same set — so checking them one by one
+    /// against what is on disk would reject a perfectly good set. The
+    /// probe is the global set plus this tenant's other overrides plus the
+    /// whole new set, built once.
+    ///
+    /// # Errors
+    /// [`EditError`] for a rejected name, invalid Tera anywhere in the
+    /// set, or an I/O failure.
+    pub fn write_set(&self, slug: &str, files: &[(String, String)]) -> Result<usize, EditError> {
+        let dir = self.dir_for(slug).ok_or(EditError::NotConfigured)?;
+        let mut named = Vec::with_capacity(files.len());
+        for (name, body) in files {
+            named.push((safe_name(name)?, body.as_str()));
+        }
+
+        let mut probe = (*self.base).clone();
+        if dir.is_dir() {
+            let mut existing = Vec::new();
+            collect(&dir, &dir, &mut existing);
+            for (n, b) in existing {
+                if !named.iter().any(|(m, _)| *m == n) {
+                    let _ = probe.add_raw_template(&n, &b);
+                }
+            }
+        }
+        probe
+            .add_raw_templates(named.iter().map(|(n, b)| (n.as_str(), *b)))
+            .map_err(|e| EditError::Invalid(chain(&e)))?;
+
+        std::fs::create_dir_all(&dir).map_err(EditError::Io)?;
+        for (name, body) in &named {
+            let path = dir.join(name);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).map_err(EditError::Io)?;
+            }
+            if !contained(&dir, path.parent().unwrap_or(&dir)) {
+                return Err(EditError::BadName(name.clone()));
+            }
+            std::fs::write(&path, body).map_err(EditError::Io)?;
+        }
+        Ok(named.len())
+    }
+
+    /// Where a tenant's previous set of overrides is kept. Outside every
+    /// tenant directory: a slug never starts with a dot.
+    fn snapshot_dir(&self, slug: &str) -> Option<PathBuf> {
+        self.dir_for(slug)?;
+        Some(self.root.join(".previous").join(slug))
+    }
+
+    /// Keep a copy of the tenant's current overrides, replacing any
+    /// earlier copy, so a later [`Self::restore_snapshot`] can bring them
+    /// back.
+    ///
+    /// # Errors
+    /// [`EditError::NotConfigured`] or an I/O failure.
+    pub fn snapshot(&self, slug: &str) -> Result<(), EditError> {
+        let dir = self.dir_for(slug).ok_or(EditError::NotConfigured)?;
+        let snap = self.snapshot_dir(slug).ok_or(EditError::NotConfigured)?;
+        if snap.exists() {
+            std::fs::remove_dir_all(&snap).map_err(EditError::Io)?;
+        }
+        std::fs::create_dir_all(&snap).map_err(EditError::Io)?;
+        if dir.is_dir() {
+            let mut files = Vec::new();
+            collect(&dir, &dir, &mut files);
+            for (name, body) in files {
+                let path = snap.join(&name);
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent).map_err(EditError::Io)?;
+                }
+                std::fs::write(path, body).map_err(EditError::Io)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Whether [`Self::snapshot`] has kept a copy for this tenant.
+    #[must_use]
+    pub fn has_snapshot(&self, slug: &str) -> bool {
+        self.snapshot_dir(slug).is_some_and(|d| d.is_dir())
+    }
+
+    /// Swap the tenant's overrides with the kept copy: the previous set
+    /// becomes live, and the current one becomes the copy, so restoring
+    /// twice gets back to where you started.
+    ///
+    /// # Errors
+    /// [`EditError::NotConfigured`] when there is no copy, or an I/O
+    /// failure.
+    pub fn restore_snapshot(&self, slug: &str) -> Result<(), EditError> {
+        let dir = self.dir_for(slug).ok_or(EditError::NotConfigured)?;
+        let snap = self
+            .snapshot_dir(slug)
+            .filter(|d| d.is_dir())
+            .ok_or(EditError::NotConfigured)?;
+        let swap = self.root.join(".previous").join(format!("{slug}.swap"));
+        if swap.exists() {
+            std::fs::remove_dir_all(&swap).map_err(EditError::Io)?;
+        }
+        if dir.exists() {
+            std::fs::rename(&dir, &swap).map_err(EditError::Io)?;
+        } else {
+            std::fs::create_dir_all(&swap).map_err(EditError::Io)?;
+        }
+        std::fs::rename(&snap, &dir).map_err(EditError::Io)?;
+        std::fs::rename(&swap, &snap).map_err(EditError::Io)?;
+        Ok(())
+    }
 }
 
 /// Whether `path` really lives inside `root`, symlinks resolved.

@@ -348,6 +348,15 @@ register_url!(
     "/cms-admin/templates/validate"
 );
 register_url!("rcms-admin:templates:delete", "/cms-admin/templates/delete");
+// Help → Documentation (the bundled guides).
+register_url!("rcms-admin:help", "/cms-admin/help");
+// Settings → Site theme (theme packages).
+register_url!("rcms-admin:site-theme", "/cms-admin/site-theme");
+register_url!("rcms-admin:site-theme:download", "/cms-admin/site-theme/download");
+register_url!("rcms-admin:site-theme:upload", "/cms-admin/site-theme/upload");
+register_url!("rcms-admin:site-theme:preview", "/cms-admin/site-theme/preview");
+register_url!("rcms-admin:site-theme:install", "/cms-admin/site-theme/install");
+register_url!("rcms-admin:site-theme:restore", "/cms-admin/site-theme/restore");
 register_url!(
     "rcms-admin:site-settings:edit",
     "/cms-admin/site-settings/{scope}/edit"
@@ -487,6 +496,7 @@ register_url!(
 register_url!("rcms-admin:account:profile", "/cms-admin/me/profile");
 // #526 — per-user admin UI language preference.
 register_url!("rcms-admin:account:language", "/cms-admin/me/language");
+register_url!("rcms-admin:account:show-templates", "/cms-admin/me/show-templates");
 // #202 — email change (with confirmation flow) + password change.
 register_url!("rcms-admin:account:email", "/cms-admin/me/email");
 register_url!(
@@ -539,6 +549,9 @@ pub fn register_tera_helpers(tera: &mut tera::Tera) {
     // for the duration of `tera.render`, so registering it once on
     // the shared Tera is safe.
     crate::page_url::register_tera_function(tera);
+    // `| safe_href`: an editor's link only if it is a site path or a
+    // web, mail or phone address (layout blocks, theme buttons).
+    crate::block::layout::register_tera_filter(tera);
     // #members — `can_view(page=…)` / `{{ p | can_view }}` (viewer-aware
     // access predicate) + `{{ list | visible }}` (filter a page/menu list,
     // nested-aware). Reads the render-scoped `AccessContext` thread-local

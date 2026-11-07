@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "Import “{name}” snippets" | translate(locale=LANG, name=type_name) }} — CMS Admin{% endblock %}
+{% block title %}{{ "Import “{name}” snippets" | translate(locale=LANG, name=type_name) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Import “{name}” snippets" | translate(locale=LANG, name=type_name) }}{% endblock %}
 
 {% block topbar_actions %}

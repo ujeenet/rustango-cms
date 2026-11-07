@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ "Edit" | translate(locale=LANG) }} {{ media.title }} — CMS Admin{% endblock %}
+{% block title %}{{ "Edit" | translate(locale=LANG) }} {{ media.title }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Edit image" | translate(locale=LANG) }}{% endblock %}
 
 {% block topbar_actions %}
@@ -394,14 +394,14 @@
         </p>
     {% else %}
         <p class="rcms-hint rcms-m-0 rcms-mb-3">
-            {{ "Each row shows a page that references this image as a hero, in a stream-block, or via a custom <code>*_media_id</code> column. Deleting this image while it's in use will leave broken renders." | translate(locale=LANG) | safe }}
+            {{ "Each row is a page, library element or setting that uses this image, in a field or in a block. Deleting it while it is in use leaves broken images." | translate(locale=LANG) }}
         </p>
         <div class="rcms-table-wrap">
         <table class="rcms-data">
             <thead>
                 <tr>
-                    <th>{{ "Page" | translate(locale=LANG) }}</th>
-                    <th>{{ "URL" | translate(locale=LANG) }}</th>
+                    <th>{{ "Used in" | translate(locale=LANG) }}</th>
+                    <th>{{ "Where" | translate(locale=LANG) }}</th>
                     <th>{{ "Status" | translate(locale=LANG) }}</th>
                     <th class="rcms-actions">{{ "Open" | translate(locale=LANG) }}</th>
                 </tr>
@@ -409,11 +409,11 @@
             <tbody>
             {% for u in usages %}
                 <tr>
-                    <td><strong>{{ u.title }}</strong></td>
-                    <td><code class="rcms-text-2xs">{{ u.url_path }}</code></td>
-                    <td><span class="rcms-tag {{ u.status }}">{{ u.status }}</span></td>
+                    <td><strong>{% if u.kind == "setting" %}{{ u.title | translate(locale=LANG) }}{% else %}{{ u.title }}{% endif %}</strong></td>
+                    <td>{% if u.kind == "page" %}<code class="rcms-text-2xs">{{ u.where }}</code>{% else %}{{ u.where | translate(locale=LANG) }}{% endif %}</td>
+                    <td>{% if u.status %}<span class="rcms-tag {{ u.status }}">{{ u.status | capitalize | translate(locale=LANG) }}</span>{% endif %}</td>
                     <td class="rcms-actions">
-                        <a href="{{ url(name='rcms-admin:pages:edit', id=u.id) }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit" | translate(locale=LANG) }}</a>
+                        <a href="{{ u.href }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Edit" | translate(locale=LANG) }}</a>
                     </td>
                 </tr>
             {% endfor %}

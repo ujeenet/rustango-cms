@@ -345,7 +345,7 @@ pub(crate) async fn handle_form_submit(
             written.push(key.clone());
         }
     }
-    if entry.insert_pool(pool).await.is_err() {
+    if entry.insert(pool).await.is_err() {
         for key in &written {
             remove_upload(&tenant.org.slug, key).await;
         }

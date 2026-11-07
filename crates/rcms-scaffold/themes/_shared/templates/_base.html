@@ -1,0 +1,137 @@
+{#- The layout every page extends: header with the `header` menu, the
+    page, and a footer with the `footer` menu. Colours, fonts and radii
+    come from the site's theme (CMS admin → Settings → Theme). -#}
+{%- set site = site_setting(scope="site") -%}
+{#- The site's name, logo and icon: Settings → Branding in the CMS admin,
+    the same ones the admin shows. -#}
+{%- set branding = site_setting(scope="branding") -%}
+{%- set site_name = branding.site_name | default(value="My site") -%}
+<!doctype html>
+<html lang="{{ LANG | default(value='en') }}" dir="{{ DIR | default(value='ltr') }}"
+      {%- if theme_default_mode and theme_default_mode != "system" %} data-theme="{{ theme_default_mode }}"{% endif %}>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{% if page.depth > 1 %}{% if page.seo_title %}{{ page.seo_title }}{% else %}{{ page.title }}{% endif %} · {% endif %}{{ site_name }}{% endblock %}</title>
+{#- Without an icon, an empty one stops the browser asking for /favicon.ico. -#}
+{%- if branding.favicon or branding.favicon_storage_key %}
+<link rel="icon" href="/__cms-branding/favicon">
+<link rel="apple-touch-icon" href="/__cms-branding/favicon">
+{%- else %}
+<link rel="icon" href="data:,">
+{%- endif %}
+{%- if not page.robots_index %}
+<meta name="robots" content="noindex">
+{%- endif %}
+{%- if page.seo_description %}
+<meta name="description" content="{{ page.seo_description }}">
+{%- endif %}
+{%- if canonical_url %}
+<link rel="canonical" href="{{ canonical_url }}">
+{%- endif %}
+{%- if theme_font_url %}
+<link rel="stylesheet" href="{{ theme_font_url }}">
+{%- endif %}
+{{ theme_css | default(value="") | safe }}
+{% include "_style.html" %}
+{% include "_theme.css.html" %}
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap site-header__inner">
+    <a class="site-brand" href="/">
+      {%- if branding.logo or branding.logo_storage_key %}<img class="site-brand__logo" src="/__cms-branding/logo" alt="" width="40" height="40">{% endif %}
+      <span class="site-brand__name">{{ site_name }}</span>
+      {%- if site.tagline %}<span class="site-brand__tagline">{{ site.tagline }}</span>{% endif %}
+    </a>
+    {%- set nav = menu(slug="header") %}
+    {%- if nav %}
+    <nav class="site-nav" aria-label="Main">
+      <ul>
+      {%- for item in nav.items %}
+        <li{% if item.children %} class="has-children"{% endif %}>
+          {%- if item.url %}
+          <a href="{{ item.url }}"{% if item.is_active %} aria-current="page"{% elif item.in_active_trail %} class="is-trail"{% endif %}{% if item.open_in_new_tab %} target="_blank" rel="noopener"{% endif %}>{{ item.label }}</a>
+          {%- else %}<span>{{ item.label }}</span>{% endif %}
+          {%- if item.children %}
+          <ul>
+            {%- for child in item.children %}
+            <li><a href="{{ child.url }}"{% if child.is_active %} aria-current="page"{% endif %}>{{ child.label }}</a></li>
+            {%- endfor %}
+          </ul>
+          {%- endif %}
+        </li>
+      {%- endfor %}
+      </ul>
+    </nav>
+    {%- endif %}
+    {%- set langs = language_switcher() %}
+    {%- if langs | length > 1 %}
+    <nav class="site-langs" aria-label="Language">
+      {%- for l in langs %}
+      <a href="{{ l.url }}" hreflang="{{ l.code }}"{% if l.is_current %} aria-current="true"{% endif %}>{{ l.code | upper }}</a>
+      {%- endfor %}
+    </nav>
+    {%- endif %}
+  </div>
+</header>
+
+<main id="main">
+{% block content %}{% endblock content %}
+</main>
+
+<footer class="site-footer">
+  <div class="wrap site-footer__inner">
+    {%- set foot = menu(slug="footer") %}
+    {%- if foot %}
+    <nav class="footer-nav" aria-label="Footer">
+      {%- for col in foot.items %}
+      <div class="footer-nav__col">
+        {%- if col.children %}
+        <h2>{{ col.label }}</h2>
+        <ul>
+          {%- for item in col.children %}
+          <li><a href="{{ item.url }}"{% if item.open_in_new_tab %} target="_blank" rel="noopener"{% endif %}>{{ item.label }}</a></li>
+          {%- endfor %}
+        </ul>
+        {%- elif col.url %}
+        <a href="{{ col.url }}">{{ col.label }}</a>
+        {%- endif %}
+      </div>
+      {%- endfor %}
+    </nav>
+    {%- endif %}
+    <p class="site-footer__note">{{ site.footer | default(value="© " ~ site_name) }}</p>
+    {%- if site.footer_logo %}
+    <img class="site-footer__logo" src="{{ rcms_image_url(media_id=site.footer_logo, filter='width-240') }}" alt="" width="96" height="96" loading="lazy">
+    {%- endif %}
+  </div>
+</footer>
+{#- Previous/next buttons for sliders. Without JavaScript a slider still
+    scrolls sideways (swipe, trackpad, keyboard). -#}
+<script>
+document.querySelectorAll("[data-rcms-slider]").forEach((slider) => {
+  const track = slider.querySelector(".rcms-block-slider__track");
+  if (!track || track.children.length < 2) return;
+  const nav = document.createElement("div");
+  nav.className = "slider-nav";
+  const buttons = [["Previous", "\u2039", -1], ["Next", "\u203A", 1]].map(([label, glyph, dir]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = glyph;
+    button.setAttribute("aria-label", label);
+    button.addEventListener("click", () => track.scrollBy({ left: dir * track.clientWidth * 0.9, behavior: "smooth" }));
+    nav.appendChild(button);
+    return button;
+  });
+  const update = () => {
+    buttons[0].disabled = track.scrollLeft <= 1;
+    buttons[1].disabled = track.scrollLeft + track.clientWidth >= track.scrollWidth - 1;
+  };
+  track.addEventListener("scroll", update, { passive: true });
+  slider.appendChild(nav);
+  update();
+});
+</script>
+</body>
+</html>

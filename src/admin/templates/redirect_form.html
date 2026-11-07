@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{% if mode == "new" %}{{ "New redirect" | translate(locale=LANG) }}{% else %}{{ "Edit redirect" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% block title %}{% if mode == "new" %}{{ "New redirect" | translate(locale=LANG) }}{% else %}{{ "Edit redirect" | translate(locale=LANG) }}{% endif %} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{% if mode == "new" %}{{ "Add redirect" | translate(locale=LANG) }}{% else %}{{ "Edit redirect:" | translate(locale=LANG) }} {{ redirect.from_path }}{% endif %}{% endblock %}
 
 {% block topbar_actions %}

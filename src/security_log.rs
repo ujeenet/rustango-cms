@@ -45,6 +45,7 @@ use chrono::{DateTime, Utc};
 use rustango::login_throttle::ClientIp;
 use rustango::signals::auth::AuthRequestMeta;
 use rustango::sql::Auto;
+use rustango::tenancy::TenantSlug;
 use rustango::Model;
 use serde::{Deserialize, Serialize};
 
@@ -191,7 +192,7 @@ pub async fn record(pool: &rustango::sql::Pool, tenant_slug: &str, entry: Entry)
         user_agent: clip(entry.request.user_agent.as_deref().unwrap_or(""), 255),
         created_at: Auto::Unset,
     };
-    if let Err(e) = row.insert_pool(pool).await {
+    if let Err(e) = row.insert(pool).await {
         tracing::warn!(target: "rustango_cms::security_log", error = %e, event = entry.event, "security event not stored");
         return;
     }
@@ -394,35 +395,35 @@ impl<S: Send + Sync> axum::extract::FromRequestParts<S> for LoginRequest {
 // ------------------------------------------------------------------ lockout
 
 /// The lock key the framework's throttle uses for `username` in this
-/// tenant: `login:tenant:<slug>:<sha256 of the trimmed, lowercased
+/// site: `login:tenant:#org:<id>:<slug>:<sha256 of the trimmed, lowercased
 /// name>`. The framework keeps it private; `tests/security_log_sqlite.rs`
 /// fails if the two drift.
-fn lock_key(tenant_slug: &str, username: &str) -> String {
+fn lock_key(site: &TenantSlug, username: &str) -> String {
     use sha2::{Digest as _, Sha256};
     use std::fmt::Write as _;
     let digest = Sha256::digest(username.trim().to_lowercase().as_bytes());
-    let mut key = format!("login:tenant:{tenant_slug}:");
+    let mut key = format!("login:tenant:{}:", site.namespace());
     for b in digest {
         let _ = write!(key, "{b:02x}");
     }
     key
 }
 
-/// `true` when any of `names` is locked out of `tenant_slug` right now.
-pub async fn is_locked(tenant_slug: &str, names: &[&str]) -> bool {
+/// `true` when any of `names` is locked out of `site` right now.
+pub async fn is_locked(site: &TenantSlug, names: &[&str]) -> bool {
     let lockout = rustango::account_lockout::shared();
     for name in names {
-        if lockout.is_locked(&lock_key(tenant_slug, name)).await {
+        if lockout.is_locked(&lock_key(site, name)).await {
             return true;
         }
     }
     false
 }
 
-/// Clear the lock and the failure count of `username` in `tenant_slug`,
-/// as a successful sign-in would.
-pub async fn unlock(tenant_slug: &str, username: &str) {
-    rustango::account_lockout::shared().clear(&lock_key(tenant_slug, username)).await;
+/// Clear the lock and the failure count of `username` in `site`, as a
+/// successful sign-in would.
+pub async fn unlock(site: &TenantSlug, username: &str) {
+    rustango::account_lockout::shared().clear(&lock_key(site, username)).await;
 }
 
 /// The lockout policy from `RCMS_LOGIN_LOCKOUT_*`, or `None` when none
@@ -483,13 +484,13 @@ fn connect_receivers() {
         AuthFailureReason,
     };
     connect_user_logged_in(|ctx| async move {
-        let Some((slug, pool)) = request_tenant().await else { return };
+        let Some((site, pool)) = request_tenant().await else { return };
         let entry = Entry::new(EVENT_LOGIN, signal_source(ctx.source), &ctx.request)
             .user(Some(ctx.user_id), &ctx.username);
-        record(&pool, &slug, entry).await;
+        record(&pool, &site.slug, entry).await;
     });
     connect_user_login_failed(|ctx| async move {
-        let Some((slug, pool)) = request_tenant().await else { return };
+        let Some((site, pool)) = request_tenant().await else { return };
         let username = ctx.attempted_username.unwrap_or_default();
         let reason = match ctx.reason {
             AuthFailureReason::Inactive => "inactive",
@@ -498,7 +499,7 @@ fn connect_receivers() {
         let source = signal_source(ctx.source);
         record(
             &pool,
-            &slug,
+            &site.slug,
             Entry::new(EVENT_LOGIN_FAILED, source, &ctx.request)
                 .user(None, &username)
                 .reason(reason),
@@ -506,19 +507,19 @@ fn connect_receivers() {
         .await;
         // The framework counts the failure before it signals, so a lock
         // seen here is the one this failure set.
-        if is_locked(&slug, &[&username]).await {
+        if is_locked(&site, &[&username]).await {
             let entry = Entry::new(EVENT_LOCKOUT, source, &ctx.request).user(None, &username);
-            record(&pool, &slug, entry).await;
+            record(&pool, &site.slug, entry).await;
         }
     });
     connect_user_logged_out(|ctx| async move {
         if ctx.user_id.is_none() {
             return;
         }
-        let Some((slug, pool)) = request_tenant().await else { return };
+        let Some((site, pool)) = request_tenant().await else { return };
         let entry = Entry::new(EVENT_LOGOUT, signal_source(ctx.source), &ctx.request)
             .user(ctx.user_id, ctx.username.as_deref().unwrap_or(""));
-        record(&pool, &slug, entry).await;
+        record(&pool, &site.slug, entry).await;
     });
 }
 
@@ -533,10 +534,10 @@ fn signal_source(source: &'static str) -> &'static str {
 /// The tenant the current request resolved to, and its pool. `None`
 /// outside a tenant request (operator console, bare admin) or when the
 /// request log that carries the tenant is off.
-async fn request_tenant() -> Option<(String, rustango::sql::Pool)> {
+async fn request_tenant() -> Option<(TenantSlug, rustango::sql::Pool)> {
     let label = rustango::tenant_log::current()?;
     let pool = crate::task_queue::resolve_pool(&label.slug).await?;
-    Some((label.slug, pool))
+    Some((TenantSlug::new(label.id?, label.slug), pool))
 }
 
 #[cfg(test)]
@@ -592,7 +593,11 @@ mod tests {
 
     #[test]
     fn lock_keys_ignore_case_and_padding() {
-        assert_eq!(lock_key("acme", " Alice "), lock_key("acme", "alice"));
-        assert_ne!(lock_key("acme", "alice"), lock_key("other", "alice"));
+        let acme = TenantSlug::new(1, "acme");
+        assert_eq!(lock_key(&acme, " Alice "), lock_key(&acme, "alice"));
+        assert_ne!(lock_key(&acme, "alice"), lock_key(&TenantSlug::new(2, "other"), "alice"));
+        // Bound to the org id: a new site reusing the slug starts clean.
+        assert_ne!(lock_key(&acme, "alice"), lock_key(&TenantSlug::new(9, "acme"), "alice"));
+        assert!(lock_key(&acme, "alice").starts_with("login:tenant:#org:1:acme:"));
     }
 }

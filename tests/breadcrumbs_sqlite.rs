@@ -43,7 +43,7 @@ async fn setup() -> (Pool, i64) {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(&pool).await.expect("page type");
+    pt.save(&pool).await.expect("page type");
     (pool, pt.id.get().copied().expect("type id"))
 }
 
@@ -87,7 +87,7 @@ async fn page(
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    p.save_pool(pool).await.expect("page");
+    p.save(pool).await.expect("page");
     p.id.get().copied().expect("id")
 }
 

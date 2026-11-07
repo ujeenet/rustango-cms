@@ -829,7 +829,11 @@ async fn collect_images_for_pages(
                     return None;
                 }
                 Some(ImageRow {
-                    loc: format!("{base}/__media__/max-2000x2000/{id}"),
+                    // Signed like every CMS-rendered image URL (#643).
+                    loc: format!(
+                        "{base}{}",
+                        crate::rendition::rendition_url_for(*id, "max-2000x2000", None).unwrap_or_default()
+                    ),
                     title: Some(m.title.clone()).filter(|s| !s.is_empty()),
                     caption: Some(m.alt_text.clone()).filter(|s| !s.is_empty()),
                 })
@@ -998,7 +1002,9 @@ pub(crate) fn base_url(headers: &HeaderMap) -> String {
                 "https".to_owned()
             }
         });
-    format!("{scheme}://{host}")
+    // A site served under a path on the main domain lives at host + prefix.
+    let prefix = crate::path_prefix::of(headers).unwrap_or("");
+    format!("{scheme}://{host}{prefix}")
 }
 
 fn is_localhost_shape(host: &str) -> bool {
@@ -1044,7 +1050,6 @@ mod base_url_tests {
 mod site_scope_tests {
     use super::*;
     use rustango::core::Model as _;
-    use rustango::sql::FetcherPool as _;
 
     async fn pool_with_tree() -> rustango::sql::Pool {
         let pool = rustango::sql::Pool::connect("sqlite::memory:").await.expect("pool");

@@ -50,7 +50,7 @@ async fn user(pool: &Pool, name: &str, superuser: bool) -> i64 {
         password_changed_at: None,
         sessions_revoked_at: None,
     };
-    u.save_pool(pool).await.expect("user");
+    u.save(pool).await.expect("user");
     u.id.get().copied().expect("user id")
 }
 
@@ -88,7 +88,7 @@ async fn page(pool: &Pool, type_id: i64, slug: &str, path: &str, parent: Option<
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    p.save_pool(pool).await.expect("page");
+    p.save(pool).await.expect("page");
     p.id.get().copied().expect("page id")
 }
 
@@ -113,14 +113,14 @@ async fn world() -> World {
     let nobody = user(&pool, "nobody", false).await;
 
     let mut role = Role { id: Auto::Unset, name: "Editor".to_owned(), description: String::new(), data: serde_json::json!({}) };
-    role.save_pool(&pool).await.expect("role");
+    role.save(&pool).await.expect("role");
     let editor_role = role.id.get().copied().expect("role id");
     for code in ["cms_admin.access", "cms_page.change"] {
         let mut rp = RolePermission { id: Auto::Unset, role_id: editor_role, codename: code.to_owned() };
-        rp.save_pool(&pool).await.expect("role perm");
+        rp.save(&pool).await.expect("role perm");
     }
     let mut ur = UserRole { id: Auto::Unset, user_id: editor, role_id: editor_role };
-    ur.save_pool(&pool).await.expect("membership");
+    ur.save(&pool).await.expect("membership");
 
     let mut pt = PageType {
         id: Auto::Unset,
@@ -136,7 +136,7 @@ async fn world() -> World {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(&pool).await.expect("page type");
+    pt.save(&pool).await.expect("page type");
     let t = pt.id.get().copied().expect("type id");
     let root = page(&pool, t, "root", "0001/", None).await;
     let child = page(&pool, t, "child", "0001/0002/", Some(root)).await;
@@ -185,7 +185,7 @@ async fn page_grants_inherit_down_the_tree_and_nowhere_else() {
         permission: Action::Edit.as_str().to_owned(),
         created_at: Auto::Unset,
     };
-    grant.save_pool(&w.pool).await.expect("grant");
+    grant.save(&w.pool).await.expect("grant");
 
     assert!(user_can(&w.pool, w.editor, w.root, Action::Edit).await.unwrap(), "granted on the page");
     assert!(user_can(&w.pool, w.editor, w.child, Action::Edit).await.unwrap(), "inherited by a descendant");

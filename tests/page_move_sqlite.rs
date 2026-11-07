@@ -36,7 +36,7 @@ async fn file_pool(tag: &str) -> Pool {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(&pool).await.expect("page type");
+    pt.save(&pool).await.expect("page type");
     pool
 }
 

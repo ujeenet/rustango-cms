@@ -1,0 +1,244 @@
+[
+  {
+    "key": "hero",
+    "label": "Hero image",
+    "icon": "panorama",
+    "description": "A full-width picture with a heading and text over it.",
+    "label_format": "{heading}",
+    "children": [
+      {
+        "kind": "field",
+        "key": "image",
+        "label": "Image",
+        "widget": "mediapicker",
+        "help": "Without an image, the theme colour fills the background."
+      },
+      {
+        "kind": "field",
+        "key": "heading",
+        "label": "Heading",
+        "widget": "text",
+        "required": true
+      },
+      {
+        "kind": "field",
+        "key": "text",
+        "label": "Text",
+        "widget": "textarea"
+      },
+      {
+        "kind": "row",
+        "children": [
+          {
+            "kind": "field",
+            "key": "button_label",
+            "label": "Button label",
+            "widget": "text",
+            "width": 6,
+            "help": "Leave empty for no button."
+          },
+          {
+            "kind": "field",
+            "key": "url",
+            "label": "Button link",
+            "widget": "text",
+            "width": 6,
+            "help": "A page on this site like /contact, or a full link (https://…, mailto:…, tel:…).",
+            "placeholder": "/contact"
+          }
+        ]
+      },
+      {
+        "kind": "field",
+        "key": "height",
+        "label": "Height",
+        "widget": "select",
+        "default": "medium",
+        "options": [
+          {
+            "value": "medium",
+            "label": "Medium"
+          },
+          {
+            "value": "tall",
+            "label": "Tall"
+          }
+        ],
+        "required": true
+      }
+    ]
+  },
+  {
+    "key": "jumbo",
+    "label": "Jumbo box",
+    "icon": "featured_play_list",
+    "description": "A big, bold box to make one message stand out.",
+    "label_format": "{heading}",
+    "children": [
+      {
+        "kind": "field",
+        "key": "heading",
+        "label": "Heading",
+        "widget": "text",
+        "required": true
+      },
+      {
+        "kind": "field",
+        "key": "text",
+        "label": "Text",
+        "widget": "textarea"
+      },
+      {
+        "kind": "row",
+        "children": [
+          {
+            "kind": "field",
+            "key": "button_label",
+            "label": "Button label",
+            "widget": "text",
+            "width": 6,
+            "help": "Leave empty for no button."
+          },
+          {
+            "kind": "field",
+            "key": "url",
+            "label": "Button link",
+            "widget": "text",
+            "width": 6,
+            "help": "A page on this site like /contact, or a full link (https://…, mailto:…, tel:…).",
+            "placeholder": "/contact"
+          }
+        ]
+      },
+      {
+        "kind": "field",
+        "key": "style",
+        "label": "Style",
+        "widget": "select",
+        "default": "accent",
+        "options": [
+          {
+            "value": "accent",
+            "label": "Accent colour"
+          },
+          {
+            "value": "soft",
+            "label": "Soft"
+          },
+          {
+            "value": "dark",
+            "label": "Dark"
+          }
+        ],
+        "required": true
+      }
+    ]
+  },
+  {
+    "key": "media_text",
+    "label": "Media and text",
+    "icon": "vertical_split",
+    "description": "An image beside a heading and text, with an optional button.",
+    "label_format": "{heading}",
+    "children": [
+      {
+        "kind": "field",
+        "key": "image",
+        "label": "Image",
+        "widget": "mediapicker"
+      },
+      {
+        "kind": "field",
+        "key": "image_alt",
+        "label": "Image description",
+        "widget": "text",
+        "help": "What the image shows, for people who can't see it. Leave empty if it is only decoration."
+      },
+      {
+        "kind": "field",
+        "key": "image_side",
+        "label": "Image side",
+        "widget": "select",
+        "default": "left",
+        "options": [
+          {
+            "value": "left",
+            "label": "Left"
+          },
+          {
+            "value": "right",
+            "label": "Right"
+          }
+        ],
+        "required": true
+      },
+      {
+        "kind": "field",
+        "key": "heading",
+        "label": "Heading",
+        "widget": "text"
+      },
+      {
+        "kind": "field",
+        "key": "text",
+        "label": "Text",
+        "widget": "markdown"
+      },
+      {
+        "kind": "row",
+        "children": [
+          {
+            "kind": "field",
+            "key": "button_label",
+            "label": "Button label",
+            "widget": "text",
+            "width": 6,
+            "help": "Leave empty for no button."
+          },
+          {
+            "kind": "field",
+            "key": "url",
+            "label": "Button link",
+            "widget": "text",
+            "width": 6,
+            "help": "A page on this site like /contact, or a full link (https://…, mailto:…, tel:…).",
+            "placeholder": "/contact"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "key": "cta",
+    "label": "Call to action",
+    "icon": "campaign",
+    "children": [
+      {
+        "kind": "field",
+        "key": "heading",
+        "label": "Heading",
+        "widget": "text"
+      },
+      {
+        "kind": "field",
+        "key": "text",
+        "label": "Text",
+        "widget": "textarea"
+      },
+      {
+        "kind": "field",
+        "key": "button_label",
+        "label": "Button label",
+        "widget": "text"
+      },
+      {
+        "kind": "field",
+        "key": "url",
+        "label": "Button link",
+        "widget": "text",
+        "help": "A page on this site like /contact, or a full link (https://…, mailto:…, tel:…).",
+        "placeholder": "/contact"
+      }
+    ]
+  }
+]

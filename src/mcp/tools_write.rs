@@ -296,9 +296,11 @@ async fn run_page_edit(
     let invalidator: std::sync::Arc<dyn crate::cache_invalidate::PageCacheInvalidator> =
         crate::task_queue::default_invalidator()
             .unwrap_or_else(|| std::sync::Arc::new(crate::cache_invalidate::Noop));
+    // The page cache keys on the org id; the verified token carries it (#930).
+    let tenant = ctx.agent.tenant_binding();
     let outcome = crate::admin::apply_page_edit(
         &ctx.pool,
-        &ctx.agent.tenant,
+        &tenant,
         &invalidator,
         None,
         "",
@@ -331,6 +333,13 @@ async fn run_page_edit(
             FORBIDDEN,
             format!("page {page_id} goes live through the review workflow “{workflow}”: save it as a draft and submit it for review"),
         )),
+        // Unreachable today: MCP posts carry no signed `_baseline`.
+        Err(crate::admin::PageEditRefusal::Conflict { conflicts, .. }) => Err(McpError::invalid_params(
+            format!(
+                "page {page_id} changed since it was loaded: {}",
+                conflicts.iter().map(|c| c.field).collect::<Vec<_>>().join(", ")
+            ),
+        )),
     }
 }
 
@@ -338,6 +347,12 @@ async fn run_page_edit(
 /// review says so, since the page it returns is the unchanged live one.
 fn edit_result(outcome: &crate::admin::PageEditOutcome, action: &str) -> Value {
     let mut out = page_result(&outcome.page, action);
+    if outcome.unchanged {
+        if let Some(obj) = out.as_object_mut() {
+            obj.insert("unchanged".to_owned(), json!(true));
+            obj.insert("note".to_owned(), json!("no changes to save: the page already holds these values"));
+        }
+    }
     if outcome.held_for_review {
         if let Some(obj) = out.as_object_mut() {
             obj.insert("held_for_review".to_owned(), json!(true));
@@ -503,12 +518,14 @@ rustango::register_mcp_tool!(
             )));
         }
 
-        let status = match input.status.as_deref().unwrap_or("draft") {
-            "draft" => PageStatus::Draft,
-            "published" => PageStatus::Published,
-            other => {
+        // At create time only draft or published: scheduling needs a
+        // go-live date and archiving a page that never went live is moot.
+        let status = match PageStatus::parse_editable(input.status.as_deref().unwrap_or("draft")) {
+            Some(s @ (PageStatus::Draft | PageStatus::Published)) => s,
+            _ => {
                 return Err(McpError::invalid_params(format!(
-                    "status must be `draft` or `published` at create time, got `{other}`"
+                    "status must be `draft` or `published` at create time, got `{}`",
+                    input.status.as_deref().unwrap_or_default()
                 )))
             }
         };
@@ -734,7 +751,7 @@ rustango::register_mcp_tool!(
             .ok_or_else(|| McpError::invalid_params(format!("page {} not found", input.page_id)))?;
 
         if let Some(status) = input.status.as_deref() {
-            if !matches!(status, "draft" | "published" | "scheduled" | "archived") {
+            if PageStatus::parse_editable(status).is_none() {
                 return Err(McpError::invalid_params(format!(
                     "unknown status `{status}`"
                 )));
@@ -1554,7 +1571,7 @@ rustango::register_mcp_tool!(
             }
         }
 
-        snippet.save_pool(&ctx.pool).await.map_err(McpError::from)?;
+        snippet.save(&ctx.pool).await.map_err(McpError::from)?;
         let mut warnings = Vec::new();
         if let Some(parsed) = &form {
             warnings = crate::forms::schema::validate(parsed);

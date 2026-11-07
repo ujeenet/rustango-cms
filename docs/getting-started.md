@@ -1,4 +1,4 @@
-# Getting started: build a blog with rustango-cms
+# Getting started: build a blog with Rustango-CMS
 
 This walkthrough takes you from an empty directory to a working blog with an editor's admin: a page tree, two page types, a Markdown body stored in its own database table, and public pages served from templates you own. No database server to install — everything here runs on SQLite.
 
@@ -13,33 +13,35 @@ This walkthrough takes you from an empty directory to a working blog with an edi
 | Tool | Why | Install |
 |---|---|---|
 | Rust 1.88+ | Compiler | <https://rustup.rs> |
-| A checkout of `rustango-cms` | The scaffolder, `rcms` | `git clone https://github.com/ujeenet/rustango-cms` |
+| The scaffolder, `rcms` | Generates a new site project | `cargo install rcms-scaffold` |
 
-The generated project gets `rustango-cms` and the `rustango` framework from crates.io; the checkout is only needed to run the scaffolder.
+`cargo install` downloads only the scaffolder, a small program that builds in seconds; you install it once. The generated project gets `rustango-cms` and the `rustango` framework from crates.io.
 
 Check what you have:
 
 ```bash
 rustc --version    # should print 1.88 or newer
+rcms --version     # the scaffolder; its version is the Rustango-CMS release it creates
 ```
 
 ---
 
 ## Step 1: Generate the project
 
-The scaffolder is `rcms`: it generates a new site project. Run it straight from the repo:
+The scaffolder is `rcms`: it generates a new site project.
 
 ```bash
-cd ~/projects/rustango-cms
-cargo run -p rcms-scaffold -- new myblog --dir ~/projects --template blog
+rcms new myblog --dir ~/projects --template blog
 ```
 
 `--template blog` gives you a home page plus an article type with a real Markdown body. (The other option, `--template minimal`, gives you the same two page types with no typed fields — useful when you want to design your own from scratch.)
 
+> **Want a finished-looking site instead?** `--theme blog`, `--theme news`, `--theme portfolio` or `--theme blog-portfolio` creates a complete site with pages, menus and colours, and no Rust models. See [Starter themes](themes.md). This guide builds a site by hand so you see how each piece works.
+
 It prints exactly what to run next:
 
 ```
-Created rustango-cms project `myblog` (blog template) at /Users/you/projects/myblog
+Created Rustango-CMS project `myblog` (blog template) at /Users/you/projects/myblog
 
 Next:
   cd /Users/you/projects/myblog
@@ -60,7 +62,7 @@ myblog/
 ├── .env.example            # every setting, documented
 ├── .gitignore
 ├── README.md               # the same commands, kept for later
-├── migrations/             # the CMS baseline — don't hand-edit these
+├── migrations/             # written on the first run: the CMS migrations, then yours
 ├── src/
 │   ├── main.rs             # wires the admin + public router together
 │   ├── models.rs           # your page types

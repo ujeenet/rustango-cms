@@ -45,7 +45,7 @@ pub async fn enqueue(
             created_at: rustango::sql::Auto::Unset,
             sent_at: None,
         };
-        row.insert_pool(pool).await?;
+        row.insert(pool).await?;
         n += 1;
     }
     Ok(n)
@@ -96,14 +96,14 @@ pub async fn drain(pool: &Pool, ctx: &DrainCtx<'_>, limit: usize) -> Result<Drai
             // queued. Sending is meaningless; say so instead of retrying.
             row.status = STATUS_FAILED.to_owned();
             row.last_error = "target missing or disabled".to_owned();
-            row.save_pool(pool).await?;
+            row.save(pool).await?;
             report.failed += 1;
             continue;
         };
         let Some(channel) = channel_for(&target.kind) else {
             row.status = STATUS_FAILED.to_owned();
             row.last_error = format!("no channel registered for kind `{}`", target.kind);
-            row.save_pool(pool).await?;
+            row.save(pool).await?;
             report.failed += 1;
             continue;
         };
@@ -112,7 +112,7 @@ pub async fn drain(pool: &Pool, ctx: &DrainCtx<'_>, limit: usize) -> Result<Drai
             Err(e) => {
                 row.status = STATUS_FAILED.to_owned();
                 row.last_error = format!("unreadable payload: {e}");
-                row.save_pool(pool).await?;
+                row.save(pool).await?;
                 report.failed += 1;
                 continue;
             }
@@ -148,7 +148,7 @@ pub async fn drain(pool: &Pool, ctx: &DrainCtx<'_>, limit: usize) -> Result<Drai
                 }
             }
         }
-        row.save_pool(pool).await?;
+        row.save(pool).await?;
     }
     Ok(report)
 }
@@ -171,7 +171,7 @@ pub async fn retry(pool: &Pool, delivery_id: i64) -> Result<bool, ExecError> {
     row.attempts = 0;
     row.last_error = String::new();
     row.next_attempt_at = Some(Utc::now());
-    row.save_pool(pool).await?;
+    row.save(pool).await?;
     Ok(true)
 }
 

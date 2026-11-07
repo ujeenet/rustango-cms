@@ -10,8 +10,8 @@
 //! every row got a distinct `sort_order`.
 //!
 //! Needs a **real PostgreSQL** tenant — SQLite serializes writers so the
-//! race can't reproduce there, and `Tenant::for_test`'s `TenantConn` is
-//! only obtainable via the PG-only `TenantPools::acquire`. `#[ignore]`d
+//! race can't reproduce there, and `Tenant::for_test_pools` (one held
+//! connection per task) is PG-only. `#[ignore]`d
 //! so the normal suite skips it; run by hand against a migrated tenant:
 //!
 //! ```sh
@@ -44,7 +44,6 @@ const TEST_TYPE: &str = "rcms_race_test";
 struct Harness {
     pools: Arc<TenantPools<rustango::sql::sqlx::Postgres>>,
     org: Org,
-    tenant_pool: Pool,
     type_id: i64,
 }
 
@@ -52,8 +51,7 @@ impl Harness {
     /// A fresh tenant bound to its own acquired connection — one per
     /// concurrent task (each task needs an independent `&Tenant`).
     async fn tenant(&self) -> Tenant {
-        let conn = self.pools.acquire(&self.org).await.expect("acquire");
-        Tenant::for_test(self.org.clone(), conn, self.tenant_pool.clone())
+        Tenant::for_test_pools(self.org.clone(), &self.pools).await.expect("tenant")
     }
 }
 
@@ -116,7 +114,6 @@ async fn setup() -> Harness {
     Harness {
         pools,
         org,
-        tenant_pool,
         type_id,
     }
 }
@@ -154,11 +151,9 @@ async fn concurrent_create_child_assigns_distinct_sort_orders() {
         // Borrow `h` across the spawn via a scoped clone of its parts.
         let pools = Arc::clone(&h.pools);
         let org = h.org.clone();
-        let tenant_pool = h.tenant_pool.clone();
         let type_id = h.type_id;
         handles.push(tokio::spawn(async move {
-            let conn = pools.acquire(&org).await.expect("acquire");
-            let t = Tenant::for_test(org, conn, tenant_pool);
+            let t = Tenant::for_test_pools(org, &pools).await.expect("tenant");
             barrier.wait().await;
             Page::create_child(
                 &t,
@@ -198,12 +193,10 @@ async fn concurrent_create_root_assigns_distinct_sort_orders() {
     for i in 0..N {
         let pools = Arc::clone(&h.pools);
         let org = h.org.clone();
-        let tenant_pool = h.tenant_pool.clone();
         let type_id = h.type_id;
         let barrier = Arc::clone(&barrier);
         handles.push(tokio::spawn(async move {
-            let conn = pools.acquire(&org).await.expect("acquire");
-            let t = Tenant::for_test(org, conn, tenant_pool);
+            let t = Tenant::for_test_pools(org, &pools).await.expect("tenant");
             barrier.wait().await;
             Page::create_root(&t, NewPage::new(type_id, format!("r{i}"), format!("r{i}")))
                 .await
@@ -250,12 +243,10 @@ async fn concurrent_move_to_same_parent_assigns_distinct_sort_orders() {
     for mut src in sources {
         let pools = Arc::clone(&h.pools);
         let org = h.org.clone();
-        let tenant_pool = h.tenant_pool.clone();
         let parent = parent.clone();
         let barrier = Arc::clone(&barrier);
         handles.push(tokio::spawn(async move {
-            let conn = pools.acquire(&org).await.expect("acquire");
-            let t = Tenant::for_test(org, conn, tenant_pool);
+            let t = Tenant::for_test_pools(org, &pools).await.expect("tenant");
             barrier.wait().await;
             src.move_to(&t, Some(&parent)).await.expect("move_to");
             src.sort_order

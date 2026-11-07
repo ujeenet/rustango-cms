@@ -144,7 +144,7 @@ pub async fn acquire(
             // Take over: refresh / claim the row in place.
             row.user_id = user_id;
             row.expires_at = new_expires;
-            row.save_pool(pool).await?;
+            row.save(pool).await?;
             Ok(AcquireOutcome::Acquired(row))
         } else {
             Ok(AcquireOutcome::Held(row))
@@ -157,7 +157,7 @@ pub async fn acquire(
             acquired_at: Auto::Unset,
             expires_at: new_expires,
         };
-        row.insert_pool(pool).await?;
+        row.insert(pool).await?;
         Ok(AcquireOutcome::Acquired(row))
     }
 }
@@ -185,7 +185,7 @@ pub async fn release(
     };
     let now = Utc::now();
     if row.user_id == user_id || row.is_stale(now) {
-        row.delete_pool(pool).await?;
+        row.delete(pool).await?;
         Ok(true)
     } else {
         Ok(false)
@@ -236,6 +236,6 @@ pub async fn force_release(
         return Ok(None);
     };
     let snapshot = row.clone();
-    row.delete_pool(pool).await?;
+    row.delete(pool).await?;
     Ok(Some(snapshot))
 }

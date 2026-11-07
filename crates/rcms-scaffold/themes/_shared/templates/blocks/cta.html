@@ -1,0 +1,7 @@
+{% import "_macros.html" as m %}
+{#- The "Call to action" content block. -#}
+<aside class="cta">
+  {%- if value.heading %}<h2>{{ value.heading }}</h2>{% endif %}
+  {%- if value.text %}<p>{{ value.text }}</p>{% endif %}
+  {{ m::button(label=value.button_label | default(value=""), url=value.url | default(value="")) | safe }}
+</aside>

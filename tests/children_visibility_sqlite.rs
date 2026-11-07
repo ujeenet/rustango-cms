@@ -43,7 +43,7 @@ async fn setup() -> (Pool, i64) {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(&pool).await.expect("page type");
+    pt.save(&pool).await.expect("page type");
     (pool, pt.id.get().copied().expect("type id"))
 }
 
@@ -92,7 +92,7 @@ async fn page(
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    p.save_pool(pool).await.expect("page");
+    p.save(pool).await.expect("page");
     p.id.get().copied().expect("id")
 }
 
@@ -136,7 +136,7 @@ async fn default_children_leave_out_error_pages() {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    err_type.save_pool(&pool).await.expect("error type");
+    err_type.save(&pool).await.expect("error type");
     let e = err_type.id.get().copied().expect("id");
     let root = page(&pool, t, 1, None, PageStatus::Published, None, None).await;
     let about = page(&pool, t, 2, Some(root), PageStatus::Published, None, None).await;
@@ -150,4 +150,53 @@ async fn default_children_leave_out_error_pages() {
         .filter_map(|p| p.id.get().copied())
         .collect();
     assert_eq!(ids, vec![about]);
+}
+
+/// #690 — a bounded window of the same live children, in the order the
+/// type asks for, with the full count beside it.
+#[tokio::test]
+async fn published_children_page_windows_the_live_children() {
+    use rustango::core::Column as _;
+    use rustango_cms::{published_children_page, ChildOrder};
+    let (pool, t) = setup().await;
+    let base = Utc::now() - Duration::days(30);
+    let root = page(&pool, t, 1, None, PageStatus::Published, None, None).await;
+    let p = Some(root);
+    // Created in this order; `published_at` and `sort_order` set below.
+    let a = page(&pool, t, 2, p, PageStatus::Published, None, None).await;
+    let b = page(&pool, t, 3, p, PageStatus::Published, None, None).await;
+    let c = page(&pool, t, 4, p, PageStatus::Published, None, None).await;
+    let undated = page(&pool, t, 5, p, PageStatus::Published, None, None).await;
+    let _draft = page(&pool, t, 6, p, PageStatus::Draft, None, None).await;
+    for (id, days, order) in [(a, Some(1), 3), (b, Some(9), 1), (c, Some(5), 2), (undated, None, 0)] {
+        let mut row = Page::objects().where_(Page::id.eq(id)).first(&pool).await.unwrap().unwrap();
+        row.published_at = days.map(|d| base + Duration::days(d));
+        row.sort_order = order;
+        row.save(&pool).await.expect("update");
+    }
+    let parent = Page::objects().where_(Page::id.eq(root)).first(&pool).await.unwrap().unwrap();
+    let ids = |v: &[Page]| v.iter().filter_map(|p| p.id.get().copied()).collect::<Vec<_>>();
+
+    let newest = published_children_page(&pool, &parent, ChildOrder::NewestFirst, 2, 0).await.unwrap();
+    assert_eq!(ids(&newest.pages), vec![b, c]);
+    assert_eq!(newest.total, 4, "the draft is not counted");
+    let next = published_children_page(&pool, &parent, ChildOrder::NewestFirst, 2, 2).await.unwrap();
+    assert_eq!(ids(&next.pages), vec![a, undated], "undated last");
+
+    let oldest = published_children_page(&pool, &parent, ChildOrder::OldestFirst, 10, 0).await.unwrap();
+    assert_eq!(ids(&oldest.pages), vec![a, c, b, undated]);
+
+    // `Position` pages through exactly what `default_children` lists.
+    let all = ids(&default_children(&pool, &parent).await.unwrap());
+    let mut paged = Vec::new();
+    for offset in (0..4).step_by(3) {
+        let w = published_children_page(&pool, &parent, ChildOrder::Position, 3, offset).await.unwrap();
+        paged.extend(ids(&w.pages));
+    }
+    assert_eq!(paged, all);
+    assert_eq!(all, vec![undated, b, c, a]);
+
+    let past_end = published_children_page(&pool, &parent, ChildOrder::Position, 3, usize::MAX).await.unwrap();
+    assert!(past_end.pages.is_empty());
+    assert_eq!(past_end.total, 4);
 }

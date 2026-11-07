@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ "Search" | translate(locale=LANG) }}{% if query %} — {{ query }}{% endif %} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ "Search" | translate(locale=LANG) }}{% if query %} — {{ query }}{% endif %} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Search" | translate(locale=LANG) }}{% endblock %}
 
 {% block content %}
@@ -37,7 +37,7 @@
                     <li class="rcms-py-2 rcms-px-0 rcms-border-top">
                         <a href="{{ url(name='rcms-admin:pages:edit', id=p.id) }}" class="rcms-no-underline">
                             <strong>{{ p.title }}</strong>
-                            <span class="rcms-tag {{ p.status }} rcms-text-3xs rcms-ml-1">{{ p.status }}</span>
+                            <span class="rcms-tag {{ p.status }} rcms-text-3xs rcms-ml-1">{{ p.status | capitalize | translate(locale=LANG) }}</span>
                         </a>
                         <br>
                         <code class="rcms-text-2xs rcms-text-muted">{{ p.url_path }}</code>

@@ -1,0 +1,409 @@
+{
+  "name": "Blog",
+  "site": {
+    "tagline": "Notes on work and life",
+    "footer": "© 2026 My Blog. Built with Rustango-CMS.",
+    "footer_logo": "@media:rustango-cms-logo"
+  },
+  "branding": {
+    "site_name": "My Blog",
+    "logo": "@media:rustango-cms-icon",
+    "favicon": "@media:rustango-cms-icon"
+  },
+  "theme": {
+    "base": "paper",
+    "slug": "starter-blog",
+    "name": "Starter: Blog",
+    "tokens": {
+      "color_link": "#c2410c",
+      "font_heading": "'Fraunces', Georgia, serif",
+      "font_body": "'Inter', system-ui, sans-serif",
+      "font_url": "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;500;600&display=swap"
+    }
+  },
+  "page_types": [
+    "Home",
+    "Page",
+    "Blog",
+    "Post"
+  ],
+  "pages": [
+    {
+      "key": "home",
+      "type": "Home",
+      "title": "Home",
+      "slug": "",
+      "data": {
+        "headline": "Writing about the things I make and learn.",
+        "intro": "A personal blog. New posts every week or so.",
+        "cta_label": "Read the blog",
+        "cta_url": "/blog",
+        "body": [
+          {
+            "type": "rich_text",
+            "value": {
+              "body": "<p>Welcome! This home page and everything below it is sample content from the <strong>Blog</strong> starter theme. Change it in the CMS admin.</p>"
+            }
+          }
+        ]
+      },
+      "children": [
+        {
+          "key": "blog",
+          "type": "Blog",
+          "title": "Blog",
+          "slug": "blog",
+          "in_menu": true,
+          "data": {
+            "intro": "Everything I've written, newest first."
+          },
+          "children": [
+            {
+              "key": "post-3",
+              "type": "Post",
+              "title": "Writing every week, one year later",
+              "slug": "writing-every-week",
+              "seo_description": "What a year of weekly posts taught me about habits, drafts and hitting publish.",
+              "in_menu": true,
+              "data": {
+                "excerpt": "What a year of weekly posts taught me about habits, drafts and hitting publish.",
+                "published": "2026-10-28",
+                "author": "Alex Morgan",
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>A year ago I promised myself one post a week. Some weeks it was easy; most weeks it was not.</p><p>The trick turned out to be lowering the bar: a short, honest post beats a perfect one that never ships.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "Publishing is a muscle. The more often you use it, the less it hurts.",
+                      "attribution": "Alex Morgan"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>If you are thinking about starting, start small, and start this week.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:paper"
+              }
+            },
+            {
+              "key": "post-2",
+              "type": "Post",
+              "title": "A calmer way to plan the week",
+              "slug": "calmer-week-planning",
+              "seo_description": "Three questions on a Sunday evening that make the week ahead feel lighter.",
+              "in_menu": true,
+              "data": {
+                "excerpt": "Three questions on a Sunday evening that make the week ahead feel lighter.",
+                "published": "2026-10-14",
+                "author": "Alex Morgan",
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Planning used to mean a long list I never finished. Now it means three questions.</p><p>What must happen? What would make the week good? What can wait? Everything else is noise.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "A plan is a promise to your future self. Keep it small enough to keep.",
+                      "attribution": "Alex Morgan"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Try it this Sunday and see how Monday feels.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:leaves"
+              }
+            },
+            {
+              "key": "post-1",
+              "type": "Post",
+              "title": "Hello, world",
+              "slug": "hello-world",
+              "seo_description": "The first post on this blog: why it exists and what you'll find here.",
+              "in_menu": true,
+              "data": {
+                "excerpt": "The first post on this blog: why it exists and what you'll find here.",
+                "published": "2026-10-01",
+                "author": "Alex Morgan",
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Welcome! This blog is where I write about the things I'm learning and making.</p><p>Expect notes on work, tools, books and the occasional side project.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "Writing things down is the best way I know to think clearly.",
+                      "attribution": "Alex Morgan"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Thanks for reading. Subscribe or say hello on the contact page.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:hills"
+              }
+            }
+          ]
+        },
+        {
+          "key": "about",
+          "type": "Page",
+          "title": "About",
+          "slug": "about",
+          "in_menu": true,
+          "data": {
+            "intro": "A little about me.",
+            "body": [
+              {
+                "type": "hero",
+                "value": {
+                  "heading": "Hi, I'm glad you're here.",
+                  "text": "I write about work, tools and the small habits that make a week go well.",
+                  "height": "medium",
+                  "image": "@media:sea"
+                }
+              },
+              {
+                "type": "rich_text",
+                "value": {
+                  "body": "<p>This is a sample page. Edit it in the CMS admin under <strong>Pages</strong>: change the text, add images, quotes or a call to action from the <em>Content</em> field.</p>"
+                }
+              },
+              {
+                "type": "quote",
+                "value": {
+                  "text": "Simple things should be simple, complex things should be possible.",
+                  "attribution": "Alan Kay"
+                }
+              },
+              {
+                "type": "rich_text",
+                "value": {
+                  "body": "<h2>What this site is for</h2><p>Replace this text with your own story. Every page here is yours to rewrite or delete.</p>"
+                }
+              },
+              {
+                "type": "media_text",
+                "value": {
+                  "image_side": "left",
+                  "heading": "How this blog started",
+                  "text": "It began as notes to myself. Writing things down made them clearer, so I kept going, and then started sharing them.\n\n*Change this text and the picture in the admin.*",
+                  "image": "@media:paper",
+                  "image_alt": "Two sheets of ruled paper and a pencil on a desk"
+                }
+              },
+              {
+                "type": "media_text",
+                "value": {
+                  "image_side": "right",
+                  "heading": "What you'll find here",
+                  "text": "Short, practical posts about writing, planning and making things. One new post every week or so.",
+                  "button_label": "Get in touch",
+                  "url": "/contact",
+                  "image": "@media:coffee",
+                  "image_alt": "A cup of coffee with latte art, seen from above on a wooden table"
+                }
+              },
+              {
+                "type": "cards",
+                "value": {
+                  "heading": "Start here",
+                  "columns": "3",
+                  "cards": [
+                    {
+                      "type": "card",
+                      "id": "about-card-0",
+                      "value": {
+                        "title": "Writing every week",
+                        "text": "How I keep a steady writing habit.",
+                        "url": "/blog/writing-every-week",
+                        "image": "@media:paper"
+                      }
+                    },
+                    {
+                      "type": "card",
+                      "id": "about-card-1",
+                      "value": {
+                        "title": "A calmer week",
+                        "text": "Planning that leaves room to think.",
+                        "url": "/blog/calmer-week-planning",
+                        "image": "@media:leaves"
+                      }
+                    },
+                    {
+                      "type": "card",
+                      "id": "about-card-2",
+                      "value": {
+                        "title": "Say hello",
+                        "text": "Questions and ideas are welcome.",
+                        "url": "/contact",
+                        "image": "@media:coffee"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "gallery",
+                "value": {
+                  "columns": "3",
+                  "images": [
+                    {
+                      "type": "gallery_image",
+                      "id": "about-gallery-0",
+                      "value": {
+                        "image": "@media:leaves",
+                        "caption": "At home",
+                        "alt": "Green leaves of a house plant against a pale wall"
+                      }
+                    },
+                    {
+                      "type": "gallery_image",
+                      "id": "about-gallery-1",
+                      "value": {
+                        "image": "@media:coffee",
+                        "caption": "Morning coffee",
+                        "alt": "A cup of coffee with latte art, seen from above on a wooden table"
+                      }
+                    },
+                    {
+                      "type": "gallery_image",
+                      "id": "about-gallery-2",
+                      "value": {
+                        "image": "@media:books",
+                        "caption": "Reading list",
+                        "alt": "Three shelves of books in muted colours"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "jumbo",
+                "value": {
+                  "heading": "Never miss a post",
+                  "text": "New writing every week. Read the latest on the blog.",
+                  "button_label": "Read the blog",
+                  "url": "/blog",
+                  "style": "accent"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "key": "contact",
+          "type": "Page",
+          "title": "Contact",
+          "slug": "contact",
+          "in_menu": true,
+          "data": {
+            "intro": "Questions, ideas or a project in mind? Get in touch.",
+            "body": [
+              {
+                "type": "rich_text",
+                "value": {
+                  "body": "<p>Write to <a href=\"mailto:hello@example.com\">hello@example.com</a> and we'll reply within two working days.</p>"
+                }
+              },
+              {
+                "type": "cta",
+                "value": {
+                  "heading": "Prefer a call?",
+                  "text": "Book a short introduction call and we'll take it from there.",
+                  "button_label": "Book a call",
+                  "url": "mailto:hello@example.com"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "menus": [
+    {
+      "slug": "header",
+      "name": "Header",
+      "items": [
+        {
+          "page": "blog"
+        },
+        {
+          "page": "about"
+        },
+        {
+          "page": "contact"
+        }
+      ]
+    },
+    {
+      "slug": "footer",
+      "name": "Footer",
+      "items": [
+        {
+          "label": "Site",
+          "children": [
+            {
+              "page": "home",
+              "label": "Home"
+            },
+            {
+              "page": "blog"
+            },
+            {
+              "page": "about"
+            },
+            {
+              "page": "contact"
+            }
+          ]
+        },
+        {
+          "label": "Elsewhere",
+          "children": [
+            {
+              "label": "GitHub",
+              "url": "https://github.com/ujeenet/rustango-cms"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "error_pages": [
+    {
+      "status": 404,
+      "title": "This post wandered off",
+      "slug": "page-not-found",
+      "body": [
+        {
+          "type": "paragraph",
+          "value": {
+            "body": "There's nothing at this address. The post may have moved, or the link may be mistyped.\n\nThe newest writing is on the home page."
+          }
+        }
+      ]
+    }
+  ]
+}

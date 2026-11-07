@@ -3,7 +3,7 @@
    last-submission time, linking straight into the builder + submission
    history. (The generic library table can't show submissions: render_cell
    is sync and pool-less, so the handler precomputes them.) #}
-{% block title %}{{ "Forms — CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ "Forms" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Forms" | translate(locale=LANG) }}{% endblock %}
 
 {% block topbar_actions %}

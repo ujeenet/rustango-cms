@@ -39,6 +39,17 @@
     function post(body) {
       body.vid = vid; body.sid = sid; body.p = path;
       var json = JSON.stringify(body);
+      /* With the CSRF cookie, send its token: a site served under a path
+         (example.com/acme/) is not covered by the server's exemption for
+         this address. A beacon can't carry the header, so this uses fetch. */
+      var token = (document.cookie.match(/(?:^|;\s*)rustango_csrf=([^;]+)/) || [])[1];
+      if (token) {
+        try {
+          fetch(COLLECT, { method: "POST", body: json, keepalive: true,
+            headers: { "Content-Type": "application/json", "X-CSRF-Token": decodeURIComponent(token) } });
+          return;
+        } catch (e) {}
+      }
       try {
         var blob = new Blob([json], { type: "application/json" });
         if (navigator.sendBeacon && navigator.sendBeacon(COLLECT, blob)) return;

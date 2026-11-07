@@ -2,7 +2,7 @@
 
 **Goal:** understand the parts of the Clay & Kiln shop that are made in Rust, and make your own.
 
-**Who this is for:** Rust developers who build a site with rustango-cms.
+**Who this is for:** Rust developers who build a site with Rustango-CMS.
 
 **Time:** about 20 minutes.
 
@@ -20,6 +20,9 @@ Most of the shop is made in the admin: the Product type, the categories, the men
 | A new vocabulary next to **Categories** | | `TaxonomyHandler` + `register_taxonomy!` |
 | A settings group with fixed boxes | | `register_site_setting!` |
 | The values of settings, menus, categories | the admin | |
+| Your own table, edited in the admin | | `#[derive(CmsAdmin)]` — see [Your own data in the admin](shop-dev-admin-screens.md) |
+| An admin screen that does one job (an import, a report) | | `AdminPageHandler` + `register_admin_page!` — same chapter |
+| Your own version of a built-in block | | a block with the same name (see "Replace a built-in block") |
 
 ## `#[derive(PageType)]` — a page type in code
 
@@ -99,13 +102,16 @@ Every method has a default, so you only write the ones you need.
 | `is_creatable()` | `true` | Hide the type from the **New page** list (for example a type used only once). |
 | `workflow_slug()` | none | Send pages of this type through a review workflow. |
 | `view_restriction()` | none | Show pages of this type only to signed-in members or some groups. |
-| `children_query(pool, page)` | all children | Choose which children the template gets in `children`. |
+| `children_query(pool, page)` | all live children | Choose which children the template gets in `children`. |
 | `public_context(pool, page)` | nothing | Give the template extra data that is not a page or its fields. |
-| `display_fields`, `extra_tabs`, `routes`, `route_context` | — | Chips in the admin list, extra editor tabs, extra URLs under a page. |
+| `routes`, `route_context`, `route_outcome` | none | Extra URLs under a page, their data, and the template (or a 404) they answer with. See [Your own data in the admin](shop-dev-admin-screens.md). |
+| `display_fields`, `extra_tabs` | — | Chips in the admin list, extra editor tabs. |
+
+In the methods that get a page (`public_context`, `route_context`), `self` is that page's row of your table, so `self.seats` is the number the editor saved for this workshop. (When a page has no row yet, `self` is `Default::default()`.)
 
 ### `children_query` — only published children
 
-By default a page's template gets all its children in `children`, drafts too. The shop page wants only the published products:
+By default a page's template gets all its live children in `children`, in the order editors arranged them. The shop page says so itself:
 
 ```rust
 #[async_trait]
@@ -122,6 +128,17 @@ impl rustango_cms::PageTypeOverrides for ShopPage {
 ```
 
 Return `Ok(None)` to keep the default. The home page uses the same code, so its cards show only published pages.
+
+A page with hundreds of children should not list them all. `published_children_page` returns one window of them, in the order you choose, and the total:
+
+```rust
+let first = rustango_cms::published_children_page(
+    pool, page, rustango_cms::ChildOrder::NewestFirst, 20, 0,
+).await?;
+Ok(Some(first.pages))
+```
+
+`first.total` is the number of live children, for "page 1 of 7" links. Serve the next windows from a route such as `page/(?P<n>\d+)` (see `routes` above), calling the same helper with an `offset`.
 
 ### Listing pages: `child.builder`
 
@@ -165,6 +182,98 @@ async fn public_context(
 ```
 
 > **Avoid N+1 queries.** Load the data for all items in one query — not one query per item in a loop.
+
+A key named `page` is special: its keys are added to the page's own, so the template reads them as `page.<key>`. They never replace a key the page has already (`title`, `url_path`…). The shop page uses this for `page.stockist_count`.
+
+## Inline panels: rows that belong to a page
+
+Some data belongs to one page but has many rows: the speakers of a workshop, the causes of a campaign. An inline panel shows them in the page editor as a list of cards, each with its own fields, which editors add, remove and reorder. The rows live in your own table.
+
+Three `PageTypeOverrides` methods make a panel:
+
+```rust
+#[async_trait]
+impl rustango_cms::PageTypeOverrides for Workshop {
+    async fn inline_panels(&self, pool: &Pool, page_id: i64) -> Result<Vec<InlinePanelSpec>, ExecError> {
+        Ok(vec![InlinePanelSpec::with_widgets(
+            "speakers",
+            "Speakers",
+            vec![
+                Widget::new(WidgetKind::Select, "potter_id", "Potter").with_options(potters(pool).await?).required(),
+                Widget::new(WidgetKind::Text, "topic", "Topic"),
+                Widget::new(WidgetKind::Boolean, "is_host", "Hosts the class").with_variant("switch"),
+            ],
+        )
+        .in_tab("Speakers")
+        .with_row_label("Speaker")
+        .with_icon("record_voice_over")])
+    }
+
+    async fn load_inline_panel(&self, pool: &Pool, page_id: i64, panel: &str) -> Result<Vec<Map<String, Value>>, ExecError> {
+        // One map per row; keys are the widget names. Add `id` so saves can
+        // tell existing rows from new ones, and `__title` for the card heading.
+        load_speakers(pool, page_id).await
+    }
+
+    async fn save_inline_panel(&self, pool: &Pool, page_id: i64, panel: &str, rows: &[Map<String, Value>]) -> Result<(), ExecError> {
+        // `rows` is every row the editor kept, in order: update the ones with
+        // an `id`, insert the others, delete the stored rows not in the list.
+        save_speakers(pool, page_id, rows).await
+    }
+}
+```
+
+| Part | What it does |
+|---|---|
+| `with_widgets(name, label, widgets)` | The fields of one row. Every widget kind works: selects, switches, the image and document choosers, checkbox lists. |
+| `in_tab("Speakers")` | Shows the panel in its own editor tab. Panels with the same tab label share it. Without it, the panel is in the Content tab. |
+| `with_row_label("Speaker")` | The add button reads "Add speaker"; a new card is called "Speaker" until a choice in it names it. |
+| `allow(add, delete, order)` | Turn row operations off, for rows another system owns. Pair it with `Widget::read_only()` on the fields editors must not change. |
+
+A row's values arrive as text, the way the browser posts them. An unchecked switch posts nothing, so a missing key means "off". A checkbox list posts a JSON array of the chosen values.
+
+### Many rows: per-row panels
+
+When a panel can hold hundreds of rows (every cause of a large organization), call `.per_row()`. The tab then lists only each row's title; a card's fields load when the editor opens it, the card has its own **Save** button, and add, remove and reorder take effect at once. The page's own Save sends nothing for the panel.
+
+A per-row panel uses five smaller methods instead of `load_inline_panel` / `save_inline_panel`:
+
+| Method | Returns |
+|---|---|
+| `inline_rows(pool, page_id, panel)` | Each row's id and title, in order (`InlineRowSummary`). Keep it cheap: it runs on every editor load. |
+| `inline_row(pool, page_id, panel, row_id)` | One row's values by widget name; `row_id = None` gives a new row's starting values. `Ok(None)` if the id isn't one of this page's rows. |
+| `save_inline_row(pool, page_id, panel, row_id, values)` | `InlineRowSaved::Saved { id, title }`, or `InlineRowSaved::Invalid(errors)` — each `FieldError` shows under its field (`"_form"` for the card). `row_id = None` adds the row. |
+| `delete_inline_row(pool, page_id, panel, row_id)` | `true` when removed; `false` refuses. |
+| `reorder_inline_rows(pool, page_id, panel, ids)` | Stores the order, first to last. Ignore ids that aren't this page's. |
+
+Every one of these checks that the row belongs to `page_id`: the URLs carry ids an editor can change.
+
+> **Name your fields carefully.** A page type's own fields share the form with the page editor's fields. `#[derive(PageType)]` refuses a `#[field]` named like one of them (`status`, `title`, `slug`, `tags`…). Rename the Rust field and keep the column with `#[rustango(column = "status")]`.
+
+## Replace a built-in block
+
+The CMS has built-in blocks (`heading`, `paragraph`, `image`, `quote`, `rich_text`, `gallery`…). To change how one works on your site, register your own block with the same `type_name`:
+
+```rust
+#[derive(Default)]
+pub struct ShopQuote;
+
+impl rustango_cms::Block for ShopQuote {
+    fn type_name(&self) -> &'static str { "quote" }          // the built-in's name
+    fn verbose_name(&self) -> &'static str { "Customer quote" }
+    fn fields(&self) -> Vec<BlockField> {
+        vec![
+            BlockField::widget("text", "Quote", WidgetKind::Textarea),
+            BlockField::widget("customer", "Customer", WidgetKind::Text),
+        ]
+    }
+}
+rustango_cms::register_block!(ShopQuote);
+```
+
+Your block wins: editors see it in the block menu, pages render with it, and the built-in one is not listed. Content saved with the old block keeps its values; give your fields the same names when you can. The server log says which block was replaced when the site starts.
+
+Two blocks of your own with the same name is a mistake: the CMS keeps the first and logs an error.
 
 ## `LibraryTypeHandler` — reusable content
 

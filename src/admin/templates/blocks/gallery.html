@@ -1,0 +1,17 @@
+{#- Gallery: pictures (`value.images`, `gallery_image` items) in a grid;
+    each opens the picture full size. Unstyled: the site's stylesheet lays
+    out the grid. -#}
+<figure class="rcms-block-gallery rcms-block-gallery--{% if value.columns in ['2', '4'] %}{{ value.columns }}{% else %}3{% endif %}">
+    <ul class="rcms-block-gallery__grid">
+    {%- for entry in value.images | default(value=[]) %}
+        {%- if entry.type == "gallery_image" and entry.value and entry.value.image %}
+        {%- set g = entry.value %}
+        <li class="rcms-block-gallery__item">
+            <a href="{{ rcms_image_url(media_id=g.image, filter='width-2000') }}"><img src="{{ rcms_image_url(media_id=g.image, filter='fill-800x600') }}" alt="{{ g.alt | default(value='') }}" loading="lazy"></a>
+            {%- if g.caption %}<span class="rcms-block-gallery__caption">{{ g.caption }}</span>{% endif %}
+        </li>
+        {%- endif %}
+    {%- endfor %}
+    </ul>
+    {%- if value.caption %}<figcaption>{{ value.caption }}</figcaption>{% endif %}
+</figure>

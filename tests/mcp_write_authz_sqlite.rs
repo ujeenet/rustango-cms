@@ -49,17 +49,17 @@ async fn user_with(pool: &Pool, name: &str, codenames: &[&str]) -> i64 {
         password_changed_at: None,
         sessions_revoked_at: None,
     };
-    u.save_pool(pool).await.expect("user");
+    u.save(pool).await.expect("user");
     let uid = u.id.get().copied().expect("user id");
     let mut role = Role { id: Auto::Unset, name: name.to_owned(), description: String::new(), data: json!({}) };
-    role.save_pool(pool).await.expect("role");
+    role.save(pool).await.expect("role");
     let rid = role.id.get().copied().expect("role id");
     for code in codenames {
         let mut rp = RolePermission { id: Auto::Unset, role_id: rid, codename: (*code).to_owned() };
-        rp.save_pool(pool).await.expect("role perm");
+        rp.save(pool).await.expect("role perm");
     }
     let mut ur = UserRole { id: Auto::Unset, user_id: uid, role_id: rid };
-    ur.save_pool(pool).await.expect("membership");
+    ur.save(pool).await.expect("membership");
     uid
 }
 
@@ -68,6 +68,7 @@ async fn call(pool: &Pool, uid: i64, tool: &str, args: Value) -> Result<Value, S
         pool: pool.clone(),
         agent: McpAgent {
             agent_id: 1,
+            org_id: 1,
             tenant: "t".to_owned(),
             skills: Vec::new(),
             tools: vec![tool.to_owned()],
@@ -147,7 +148,7 @@ async fn upload_media_refuses_files_a_browser_would_run() {
         password_changed_at: None,
         sessions_revoked_at: None,
     };
-    admin.save_pool(&pool).await.expect("user");
+    admin.save(&pool).await.expect("user");
     let uid = admin.id.get().copied().expect("uid");
     for name in ["x.html", "x.xhtml", "x.js", "x.xml"] {
         let err = call(&pool, uid, "upload_media", json!({ "filename": name, "content_base64": "aGk=" }))

@@ -1,0 +1,44 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Documentation" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
+{% block heading %}{{ "Documentation" | translate(locale=LANG) }}{% endblock %}
+{% block description %}{{ "Guides for editors and developers. The same guides are published at" | translate(locale=LANG) }} <a href="{{ docs_site }}" target="_blank" rel="noopener">{{ docs_site | replace(from="https://", to="") }}</a>.{% endblock %}
+{% block body %}
+<form method="get" action="{{ url(name='rcms-admin:help') }}" class="rcms-list-filter-row rcms-mb-4 rcms-maxw-760" role="search">
+    <label class="rcms-search-input">
+        <span class="material-symbols-rounded">search</span>
+        <input type="search" name="q" value="{{ q }}" placeholder="{{ "Search the guides" | translate(locale=LANG) }}" aria-label="{{ "Search the guides" | translate(locale=LANG) }}" autocomplete="off">
+    </label>
+</form>
+
+{% if q %}
+<div class="rcms-card rcms-maxw-760">
+    <h2 class="rcms-m-0 rcms-mb-3 rcms-text-lg">{{ "Results for “{q}”" | translate(locale=LANG, q=q) }}</h2>
+    {% if results | length == 0 %}
+    <p class="rcms-hint">{{ "No guide mentions that. Try another word." | translate(locale=LANG) }}</p>
+    {% else %}
+    <ul class="rcms-list-none rcms-p-0 rcms-m-0">
+        {% for r in results %}
+        <li class="rcms-mb-3">
+            <a href="{{ url(name='rcms-admin:help') }}/{{ r.slug }}"><strong>{{ r.title }}</strong></a>
+            <span class="rcms-hint">· {{ r.section }}</span>
+            <div class="rcms-hint">{{ r.snippet }}</div>
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</div>
+{% else %}
+<div class="rcms-help-sections">
+    {% for s in sections %}
+    <section class="rcms-card">
+        <h2 class="rcms-help-section-title">{{ s.title }}<span class="rcms-help-count">{{ s.guides | length }}</span></h2>
+        <ul class="rcms-help-links">
+            {% for g in s.guides %}
+            <li><a href="{{ url(name='rcms-admin:help') }}/{{ g.slug }}">{{ g.title }}</a></li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}

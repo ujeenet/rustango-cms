@@ -212,7 +212,7 @@ pub async fn ensure_themes_seeded(pool: &Pool) -> Result<(), ExecError> {
                 color_value_dark: (*dark).to_owned(),
                 sort_order: idx as i32,
             };
-            row.insert_pool(pool).await?;
+            row.insert(pool).await?;
         }
     }
     Ok(())

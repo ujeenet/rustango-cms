@@ -83,7 +83,7 @@ pub(crate) async fn prefill(pool: &rustango::sql::Pool, page: &Page) -> HashMap<
                 }
             }
         }
-        for spec in handler.inline_panels() {
+        for spec in handler.inline_panels(pool, page_id).await.unwrap_or_default() {
             let Ok(rows) = handler.load_inline_panel(pool, page_id, &spec.name).await else {
                 continue;
             };
@@ -103,4 +103,40 @@ pub(crate) async fn prefill(pool: &rustango::sql::Pool, page: &Page) -> HashMap<
         crate::page_builder::values::prefill_form(&compiled, &values, &mut form);
     }
     form
+}
+
+/// Whether `form` posts the type content stored for `page` unchanged,
+/// judged without writing. Content keys are the extension fields (the
+/// handler's widget names), inline-panel rows (`inline__…`) and
+/// page-builder values (`pb__…`): each one [`prefill`] emits must be
+/// posted with the same value, and no other may be posted non-empty.
+/// Values compare as posted, so a field the save would normalise
+/// (re-sanitised rich text, a reformatted number, a row id the form
+/// leaves out) counts as changed.
+pub(crate) async fn content_matches(pool: &rustango::sql::Pool, page: &Page, form: &HashMap<String, String>) -> bool {
+    let page_id = page.id.get().copied().unwrap_or_default();
+    let mut widget_names = std::collections::HashSet::new();
+    let handler = PageType::objects()
+        .where_(PageType::id.eq(page.page_type_id))
+        .first(pool)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|pt| crate::page_type::find_handler(&pt.type_name));
+    if let Some(handler) = handler {
+        let Ok(widgets) = handler.widgets(pool, page_id).await else {
+            return false;
+        };
+        widget_names.extend(widgets.into_iter().map(|w| w.name));
+    }
+    let is_content = |k: &str| k.starts_with("inline__") || k.starts_with("pb__") || widget_names.contains(k);
+    let stored = prefill(pool, page).await;
+    let stored_match = stored
+        .iter()
+        .filter(|(k, _)| is_content(k))
+        .all(|(k, v)| form.get(k).map_or("", String::as_str) == v);
+    stored_match
+        && form
+            .iter()
+            .all(|(k, v)| v.is_empty() || stored.contains_key(k) || !is_content(k))
 }

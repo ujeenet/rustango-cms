@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ "Translate:" | translate(locale=LANG) }} {{ title }} — CMS Admin{% endblock %}
+{% block title %}{{ "Translate:" | translate(locale=LANG) }} {{ title }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Translate:" | translate(locale=LANG) }} {{ title }} → {{ editing_locale.name }}{% endblock %}
 
 {% block topbar_actions %}

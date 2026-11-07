@@ -43,7 +43,7 @@ async fn page_and_document_links_resolve_and_missing_ones_go_inert() {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(&pool).await.expect("page type");
+    pt.save(&pool).await.expect("page type");
 
     let mut about = Page {
         id: Auto::Unset,
@@ -78,7 +78,7 @@ async fn page_and_document_links_resolve_and_missing_ones_go_inert() {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    about.save_pool(&pool).await.expect("page");
+    about.save(&pool).await.expect("page");
     let page_id = about.id.get().copied().expect("page id");
 
     let mut doc = Media {
@@ -100,7 +100,7 @@ async fn page_and_document_links_resolve_and_missing_ones_go_inert() {
         focal_point_y: None,
         uploaded_at: Auto::Unset,
     };
-    doc.save_pool(&pool).await.expect("media");
+    doc.save(&pool).await.expect("media");
     let media_id = doc.id.get().copied().expect("media id");
 
     let html = format!(

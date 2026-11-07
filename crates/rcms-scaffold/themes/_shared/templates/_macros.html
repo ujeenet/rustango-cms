@@ -1,0 +1,27 @@
+{#- A card for a child page: cover, kicker line, title and summary. -#}
+{% macro card(p, summary="", kicker="") %}
+<a class="card" href="{{ p.url_path }}">
+  <div class="card__media">
+    {%- if p.builder and p.builder.cover %}
+    <img src="{{ rcms_image_url(media_id=p.builder.cover, filter='width-800') }}" alt="" loading="lazy">
+    {%- else %}<div class="placeholder" aria-hidden="true"></div>{% endif %}
+  </div>
+  <div class="card__body">
+    {%- if kicker %}<span class="card__kicker">{{ kicker }}</span>{% endif %}
+    <h3>{{ p.title }}</h3>
+    {%- if summary %}<p>{{ summary }}</p>{% endif %}
+  </div>
+</a>
+{% endmacro card %}
+
+{#- A date field (YYYY-MM-DD) as "November 3, 2026"; nothing when empty. -#}
+{% macro date(value) %}{% if value %}{{ value | date(format="%B %-d, %Y") }}{% endif %}{% endmacro date %}
+
+{#- A button link for a content block, shown only with both a label and a
+    link the `safe_href` filter accepts: a site path (/contact) or an
+    http(s), mailto or tel address; anything else (javascript:, …) is
+    dropped. -#}
+{% macro button(label, url, class="button") %}
+{%- set href = url | default(value="") | safe_href -%}
+{%- if label and href %}<a class="{{ class }}" href="{{ href }}">{{ label }}</a>{% endif -%}
+{% endmacro button %}

@@ -80,7 +80,7 @@ pub(crate) async fn handle_ws(
         host: header_str(&headers, "host"),
         visitor_id: q.vid.chars().take(36).collect(),
         session_id: q.sid.chars().take(36).collect(),
-        path: sanitize_path(&q.p),
+        path: sanitize_path(crate::path_prefix::site_path(&headers, &q.p)),
         referrer_host: host_of(&q.referrer),
         country: geo_country(&headers),
         device: device.to_owned(),
@@ -143,5 +143,5 @@ async fn run(mut socket: WebSocket, ctx: Engage) {
         locale: ctx.locale,
         created_at: chrono::Utc::now(),
     };
-    entry.insert_pool(&ctx.pool).await.log_warn("analytics event not recorded");
+    entry.insert(&ctx.pool).await.log_warn("analytics event not recorded");
 }

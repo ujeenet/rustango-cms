@@ -616,7 +616,7 @@ pub async fn disable_for_page(
     for mut row in rows {
         row.is_active = false;
         row.disabled_reason = reason.chars().take(255).collect();
-        row.save_pool(pool).await?;
+        row.save(pool).await?;
         disabled += 1;
     }
     Ok(disabled)
@@ -641,7 +641,7 @@ pub fn to_rule(r: &Redirect) -> rustango::redirects::RedirectRule {
 /// the public re-export and ad-hoc use.
 pub async fn bump_hit_count(pool: &rustango::sql::Pool, mut row: Redirect) {
     row.hit_count = row.hit_count.saturating_add(1);
-    if let Err(e) = row.save_pool(pool).await {
+    if let Err(e) = row.save(pool).await {
         tracing::warn!(error = %e, "cms_redirect: failed to bump hit_count");
     }
 }
@@ -1017,9 +1017,9 @@ mod tests {
                 created_at: Auto::Unset,
                 updated_at: Auto::Unset,
             };
-            pt.insert_pool(pool).await.expect("insert page type");
+            pt.insert(pool).await.expect("insert page type");
         }
-        page.insert_pool(pool).await.expect("insert page");
+        page.insert(pool).await.expect("insert page");
         page.id.get().copied().expect("page id")
     }
 
@@ -1046,7 +1046,7 @@ mod tests {
         let mut stale = mk_redirect("/old-jar", "/nowhere");
         stale.is_active = false;
         stale.disabled_reason = "Linked page was unpublished".to_owned();
-        stale.save_pool(&pool).await.expect("stale rule");
+        stale.save(&pool).await.expect("stale rule");
 
         let moves = vec![
             (7, "/old-jar".to_owned(), "/shop/jar".to_owned()),
@@ -1096,7 +1096,7 @@ mod tests {
         ensure_columns(&pool).await.expect("upgrade");
         // Full-model round-trip decodes the new columns with defaults.
         let mut row = mk_redirect("/old", "/new");
-        row.insert_pool(&pool).await.expect("insert");
+        row.insert(&pool).await.expect("insert");
         let got = find_for_path(&pool, "/old").await.expect("query");
         let got = got.expect("row found");
         assert!(got.is_active);
@@ -1110,7 +1110,7 @@ mod tests {
         let mut row = mk_redirect("/dead", "/alive");
         row.is_active = false;
         row.disabled_reason = "Linked page was deleted".to_owned();
-        row.insert_pool(&pool).await.expect("insert");
+        row.insert(&pool).await.expect("insert");
         assert!(
             find_for_path(&pool, "/dead")
                 .await
@@ -1124,14 +1124,14 @@ mod tests {
     async fn override_rules_returns_only_active_overrides() {
         let pool = mem_pool().await;
         let mut normal = mk_redirect("/a", "/b");
-        normal.insert_pool(&pool).await.expect("insert normal");
+        normal.insert(&pool).await.expect("insert normal");
         let mut over = mk_redirect("/live", "/elsewhere");
         over.overrides_live = true;
-        over.insert_pool(&pool).await.expect("insert override");
+        over.insert(&pool).await.expect("insert override");
         let mut dead_over = mk_redirect("/live2", "/elsewhere2");
         dead_over.overrides_live = true;
         dead_over.is_active = false;
-        dead_over.insert_pool(&pool).await.expect("insert dead");
+        dead_over.insert(&pool).await.expect("insert dead");
         let rules = override_rules(&pool).await.expect("query");
         assert_eq!(rules.len(), 1);
         assert_eq!(rules[0].from_path, "/live");
@@ -1153,7 +1153,7 @@ mod tests {
             .expect("q")
             .expect("page");
         page.url_path = "/moved/target".to_owned();
-        page.save_pool(&pool).await.expect("save");
+        page.save(&pool).await.expect("save");
         assert_eq!(resolve_destination(&pool, &rule).await, "/moved/target");
     }
 
@@ -1250,16 +1250,16 @@ mod tests {
     async fn wildcard_rules_query_returns_only_active_patterns() {
         let pool = mem_pool().await;
         mk_redirect("/exact", "/x")
-            .insert_pool(&pool)
+            .insert(&pool)
             .await
             .expect("exact");
         mk_redirect("/glob/*", "/g/*")
-            .insert_pool(&pool)
+            .insert(&pool)
             .await
             .expect("glob");
         let mut dead = mk_redirect("/dead/*", "/d/*");
         dead.is_active = false;
-        dead.insert_pool(&pool).await.expect("dead");
+        dead.insert(&pool).await.expect("dead");
         let rules = wildcard_rules(&pool).await.expect("query");
         assert_eq!(rules.len(), 1, "only the active pattern");
         assert_eq!(rules[0].from_path, "/glob/*");
@@ -1270,13 +1270,13 @@ mod tests {
         let pool = mem_pool().await;
         let mut from_linked = mk_redirect("/f", "/x");
         from_linked.from_page_id = Some(7);
-        from_linked.insert_pool(&pool).await.expect("i1");
+        from_linked.insert(&pool).await.expect("i1");
         let mut to_linked = mk_redirect("/t", "/y");
         to_linked.to_page_id = Some(7);
-        to_linked.insert_pool(&pool).await.expect("i2");
+        to_linked.insert(&pool).await.expect("i2");
         let mut unrelated = mk_redirect("/u", "/z");
         unrelated.from_page_id = Some(8);
-        unrelated.insert_pool(&pool).await.expect("i3");
+        unrelated.insert(&pool).await.expect("i3");
 
         let n = disable_for_page(&pool, 7, "Linked page “X” was deleted")
             .await
@@ -1300,7 +1300,7 @@ mod tests {
     async fn flush_tenant_applies_deltas_additively_and_sets_last_hit() {
         let pool = mem_pool().await;
         let mut r = mk_redirect("/flush", "/dest");
-        r.insert_pool(&pool).await.expect("insert");
+        r.insert(&pool).await.expect("insert");
         let id = Redirect::objects()
             .where_(Redirect::from_path.eq("/flush".to_owned()))
             .fetch(&pool)

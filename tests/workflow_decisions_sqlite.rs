@@ -37,7 +37,7 @@ async fn user(pool: &Pool, name: &str, superuser: bool) -> i64 {
         password_changed_at: None,
         sessions_revoked_at: None,
     };
-    u.save_pool(pool).await.expect("user");
+    u.save(pool).await.expect("user");
     u.id.get().copied().expect("user id")
 }
 
@@ -75,7 +75,7 @@ async fn page(pool: &Pool, type_id: i64, slug: &str, path: &str, parent: Option<
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    p.save_pool(pool).await.expect("page");
+    p.save(pool).await.expect("page");
     p.id.get().copied().expect("page id")
 }
 
@@ -98,7 +98,7 @@ async fn setup() -> (Pool, i64, Workflow, Vec<WorkflowTask>) {
     }
     let reviewer = user(&pool, "reviewer", true).await;
     let mut role = Role { id: Auto::Unset, name: "Review".to_owned(), description: String::new(), data: serde_json::json!({}) };
-    role.save_pool(&pool).await.expect("role");
+    role.save(&pool).await.expect("role");
     let role_id = role.id.get().copied().expect("role id");
     let mut pt = PageType {
         id: Auto::Unset,
@@ -114,7 +114,7 @@ async fn setup() -> (Pool, i64, Workflow, Vec<WorkflowTask>) {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(&pool).await.expect("page type");
+    pt.save(&pool).await.expect("page type");
     let page_id = page(&pool, pt.id.get().copied().expect("type id"), "p", "0001/", None).await;
 
     let mut wf = Workflow {
@@ -126,7 +126,7 @@ async fn setup() -> (Pool, i64, Workflow, Vec<WorkflowTask>) {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    wf.save_pool(&pool).await.expect("workflow");
+    wf.save(&pool).await.expect("workflow");
     let wf_id = wf.id.get().copied().expect("wf id");
     for (n, name) in ["Step 1", "Step 2"].iter().enumerate() {
         let mut t = WorkflowTask {
@@ -138,7 +138,7 @@ async fn setup() -> (Pool, i64, Workflow, Vec<WorkflowTask>) {
             kind: "group_approval".to_owned(),
             webhook_url: String::new(),
         };
-        t.save_pool(&pool).await.expect("task");
+        t.save(&pool).await.expect("task");
     }
     let tasks = rustango_cms::workflow::tasks_for(&pool, wf_id).await.expect("tasks");
     submit_for_review(&pool, page_id, &wf, &tasks, reviewer).await.expect("submit");

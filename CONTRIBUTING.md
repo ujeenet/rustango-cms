@@ -20,12 +20,16 @@ dialect-neutral ORM and `_pool` helpers, not backend-only SQL.
 
 ## Test
 
-Run both suites — most database-backed tests are SQLite-gated, so the
-default run alone skips them:
+Tests run under [cargo-nextest](https://nexte.st), which runs every test
+as its own process across all cores (`cargo install cargo-nextest
+--locked`; settings in `.config/nextest.toml`). Run both suites — most
+database-backed tests are SQLite-gated, so the default run alone skips
+them — and the doctests, which nextest can't run:
 
 ```sh
-cargo test --workspace
-cargo test --workspace --features sqlite
+cargo nextest run --workspace
+cargo nextest run --workspace --features sqlite
+cargo test --workspace --doc
 ```
 
 The end-to-end suite boots the `cms_demo` example on SQLite (Node ≥ 22.13):
@@ -36,7 +40,8 @@ cd e2e && npm ci && npx playwright test
 
 Tests that need a live MySQL or PostgreSQL are `#[ignore]`d and document
 their environment variable at the top of the file (for example
-`RCMS_TEST_MYSQL_URL`).
+`RCMS_TEST_MYSQL_URL`). They share one database, so run them one at a
+time: `cargo nextest run --profile live --run-ignored only`.
 
 Before a pull request, also run what CI runs:
 

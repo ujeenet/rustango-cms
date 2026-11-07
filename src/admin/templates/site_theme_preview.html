@@ -1,0 +1,79 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ "Install a theme" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
+{% block heading %}{{ "Install a theme" | translate(locale=LANG) }}{% endblock %}
+{% block description %}{{ "Check what installing this theme changes, then install it." | translate(locale=LANG) }}{% endblock %}
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:site-theme') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">arrow_back</span> {{ "Site theme" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+{% block body %}
+{% if problem %}
+<div class="rcms-card rcms-maxw-760">
+    <p><strong>{{ "This package can't be installed." | translate(locale=LANG) }}</strong></p>
+    <p class="rcms-hint">{{ problem }}</p>
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:site-theme') }}" class="rcms-btn rcms-btn-outlined">{{ "Back" | translate(locale=LANG) }}</a>
+    </div>
+</div>
+{% else %}
+<div class="rcms-card rcms-maxw-760 rcms-mb-4">
+    <h2 class="rcms-m-0 rcms-mb-3 rcms-text-lg">{{ preview.name }}</h2>
+    {% if preview.site_is_empty %}
+    <p>{{ "This site has no pages yet, so the theme will create everything it brings: {pages} page(s), {menus} menu(s), page types, site settings and colours." | translate(locale=LANG, pages=preview.page_count, menus=preview.menu_count) }}</p>
+    {% else %}
+    <p>{{ "This site already has content, so only its look changes: templates, page types and colours. Your pages, menus and settings stay as they are." | translate(locale=LANG) }}</p>
+    {% endif %}
+
+    <h3 class="rcms-mt-4 rcms-mb-2">{{ "Page types" | translate(locale=LANG) }}</h3>
+    {% if preview.types | length == 0 %}
+    <p class="rcms-hint">{{ "This package brings no page types: the page types this site defines in code keep their fields and use the package's templates of the same name." | translate(locale=LANG) }}</p>
+    {% endif %}
+    <ul class="rcms-list-none rcms-p-0 rcms-m-0 rcms-mb-3">
+    {% for t in preview.types %}
+        <li class="rcms-mb-2">
+            {{ t.name }}
+            {% if t.state == "new" %}<span class="rcms-tag published">{{ "New" | translate(locale=LANG) }}</span>
+            {% elif t.state == "restyled" %}<span class="rcms-tag">{{ "Uses the theme's template" | translate(locale=LANG) }}</span>
+            {% else %}<span class="rcms-tag">{{ "Kept as defined in code" | translate(locale=LANG) }}</span>{% endif %}
+        </li>
+    {% endfor %}
+    </ul>
+
+    <h3 class="rcms-mt-4 rcms-mb-2">{{ "Templates" | translate(locale=LANG) }}</h3>
+    <div class="rcms-table-panel">
+        <table class="rcms-table">
+            <thead><tr>
+                <th>{{ "Template" | translate(locale=LANG) }}</th>
+                <th>{{ "Change" | translate(locale=LANG) }}</th>
+            </tr></thead>
+            <tbody>
+            {% for t in preview.templates %}
+                <tr>
+                    <td><code>{{ t.name }}</code></td>
+                    <td>{% if t.replaces %}<span class="rcms-tag">{{ "Replaces" | translate(locale=LANG) }}</span>{% else %}<span class="rcms-tag published">{{ "New" | translate(locale=LANG) }}</span>{% endif %}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if preview.missing | length > 0 %}
+    <p class="rcms-hint"><strong>{{ "Check first:" | translate(locale=LANG) }}</strong>
+        {{ "pages of these types use a template neither this site nor the theme has, and would not display: {types}" | translate(locale=LANG, types=preview.missing | join(sep=", ")) }}</p>
+    {% endif %}
+    <p class="rcms-hint">{{ "The current templates and colours are kept: you can restore them from the Site theme page." | translate(locale=LANG) }}</p>
+</div>
+
+<form method="post" action="{{ url(name='rcms-admin:site-theme:install') }}" class="rcms-maxw-760">
+    {{ csrf_token | csrf_input | safe }}
+    <input type="hidden" name="token" value="{{ token }}">
+    <div class="rcms-form-actions">
+        <a href="{{ url(name='rcms-admin:site-theme') }}" class="rcms-btn rcms-btn-text">{{ "Cancel" | translate(locale=LANG) }}</a>
+        <button type="submit" class="rcms-btn">
+            <span class="material-symbols-rounded sm">palette</span> {{ "Install theme" | translate(locale=LANG) }}
+        </button>
+    </div>
+</form>
+{% endif %}
+{% endblock %}

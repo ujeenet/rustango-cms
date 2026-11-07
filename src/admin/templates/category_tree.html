@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ taxonomy_name }} — CMS Admin{% endblock %}
+{% block title %}{{ taxonomy_name }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ taxonomy_name }}{% endblock %}
 
 {% block topbar_actions %}
@@ -62,5 +62,6 @@
         </tbody>
     </table>
     </div>
+    {% include "rcms_admin/_pagination.html" %}
 {% endif %}
 {% endblock %}

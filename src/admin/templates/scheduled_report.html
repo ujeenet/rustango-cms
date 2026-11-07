@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "Scheduled pages" | translate(locale=LANG) }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ "Scheduled pages" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Scheduled pages" | translate(locale=LANG) }}{% endblock %}
 
 {% block topbar_actions %}

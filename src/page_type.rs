@@ -206,26 +206,129 @@ pub async fn published_children(
     pool: &Pool,
     page: &crate::page::Page,
 ) -> Result<Vec<crate::page::Page>, ExecError> {
-    use crate::page::PageStatus;
-    use rustango::core::Column as _;
     use rustango::sql::FetcherPool as _;
-    let id = page.id.get().copied().unwrap_or_default();
-    let now = chrono::Utc::now();
-    let rows = crate::page::Page::objects()
-        .where_(crate::page::Page::parent_id.eq(id))
-        .where_(crate::page::Page::status.is_in([
-            PageStatus::Published.as_str().to_owned(),
-            PageStatus::Scheduled.as_str().to_owned(),
-        ]))
+    published_children_qs(pool, page)
+        .await
         .order_by(&[("sort_order", false), ("id", false)])
         .fetch(pool)
+        .await
+}
+
+/// The [`published_children`] rows of `page`, unordered.
+async fn published_children_qs(
+    pool: &Pool,
+    page: &crate::page::Page,
+) -> rustango::query::QuerySet<crate::page::Page> {
+    use crate::page::{Page, PageStatus};
+    use rustango::core::Column as _;
+    let id = page.id.get().copied().unwrap_or_default();
+    let now = chrono::Utc::now();
+    // `resolver::visible_now`, in SQL so the limit counts only listed
+    // pages: published and not expired, or scheduled, past go-live and
+    // not expired.
+    let not_expired = || Page::expire_at.is_null().or(Page::expire_at.gt(now));
+    let mut qs = Page::objects()
+        .where_(Page::parent_id.eq(id))
+        .where_(
+            Page::status
+                .eq(PageStatus::Published.as_str().to_owned())
+                .and(not_expired())
+                .or(Page::status
+                    .eq(PageStatus::Scheduled.as_str().to_owned())
+                    .and(Page::go_live_at.lte(now))
+                    .and(not_expired())),
+        );
+    if let Some(tid) = crate::error_pages::error_page_type_id(pool).await {
+        qs = qs.where_(Page::page_type_id.ne(tid));
+    }
+    qs
+}
+
+/// How [`published_children_page`] orders a page's children.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ChildOrder {
+    /// `sort_order, id` — the editor's arrangement, as in
+    /// [`published_children`].
+    #[default]
+    Position,
+    /// Newest `published_at` first, undated pages last; newer ids first
+    /// among equals. For a blog or news index.
+    NewestFirst,
+    /// Oldest `published_at` first, undated pages last; older ids first
+    /// among equals.
+    OldestFirst,
+}
+
+/// One window of a page's [`published_children`].
+#[derive(Debug, Clone, Default)]
+pub struct ChildrenPage {
+    /// The children in this window, in the requested order.
+    pub pages: Vec<crate::page::Page>,
+    /// How many live children the page has in all, for "page 2 of 7".
+    pub total: usize,
+}
+
+/// One window of the live children of `page`: the same rows as
+/// [`published_children`], ordered by `order`, counted and paged in SQL.
+///
+/// [`published_children`] reads every child. An index with hundreds of
+/// children should return a window from
+/// [`PageTypeHandler::children_query`] instead, so the renderer's
+/// follow-up reads (tags, translations, grandchildren) stay that size
+/// too; the next windows can be served from a [`PageTypeHandler::routes`]
+/// pattern such as `page/(?P<n>\d+)` through [`PageTypeHandler::route_context`].
+///
+/// ```ignore
+/// async fn children_query(&self, pool: &Pool, page: &Page)
+///     -> Result<Option<Vec<Page>>, ExecError>
+/// {
+///     let first = rustango_cms::published_children_page(
+///         pool, page, rustango_cms::ChildOrder::NewestFirst, 20, 0,
+///     ).await?;
+///     Ok(Some(first.pages))
+/// }
+/// ```
+///
+/// There is no default cap: a cap on the default `sort_order` listing
+/// would quietly drop a blog's newest posts, so the type chooses both the
+/// order and the size.
+///
+/// # Errors
+/// Driver / query failures from the count or the page lookup.
+pub async fn published_children_page(
+    pool: &Pool,
+    page: &crate::page::Page,
+    order: ChildOrder,
+    limit: usize,
+    offset: usize,
+) -> Result<ChildrenPage, ExecError> {
+    use rustango::core::NullsOrder;
+    use rustango::sql::{CounterPool as _, FetcherPool as _};
+    let qs = published_children_qs(pool, page).await;
+    let total = usize::try_from(qs.clone().count(pool).await?).unwrap_or_default();
+    let keys: &[(&'static str, bool, NullsOrder)] = match order {
+        ChildOrder::Position => &[
+            ("sort_order", false, NullsOrder::Default),
+            ("id", false, NullsOrder::Default),
+        ],
+        ChildOrder::NewestFirst => &[
+            ("published_at", true, NullsOrder::Last),
+            ("id", true, NullsOrder::Default),
+        ],
+        ChildOrder::OldestFirst => &[
+            ("published_at", false, NullsOrder::Last),
+            ("id", false, NullsOrder::Default),
+        ],
+    };
+    let pages = qs
+        .order_by_with_nulls(keys)
+        .limit(i64::try_from(limit).unwrap_or(i64::MAX))
+        // A huge offset must not wrap negative (backends differ).
+        .offset(i64::try_from(offset).unwrap_or(i64::MAX))
+        .fetch(pool)
         .await?;
-    let error_tid = crate::error_pages::error_page_type_id(pool).await;
-    Ok(rows
-        .into_iter()
-        .filter(|p| crate::resolver::visible_now(p, now))
-        .filter(|p| error_tid.map_or(true, |tid| p.page_type_id != tid))
-        .collect())
+    Ok(ChildrenPage { pages, total })
 }
 
 /// A page kind registered by user code (e.g. `BlogPostPage`, `LandingPage`).
@@ -445,6 +548,20 @@ pub trait PageTypeHandler: Send + Sync + 'static {
         Ok(serde_json::Map::new())
     }
 
+    /// What a matched routable pattern renders: the usual template, a
+    /// template of its own ([`crate::routable::RouteOutcome::Template`]),
+    /// or the site's 404 page when the record the URL names does not
+    /// exist ([`crate::routable::RouteOutcome::NotFound`]). Receives the
+    /// map [`Self::route_context`] returned, so the choice can depend on
+    /// loaded data (one template per kind of record, a missing id).
+    fn route_outcome(
+        &self,
+        _matched: &crate::routable::RouteMatch,
+        _route_ctx: &serde_json::Map<String, Value>,
+    ) -> crate::routable::RouteOutcome {
+        crate::routable::RouteOutcome::Render
+    }
+
     /// Inject handler-computed values into the public render's Tera
     /// context, for hand-rolled
     /// data — e.g. a `HomePage` that exposes a `latest_posts` list
@@ -471,23 +588,20 @@ pub trait PageTypeHandler: Send + Sync + 'static {
     }
 
     /// Build the `children` ctx var the public renderer hands to the
-    /// page template (by default the live children, newest first)
-    /// — index-style pages (BlogIndexPage, ArchivePage, …) lean on
-    /// this to surface only published rows in a meaningful order.
+    /// page template — index-style pages (a blog index, an archive)
+    /// lean on this to choose which children they list and in what
+    /// order.
     ///
-    /// The default returns every immediate child sorted by
-    /// `sort_order, id` (matches the pre-existing `children` shape
-    /// — drafts INCLUDED, ordering NOT chronological).
-    /// Overriding handlers typically:
-    /// - filter by `status = published`
-    /// - filter by `expire_at IS NULL OR expire_at > now`
-    /// - order by `published_at DESC` (or `sort_order ASC` for a
-    ///   curated tree)
-    /// - apply a limit
+    /// The default is [`published_children`]: the live children, ordered
+    /// `sort_order, id`, all of them. A type with many children should
+    /// return one window from [`published_children_page`] instead, which
+    /// also takes the order; the renderer's follow-up reads (tags,
+    /// translations, grandchildren) are sized by what this returns.
     ///
     /// The result lands in two places in the template context:
     /// `children` (the typed list) AND a thread-local backing the
-    /// `children_filtered(...)` Tera function (see [`crate::children_filtered`]).
+    /// `children_filtered(...)` Tera function (see [`crate::children_filtered`]),
+    /// which filters and limits this list in memory.
     ///
     /// # Errors
     /// Driver / query failures from the page lookup.
@@ -641,8 +755,14 @@ pub trait PageTypeHandler: Send + Sync + 'static {
     /// inline panels pay nothing. Handlers that do override this
     /// method must also implement [`Self::load_inline_panel`] and
     /// [`Self::save_inline_panel`] for the rows to round-trip.
-    fn inline_panels(&self) -> Vec<InlinePanelSpec> {
-        Vec::new()
+    ///
+    /// Async with the pool and the page (`0` for a page not saved yet), so
+    /// a panel can take its options or its locks from the database.
+    ///
+    /// # Errors
+    /// Driver / query failures building the specs.
+    async fn inline_panels(&self, _pool: &Pool, _page_id: i64) -> Result<Vec<InlinePanelSpec>, ExecError> {
+        Ok(Vec::new())
     }
 
     /// Fetch existing rows for `panel_name` keyed under `page_id`.
@@ -680,6 +800,63 @@ pub trait PageTypeHandler: Send + Sync + 'static {
         _panel_name: &str,
         _rows: &[serde_json::Map<String, Value>],
     ) -> Result<(), ExecError> {
+        Ok(())
+    }
+
+    /// Per-row panels: each row's id and title, in order. See
+    /// [`InlinePanelSpec::per_row`](InlinePanelSpec#structfield.per_row).
+    ///
+    /// # Errors
+    /// Driver / query failures.
+    async fn inline_rows(&self, _pool: &Pool, _page_id: i64, _panel: &str) -> Result<Vec<InlineRowSummary>, ExecError> {
+        Ok(Vec::new())
+    }
+
+    /// Per-row panels: one row's values, keyed by widget name (`None` id:
+    /// a new row's starting values). `Ok(None)`: no such row on this page.
+    ///
+    /// # Errors
+    /// Driver / query failures.
+    async fn inline_row(
+        &self,
+        _pool: &Pool,
+        _page_id: i64,
+        _panel: &str,
+        _row_id: Option<i64>,
+    ) -> Result<Option<serde_json::Map<String, Value>>, ExecError> {
+        Ok(None)
+    }
+
+    /// Per-row panels: store one row from its posted values (`None` id:
+    /// add it). Values arrive as the browser posts them; an unchecked
+    /// switch is absent.
+    ///
+    /// # Errors
+    /// Driver / query failures (validation problems are `Invalid`).
+    async fn save_inline_row(
+        &self,
+        _pool: &Pool,
+        _page_id: i64,
+        _panel: &str,
+        _row_id: Option<i64>,
+        _values: &serde_json::Map<String, Value>,
+    ) -> Result<InlineRowSaved, ExecError> {
+        Ok(InlineRowSaved::Invalid(vec![crate::admin::cms_admin::FieldError::new("_form", "This panel can't be saved.")]))
+    }
+
+    /// Per-row panels: remove one row. `Ok(false)`: refused.
+    ///
+    /// # Errors
+    /// Driver / query failures.
+    async fn delete_inline_row(&self, _pool: &Pool, _page_id: i64, _panel: &str, _row_id: i64) -> Result<bool, ExecError> {
+        Ok(false)
+    }
+
+    /// Per-row panels: store a new order (`ids` first to last).
+    ///
+    /// # Errors
+    /// Driver / query failures.
+    async fn reorder_inline_rows(&self, _pool: &Pool, _page_id: i64, _panel: &str, _ids: &[i64]) -> Result<(), ExecError> {
         Ok(())
     }
 
@@ -828,9 +1005,15 @@ impl PanelLayout {
 
 /// One inline panel declaration — a 1-N relation between the page
 /// and a child table the handler maintains. See
-/// [`PageTypeHandler::inline_panels`]. The admin editor renders one
-/// section per spec with the fields stacked vertically; add and remove
-/// are plain HTML buttons, with no drag-to-reorder.
+/// [`PageTypeHandler::inline_panels`]. The admin editor renders each row
+/// as a card of widgets (any [`crate::Widget`] kind: selects, switches,
+/// the media chooser…) with add, remove and move up / down, in the
+/// Content tab or in a tab of its own ([`Self::in_tab`]).
+///
+/// Every row carries its `id` (when the loaded row has one) in a hidden
+/// field, so [`PageTypeHandler::save_inline_panel`] can tell existing
+/// rows from new ones. A loaded row's `__title` key, when set, is shown
+/// as the card's heading.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InlinePanelSpec {
     /// Stable identifier — used in form field names
@@ -854,6 +1037,55 @@ pub struct InlinePanelSpec {
     /// Optional material-symbols icon name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// Per-row widgets. When non-empty they replace [`Self::fields`],
+    /// giving rows every widget kind. Names are the row keys.
+    #[serde(default)]
+    pub widgets: Vec<crate::widget::Widget>,
+    /// Render the panel in its own editor tab with this label instead
+    /// of the Content tab. Panels naming the same tab share it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab: Option<String>,
+    /// What one row is called, e.g. "Cause" (the add button reads
+    /// "Add cause").
+    #[serde(default)]
+    pub row_label: String,
+    /// Editors may add rows.
+    #[serde(default = "yes")]
+    pub can_add: bool,
+    /// Editors may remove rows.
+    #[serde(default = "yes")]
+    pub can_delete: bool,
+    /// Editors may reorder rows (the saved order is the row order).
+    #[serde(default = "yes")]
+    pub can_order: bool,
+    /// Per-row mode: the tab lists only each row's title; a card's fields
+    /// load when it is opened, it saves with its own Save button, and add,
+    /// remove and reorder take effect at once. The page's Save sends
+    /// nothing for this panel. Uses the `*_inline_row*` hooks instead of
+    /// [`PageTypeHandler::load_inline_panel`] / `save_inline_panel`. For
+    /// panels with many rows.
+    #[serde(default)]
+    pub per_row: bool,
+}
+
+/// One row of a per-row inline panel, as its card header shows it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InlineRowSummary {
+    pub id: i64,
+    pub title: String,
+}
+
+/// What [`PageTypeHandler::save_inline_row`] did.
+#[derive(Debug, Clone)]
+pub enum InlineRowSaved {
+    /// Stored; the row's id and the title its card should show.
+    Saved { id: i64, title: String },
+    /// Not stored: one message per field (`"_form"` for the whole row).
+    Invalid(Vec<crate::admin::cms_admin::FieldError>),
+}
+
+fn yes() -> bool {
+    true
 }
 
 impl InlinePanelSpec {
@@ -873,6 +1105,67 @@ impl InlinePanelSpec {
             max_num: None,
             help: String::new(),
             icon: None,
+            widgets: Vec::new(),
+            tab: None,
+            row_label: String::new(),
+            can_add: true,
+            can_delete: true,
+            can_order: true,
+            per_row: false,
+        }
+    }
+
+    /// Per-row mode — see [`Self::per_row`](InlinePanelSpec#structfield.per_row).
+    #[must_use]
+    pub fn per_row(mut self) -> Self {
+        self.per_row = true;
+        self
+    }
+
+    /// A panel whose rows are full widgets — see [`Self::widgets`].
+    #[must_use]
+    pub fn with_widgets(
+        name: impl Into<String>,
+        label: impl Into<String>,
+        widgets: Vec<crate::widget::Widget>,
+    ) -> Self {
+        let mut spec = Self::new(name, label, Vec::new());
+        spec.widgets = widgets;
+        spec
+    }
+
+    /// Show the panel in its own editor tab labelled `tab`.
+    #[must_use]
+    pub fn in_tab(mut self, tab: impl Into<String>) -> Self {
+        self.tab = Some(tab.into());
+        self
+    }
+
+    /// Name one row, e.g. "Cause".
+    #[must_use]
+    pub fn with_row_label(mut self, label: impl Into<String>) -> Self {
+        self.row_label = label.into();
+        self
+    }
+
+    /// Which row operations editors get. A panel whose rows another
+    /// system owns sets `add` and `delete` to `false`.
+    #[must_use]
+    pub fn allow(mut self, add: bool, delete: bool, order: bool) -> Self {
+        self.can_add = add;
+        self.can_delete = delete;
+        self.can_order = order;
+        self
+    }
+
+    /// The widgets one row renders: [`Self::widgets`], or the legacy
+    /// [`Self::fields`] converted.
+    #[must_use]
+    pub fn row_widgets(&self) -> Vec<crate::widget::Widget> {
+        if self.widgets.is_empty() {
+            self.fields.iter().cloned().map(ExtensionField::into_widget).collect()
+        } else {
+            self.widgets.clone()
         }
     }
 
@@ -1206,6 +1499,12 @@ pub trait PageTypeOverrides: Send + Sync + 'static {
     /// [`PageTypeHandler::public_context`]. The derive forwards to
     /// this override automatically; hand-rolled handlers can opt in
     /// via `impl PageTypeOverrides for MyHandler { … }`.
+    ///
+    /// With `#[derive(PageType)]`, `self` is the page's **stored row**
+    /// (its extension fields as saved), so `self.<field>` reads the
+    /// page's own values. A page without a saved row yet gets the
+    /// type's `Default` value. The same holds for
+    /// [`Self::route_context`].
     async fn public_context(
         &self,
         _pool: &Pool,
@@ -1216,11 +1515,13 @@ pub trait PageTypeOverrides: Send + Sync + 'static {
 
     /// Override the children listing this page exposes to its template —
     /// see [`PageTypeHandler::children_query`]. Return `Ok(None)` (the
-    /// default) to keep the framework behavior (all immediate children,
-    /// `sort_order, id`, drafts included). Return `Ok(Some(pages))` to
+    /// default) to keep the framework behavior ([`published_children`]:
+    /// live children, `sort_order, id`).
+    /// Return `Ok(Some(pages))` to
     /// make this type an index that lists e.g. only published children in
     /// a custom order — [`published_children`] is the common building
-    /// block:
+    /// block, and [`published_children_page`] the bounded one for an
+    /// index with many children:
     ///
     /// ```ignore
     /// async fn children_query(&self, pool, page)
@@ -1254,9 +1555,101 @@ pub trait PageTypeOverrides: Send + Sync + 'static {
         Ok(serde_json::Map::new())
     }
 
+    /// What a matched route renders — see [`PageTypeHandler::route_outcome`].
+    fn route_outcome(
+        &self,
+        _matched: &crate::routable::RouteMatch,
+        _route_ctx: &serde_json::Map<String, Value>,
+    ) -> crate::routable::RouteOutcome {
+        crate::routable::RouteOutcome::Render
+    }
+
     /// Handler-contributed tabs — see [`PageTypeHandler::extra_tabs`].
     async fn extra_tabs(&self, _pool: &Pool, _page_id: i64) -> Result<Vec<TabSpec>, ExecError> {
         Ok(Vec::new())
+    }
+
+    /// Inline panels — see [`PageTypeHandler::inline_panels`].
+    async fn inline_panels(&self, _pool: &Pool, _page_id: i64) -> Result<Vec<InlinePanelSpec>, ExecError> {
+        Ok(Vec::new())
+    }
+
+    /// A panel's rows — see [`PageTypeHandler::load_inline_panel`].
+    async fn load_inline_panel(
+        &self,
+        _pool: &Pool,
+        _page_id: i64,
+        _panel_name: &str,
+    ) -> Result<Vec<serde_json::Map<String, Value>>, ExecError> {
+        Ok(Vec::new())
+    }
+
+    /// Store a panel's posted rows — see [`PageTypeHandler::save_inline_panel`].
+    async fn save_inline_panel(
+        &self,
+        _pool: &Pool,
+        _page_id: i64,
+        _panel_name: &str,
+        _rows: &[serde_json::Map<String, Value>],
+    ) -> Result<(), ExecError> {
+        Ok(())
+    }
+
+    /// Per-row panels: each row's id and title, in order. See
+    /// [`InlinePanelSpec::per_row`](InlinePanelSpec#structfield.per_row).
+    ///
+    /// # Errors
+    /// Driver / query failures.
+    async fn inline_rows(&self, _pool: &Pool, _page_id: i64, _panel: &str) -> Result<Vec<InlineRowSummary>, ExecError> {
+        Ok(Vec::new())
+    }
+
+    /// Per-row panels: one row's values, keyed by widget name (`None` id:
+    /// a new row's starting values). `Ok(None)`: no such row on this page.
+    ///
+    /// # Errors
+    /// Driver / query failures.
+    async fn inline_row(
+        &self,
+        _pool: &Pool,
+        _page_id: i64,
+        _panel: &str,
+        _row_id: Option<i64>,
+    ) -> Result<Option<serde_json::Map<String, Value>>, ExecError> {
+        Ok(None)
+    }
+
+    /// Per-row panels: store one row from its posted values (`None` id:
+    /// add it). Values arrive as the browser posts them; an unchecked
+    /// switch is absent.
+    ///
+    /// # Errors
+    /// Driver / query failures (validation problems are `Invalid`).
+    async fn save_inline_row(
+        &self,
+        _pool: &Pool,
+        _page_id: i64,
+        _panel: &str,
+        _row_id: Option<i64>,
+        _values: &serde_json::Map<String, Value>,
+    ) -> Result<InlineRowSaved, ExecError> {
+        Ok(InlineRowSaved::Invalid(vec![crate::admin::cms_admin::FieldError::new("_form", "This panel can't be saved.")]))
+    }
+
+    /// Per-row panels: remove one row. `Ok(false)`: refused.
+    ///
+    /// # Errors
+    /// Driver / query failures.
+    async fn delete_inline_row(&self, _pool: &Pool, _page_id: i64, _panel: &str, _row_id: i64) -> Result<bool, ExecError> {
+        Ok(false)
+    }
+
+    /// Per-row panels: store a new order (`ids` first to last).
+    ///
+    /// # Errors
+    /// Driver / query failures.
+    async fn reorder_inline_rows(&self, _pool: &Pool, _page_id: i64, _panel: &str, _ids: &[i64]) -> Result<(), ExecError> {
+        Ok(())
     }
 }
 

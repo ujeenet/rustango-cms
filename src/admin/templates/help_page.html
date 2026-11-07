@@ -1,0 +1,33 @@
+{% extends "rcms_admin/_list_base.html" %}
+{% block title %}{{ title }} — {{ "Documentation" | translate(locale=LANG) }}{% endblock %}
+{% block heading %}{{ title }}{% endblock %}
+{% block description %}{{ "Documentation" | translate(locale=LANG) }} · {{ section }}{% endblock %}
+{% block topbar_actions %}
+    <a href="{{ url(name='rcms-admin:help') }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">
+        <span class="material-symbols-rounded sm">menu_book</span> {{ "All guides" | translate(locale=LANG) }}
+    </a>
+    <a href="{{ public_url }}" target="_blank" rel="noopener" class="rcms-btn rcms-btn-text rcms-btn-small">
+        <span class="material-symbols-rounded sm">open_in_new</span> {{ "Open on the docs site" | translate(locale=LANG) }}
+    </a>
+{% endblock %}
+{% block body %}
+<div class="rcms-help-layout">
+    <article class="rcms-card rcms-help-doc">
+        {{ body_html | safe }}
+        <nav class="rcms-help-pager" aria-label="{{ "Guides" | translate(locale=LANG) }}">
+            {% if prev %}<a href="{{ url(name='rcms-admin:help') }}/{{ prev.slug }}">← {{ prev.title }}</a>{% else %}<span></span>{% endif %}
+            {% if next %}<a href="{{ url(name='rcms-admin:help') }}/{{ next.slug }}">{{ next.title }} →</a>{% endif %}
+        </nav>
+    </article>
+    <nav class="rcms-help-toc" aria-label="{{ "All guides" | translate(locale=LANG) }}">
+        {% for s in sections %}
+        <div class="rcms-help-toc-section">
+            <div class="rcms-help-toc-title">{{ s.title }}</div>
+            {% for g in s.guides %}
+            <a href="{{ url(name='rcms-admin:help') }}/{{ g.slug }}"{% if g.slug == current %} aria-current="page"{% endif %}>{{ g.title }}</a>
+            {% endfor %}
+        </div>
+        {% endfor %}
+    </nav>
+</div>
+{% endblock %}

@@ -110,7 +110,7 @@ pub async fn record(
         data_json,
         created_at: Auto::Unset,
     };
-    row.insert_pool(pool).await?;
+    row.insert(pool).await?;
     Ok(())
 }
 

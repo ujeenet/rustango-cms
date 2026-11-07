@@ -18,6 +18,10 @@ PowerShell; the database location comes from `.env`.
 - Admin: <http://demo.localhost:8080/cms-admin/pages>
 - Public pages: `http://demo.localhost:8080/<slug>/`
 
+Always use the `demo.localhost` address. Plain `http://localhost:8080` is the
+operator console, a separate login where the `admin` user has no account, so
+it reports a wrong password.
+
 ### What quickstart runs
 
 The same steps by hand, if you want to name the site or its host yourself:
@@ -75,7 +79,7 @@ The full guide: <https://cms.rustango.com/production>.
 - `src/main.rs` — wires the admin + public router into the manage runner and seeds page types.
 - `src/models.rs` — your page types (`HomePage`, `ArticlePage`). Add more with `register_page_type!` and a force-link line in `main.rs`.
 - `templates/` — public page templates (the admin ships its own).
-- `migrations/` — the CMS baseline migrations (registry, tenant, cms). Generate your own with the rustango migration tooling; never hand-edit these.
+- `migrations/` — the database migrations. The app writes the Rustango-CMS ones here from its `rustango-cms` dependency every time it starts, so a new release's migrations arrive with the upgrade. Generate your own with `cargo run -- makemigrations`; never hand-edit the CMS ones.
 
 ## Dependencies
 

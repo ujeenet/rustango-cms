@@ -257,7 +257,7 @@ fn rcms_meta_tags(args: &HashMap<String, tera::Value>) -> tera::Result<tera::Val
     html.push_str("\">\n");
     if let Some(mid) = og_image_id {
         html.push_str(r#"<meta property="og:image" content=""#);
-        html.push_str(&abs(&format!("/__media__/fill-1200x630/{mid}")));
+        html.push_str(&abs(&crate::rendition::rendition_url_for(mid, "fill-1200x630", None).unwrap_or_default()));
         html.push_str("\">\n");
     }
 
@@ -277,7 +277,7 @@ fn rcms_meta_tags(args: &HashMap<String, tera::Value>) -> tera::Result<tera::Val
     }
     if let Some(mid) = og_image_id {
         html.push_str(r#"<meta name="twitter:image" content=""#);
-        html.push_str(&abs(&format!("/__media__/fill-1200x630/{mid}")));
+        html.push_str(&abs(&crate::rendition::rendition_url_for(mid, "fill-1200x630", None).unwrap_or_default()));
         html.push_str("\">\n");
     }
 
@@ -362,6 +362,7 @@ mod tests {
     #[test]
     fn emits_og_image_when_id_set() {
         let html = render(page_value(json!({ "og_image_media_id": 42 })));
+        let html = crate::rendition::strip_sig(&html);
         assert!(html.contains(r#"og:image" content="/__media__/fill-1200x630/42""#));
         assert!(html.contains(r#"twitter:image" content="/__media__/fill-1200x630/42""#));
     }
@@ -440,6 +441,7 @@ mod tests {
         assert!(
             html.contains(r#"<link rel="canonical" href="https://example.com/blog/post">"#)
         );
+        let html = crate::rendition::strip_sig(&html);
         assert!(html
             .contains(r#"og:image" content="https://example.com/__media__/fill-1200x630/7""#));
         assert!(html.contains(

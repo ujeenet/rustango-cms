@@ -221,7 +221,7 @@ pub async fn relate(
         sort_order: next_sort,
         created_at: Auto::Unset,
     };
-    row.insert_pool(pool).await?;
+    row.insert(pool).await?;
     Ok(row)
 }
 
@@ -245,7 +245,7 @@ pub async fn unrelate(
         .fetch(pool)
         .await?;
     for row in existing {
-        row.delete_pool(pool).await?;
+        row.delete(pool).await?;
     }
     Ok(())
 }
@@ -272,14 +272,14 @@ pub async fn replace_all(
 ) -> Result<(), rustango::sql::ExecError> {
     // `Column` + `FetcherPool` imports aren't needed here — the
     // inner work goes through `rows_for_relation` (already trait-
-    // imported in its own body) and `delete_pool` / `save_pool` /
-    // `insert_pool` (autoderefed on the model).
+    // imported in its own body) and `delete` / `save` /
+    // `insert` (autoderefed on the model).
     let current = rows_for_relation(pool, page_id, relation_name).await?;
     let desired: std::collections::HashSet<i64> = snippet_ids.iter().copied().collect();
     // Delete rows whose snippet_id is no longer in the desired set.
     for row in &current {
         if !desired.contains(&row.snippet_id) {
-            row.clone().delete_pool(pool).await?;
+            row.clone().delete(pool).await?;
         }
     }
     // Index existing-and-kept rows by snippet_id for the upsert.
@@ -295,7 +295,7 @@ pub async fn replace_all(
         if let Some(mut row) = kept.get(&snippet_id).cloned() {
             if row.sort_order != target_sort {
                 row.sort_order = target_sort;
-                row.save_pool(pool).await?;
+                row.save(pool).await?;
             }
         } else {
             let mut row = PageSnippetM2M {
@@ -306,7 +306,7 @@ pub async fn replace_all(
                 sort_order: target_sort,
                 created_at: Auto::Unset,
             };
-            row.insert_pool(pool).await?;
+            row.insert(pool).await?;
         }
     }
     Ok(())

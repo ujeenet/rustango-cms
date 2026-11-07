@@ -48,7 +48,7 @@ async fn bounce_rate_counts_short_single_page_sessions() {
         event("d", "pageview", 0),               // bounce: engaged only 5s
         event("d", "engagement", 5_000),
     ] {
-        e.insert_pool(&pool).await.expect("event");
+        e.insert(&pool).await.expect("event");
     }
     let m = rustango_cms::analytics::query::compute(&pool, Utc::now() - Duration::hours(1), Utc::now())
         .await

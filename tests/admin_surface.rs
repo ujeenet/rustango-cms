@@ -85,7 +85,7 @@ async fn settings_template_renders_with_empty_themes() {
     let tera = Arc::new(fresh_tera());
     let mut ctx = test_ctx();
     ctx.insert("active_tab", "settings");
-    ctx.insert("brand_name", &"Test CMS");
+    ctx.insert("site_name", &"Test CMS");
     ctx.insert("tenant_slug", &"demo");
     // _base.html + form templates pull a handful of chrome
     // variables. Real handlers thread these in via add_chrome +
@@ -124,7 +124,7 @@ async fn settings_template_with_zero_locales_shows_empty_state() {
     let tera = Arc::new(fresh_tera());
     let mut ctx = test_ctx();
     ctx.insert("active_tab", "settings");
-    ctx.insert("brand_name", &"Test CMS");
+    ctx.insert("site_name", &"Test CMS");
     ctx.insert("tenant_slug", &"demo");
     // _base.html + form templates pull a handful of chrome
     // variables. Real handlers thread these in via add_chrome +
@@ -161,7 +161,7 @@ async fn styleguide_renders_every_canonical_component() {
     let tera = Arc::new(fresh_tera());
     let mut ctx = test_ctx();
     ctx.insert("active_tab", "styleguide");
-    ctx.insert("brand_name", &"Test CMS");
+    ctx.insert("site_name", &"Test CMS");
     ctx.insert("tenant_slug", &"demo");
     ctx.insert("theme_css", &"");
     ctx.insert("csrf_token", &"test-token");
@@ -248,7 +248,7 @@ fn aging_pages_pagination_links_use_querystring_filter() {
     let mut ctx = test_ctx();
     // `_base.html` chrome.
     ctx.insert("active_tab", "reports");
-    ctx.insert("brand_name", &"Test CMS");
+    ctx.insert("site_name", &"Test CMS");
     ctx.insert("tenant_slug", &"demo");
     ctx.insert("theme_css", &"");
     ctx.insert("csrf_token", &"t");
@@ -306,7 +306,7 @@ fn media_collection_rail_links_use_querystring_filter() {
     let mut ctx = test_ctx();
     // `_base.html` chrome.
     ctx.insert("active_tab", "media");
-    ctx.insert("brand_name", &"Test CMS");
+    ctx.insert("site_name", &"Test CMS");
     ctx.insert("tenant_slug", &"demo");
     ctx.insert("theme_css", &"");
     ctx.insert("csrf_token", &"t");
@@ -459,7 +459,7 @@ fn page_form_ctx() -> Context {
     ctx.insert("active_tab", "pages");
     // Breadcrumb ancestors (epic: editor header breadcrumb trail).
     ctx.insert("ancestors", &Vec::<Value>::new());
-    ctx.insert("brand_name", &"Test CMS");
+    ctx.insert("site_name", &"Test CMS");
     ctx.insert("tenant_slug", &"demo");
     ctx.insert("theme_css", &"");
     ctx.insert("csrf_token", &"test-token");
@@ -633,7 +633,7 @@ async fn empty_locale_list_renders_empty_state_not_table() {
     let build_ctx = || {
         let mut c = test_ctx();
         c.insert("active_tab", "locales");
-        c.insert("brand_name", &"Test CMS");
+        c.insert("site_name", &"Test CMS");
         c.insert("tenant_slug", &"demo");
         c.insert("theme_css", &"");
         c.insert("csrf_token", &"test-token");
@@ -738,7 +738,7 @@ async fn snippet_translation_mode_shows_rows_not_the_edit_form() {
     let tera = fresh_tera();
     let mut ctx = test_ctx();
     ctx.insert("active_tab", "library");
-    ctx.insert("brand_name", &"Test CMS");
+    ctx.insert("site_name", &"Test CMS");
     ctx.insert("csrf_token", &"test-token");
     ctx.insert("messages", &Vec::<serde_json::Value>::new());
     ctx.insert("mode", "edit");
@@ -780,7 +780,7 @@ async fn user_form_deactivate_form_is_not_nested() {
     let tera = fresh_tera();
     let mut ctx = test_ctx();
     ctx.insert("active_tab", "users");
-    ctx.insert("brand_name", &"Test CMS");
+    ctx.insert("site_name", &"Test CMS");
     ctx.insert("csrf_token", &"test-token");
     ctx.insert("messages", &Vec::<serde_json::Value>::new());
     ctx.insert("mode", "edit");
@@ -810,7 +810,7 @@ async fn site_setting_translation_mode_shows_rows() {
     let tera = fresh_tera();
     let mut ctx = test_ctx();
     ctx.insert("active_tab", "site-settings");
-    ctx.insert("brand_name", &"Test CMS");
+    ctx.insert("site_name", &"Test CMS");
     ctx.insert("csrf_token", &"test-token");
     ctx.insert("messages", &Vec::<serde_json::Value>::new());
     ctx.insert("scope", "brand");
@@ -851,7 +851,7 @@ fn security_log_template_renders_events() {
     let tera = fresh_tera();
     let mut ctx = test_ctx();
     ctx.insert("active_tab", "security-log");
-    ctx.insert("brand_name", &"Test CMS");
+    ctx.insert("site_name", &"Test CMS");
     ctx.insert("theme_css", &"");
     ctx.insert("csrf_token", &"test-token");
     ctx.insert("messages", &Vec::<serde_json::Value>::new());
@@ -889,4 +889,79 @@ fn security_log_template_renders_events() {
     ctx.insert("LANG", "de");
     let html = tera.render("rcms_admin/security_log.html", &ctx).expect("de renders");
     assert!(html.contains(">Konto gesperrt</span>"), "macro labels follow LANG");
+}
+
+/// Chrome variables every `_base.html` page reads; real handlers fill
+/// them through `add_chrome`.
+fn chrome_ctx(active_tab: &str) -> Context {
+    let mut ctx = test_ctx();
+    ctx.insert("active_tab", active_tab);
+    ctx.insert("site_name", &"Test CMS");
+    ctx.insert("tenant_slug", &"demo");
+    ctx.insert("theme_css", &"");
+    ctx.insert("csrf_token", &"test-token");
+    ctx.insert("messages", &Vec::<serde_json::Value>::new());
+    ctx.insert("org_slug", &"demo");
+    ctx.insert("org_display_name", &"Demo");
+    ctx
+}
+
+#[test]
+fn cms_admin_list_and_form_render() {
+    // #940 — the generic model editor's two screens.
+    let tera = fresh_tera();
+    let meta = serde_json::json!({
+        "slug": "causes", "label": "Causes", "singular": "cause", "icon": null,
+        "searchable": true, "url": "/cms-admin/x/causes"
+    });
+
+    let mut ctx = chrome_ctx("custom:causes");
+    ctx.insert("meta", &meta);
+    ctx.insert("columns", &["Name", "Active"]);
+    ctx.insert(
+        "items",
+        &serde_json::json!([{ "id": 4, "title": "Water", "cells": ["Water", "Yes"] }]),
+    );
+    ctx.insert("q", "wat");
+    ctx.insert("total", &1);
+    ctx.insert("query_string", "q=wat");
+    ctx.insert("pagination", &rustango_cms::admin::pagination::context(1, 25, 1));
+    ctx.insert("can_add", &true);
+    // Tera escapes `/` in attributes as `&#x2F;`; browsers decode it.
+    let html = tera.render("rcms_admin/cms_admin_list.html", &ctx).expect("list renders").replace("&#x2F;", "/");
+    assert!(html.contains(r#"href="/cms-admin/x/causes/edit?id=4""#), "first cell links to the form");
+    assert!(html.contains(r#"href="/cms-admin/x/causes/new""#), "add button");
+    assert!(html.contains(r#"value="wat""#), "search keeps the query");
+
+    let mut ctx = chrome_ctx("custom:causes");
+    ctx.insert("meta", &meta);
+    ctx.insert("record_id", &4);
+    ctx.insert("record_title", "Water");
+    ctx.insert(
+        "fields",
+        &vec![
+            rustango_cms::Widget::new(rustango_cms::WidgetKind::Text, "name", "Name").with_value("Water"),
+            rustango_cms::Widget::new(rustango_cms::WidgetKind::Number, "external_id", "External id").read_only(),
+        ],
+    );
+    let mut errors = HashMap::new();
+    errors.insert("name", vec!["Pick another name."]);
+    errors.insert("_form", vec!["Database is read-only."]);
+    ctx.insert("errors", &errors);
+    ctx.insert("can_save", &true);
+    ctx.insert("can_delete", &true);
+    let html = tera.render("rcms_admin/cms_admin_form.html", &ctx).expect("form renders").replace("&#x2F;", "/");
+    assert!(html.contains(r#"action="/cms-admin/x/causes/edit""#));
+    assert!(html.contains(r#"name="id" value="4""#));
+    assert!(html.contains("Pick another name."), "field error");
+    assert!(html.contains("Database is read-only."), "form error");
+    assert!(html.contains(r#"action="/cms-admin/x/causes/delete""#), "delete form");
+
+    // A new record with no errors: no id, no delete, nothing flagged.
+    ctx.insert("record_id", &Option::<i64>::None);
+    ctx.insert("errors", &HashMap::<String, Vec<String>>::new());
+    ctx.insert("can_delete", &false);
+    let html = tera.render("rcms_admin/cms_admin_form.html", &ctx).expect("new form renders").replace("&#x2F;", "/");
+    assert!(html.contains(r#"action="/cms-admin/x/causes/new""#));
+    assert!(!html.contains("/delete"));
 }

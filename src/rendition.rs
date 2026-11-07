@@ -128,9 +128,9 @@ pub enum EncodeFormat {
     /// it, `encode` returns a clear error. Parsing + the URL spec always
     /// recognize `format-avif`.
     Avif,
-    /// Content negotiation — picks the best the request accepts.
-    /// v0 behaves like WebP (browsers all support it). Future: read
-    /// the `Accept` header to pick AVIF when supported.
+    /// Pick for the image: JPEG for an opaque raster image, PNG (or
+    /// WebP for a WebP source) when it has transparent pixels. Also
+    /// what happens when no format is given. See [`auto_format`].
     Auto,
 }
 
@@ -388,11 +388,39 @@ pub fn apply(
     }
 }
 
+/// The output format for `format-auto` or no format at all.
+///
+/// Lossless PNG and WebP keep photos at megabytes, so an image with
+/// no transparent pixel becomes a JPEG; one with transparency keeps
+/// it (WebP stays WebP, everything else becomes PNG). An alpha
+/// channel whose pixels are all opaque counts as opaque — many photos
+/// are saved as RGBA without using it.
+#[must_use]
+pub fn auto_format(image: &image::DynamicImage, source_mime: &str) -> EncodeFormat {
+    if !has_transparency(image) {
+        EncodeFormat::Jpeg
+    } else if source_mime == "image/webp" {
+        EncodeFormat::Webp
+    } else {
+        EncodeFormat::Png
+    }
+}
+
+/// Whether any pixel is less than fully opaque.
+fn has_transparency(image: &image::DynamicImage) -> bool {
+    if !image.color().has_alpha() {
+        return false;
+    }
+    match image.as_rgba8() {
+        Some(buf) => buf.pixels().any(|p| p[3] < u8::MAX),
+        None => image.to_rgba8().pixels().any(|p| p[3] < u8::MAX),
+    }
+}
+
 /// Encode `image` per the supplied [`EncodingOps`], applying
 /// background-color flattening when targeting a non-alpha format
-/// (JPEG). Returns `(bytes, mime, extension)`. When `encoding.format`
-/// is `None`, falls back to `source_mime` (JPEG passthrough, anything
-/// else → PNG) to preserve the v0.2 behavior.
+/// (JPEG). Returns `(bytes, mime, extension)`. With no format, or
+/// `format-auto`, the format comes from [`auto_format`].
 ///
 /// # Errors
 /// Encoder failures from the [`image`] crate.
@@ -402,15 +430,10 @@ pub fn encode(
     source_mime: &str,
 ) -> Result<(Vec<u8>, String, String), String> {
     use image::codecs::jpeg::JpegEncoder;
-    let format = encoding.format.unwrap_or_else(|| {
-        if source_mime == "image/jpeg" || source_mime == "image/jpg" {
-            EncodeFormat::Jpeg
-        } else if source_mime == "image/webp" {
-            EncodeFormat::Webp
-        } else {
-            EncodeFormat::Png
-        }
-    });
+    let format = match encoding.format {
+        None | Some(EncodeFormat::Auto) => auto_format(image, source_mime),
+        Some(explicit) => explicit,
+    };
 
     // Background-color flatten when targeting a non-alpha format.
     // PNG + WebP both honour alpha; JPEG doesn't.
@@ -681,8 +704,10 @@ fn rcms_image_url(
         .get("filter")
         .and_then(tera::Value::as_str)
         .ok_or_else(|| tera::Error::msg("rcms_image_url: `filter` (string) is required"))?;
-    let op =
-        FilterOp::parse(filter).map_err(|e| tera::Error::msg(format!("rcms_image_url: {e}")))?;
+    // A full pipeline (`width-800|format-jpeg`), like the srcset and
+    // picture helpers; a bare resize op is a pipeline with no hints.
+    let pipeline = FilterPipeline::parse(filter)
+        .map_err(|e| tera::Error::msg(format!("rcms_image_url: {e}")))?;
     // Optional content-hash cache-buster. The route serves renditions
     // with `Cache-Control: immutable`, so when the underlying bytes
     // change (e.g. an in-place crop) the URL must change too. Callers
@@ -692,7 +717,7 @@ fn rcms_image_url(
     let v = args.get("v").and_then(tera::Value::as_str);
     Ok(tera::Value::String(rendition_url(
         media_id,
-        &op.canonical(),
+        &pipeline.canonical(),
         v,
     )))
 }
@@ -792,30 +817,38 @@ fn rendition_url(media_id: i64, canonical_spec: &str, v: Option<&str>) -> String
 
 // ---- #425 — signed rendition URLs (enumeration / CPU-DoS guard) ----
 
-/// Process-wide signing key for rendition URLs. `None` = signing off.
-static SIGNING_KEY: std::sync::OnceLock<Option<Vec<u8>>> = std::sync::OnceLock::new();
+/// The rendition signing key and how strictly it is enforced.
+#[derive(PartialEq, Eq)]
+struct SigningKey {
+    bytes: Vec<u8>,
+    /// Set explicitly (`set_signing_key` / `RCMS_RENDITION_SIGNING_KEY`):
+    /// every request must be signed. Otherwise the key is derived from
+    /// the CMS secret and an unsigned request is served, capped.
+    strict: bool,
+}
 
-/// Enable **signed rendition URLs**. Once a key is set, every
-/// `rcms_image_url` / `rcms_image_srcset` / `rcms_picture` URL carries
-/// an HMAC `s=` over `(canonical_spec, media_id)`, and the rendition
-/// route ([`crate::rendition_route`]) rejects requests whose signature
-/// is missing or forged — closing the media-id-enumeration + arbitrary-
-/// spec CPU-DoS surface.
+static SIGNING_KEY: std::sync::OnceLock<SigningKey> = std::sync::OnceLock::new();
+
+/// Make rendition signing **strict** with your own key: every request to
+/// the rendition route must then carry a valid `s=` signature, so media
+/// ids can't be enumerated and no unsigned size is ever generated.
 ///
-/// **Opt-in + backward compatible:** when no key is set (and the
-/// `RCMS_RENDITION_SIGNING_KEY` env var is unset) URLs stay unsigned and
-/// the route serves exactly as before.
+/// Without it, URLs the CMS renders (`rcms_image_url` / `rcms_image_srcset`
+/// / `rcms_picture`) are still signed — with a key derived from the CMS
+/// secret — and always served; unsigned URLs, such as the ones API clients
+/// build from `download_url_template`, are served too, but an anonymous
+/// visitor can only create [`max_unsigned_variants`] sizes of an image
+/// that way (#643).
 ///
 /// Call once at startup, before serving. The key MUST be stable across
 /// restarts — URLs are baked into cached HTML, so a per-boot random key
 /// would 403 every image after a restart. Source it from your config.
 ///
 /// The first read fixes the key, so a call after it — or a second call
-/// with another key — cannot take effect; it is logged as an error rather
-/// than dropped, since it can leave rendition signing off.
+/// with another key — cannot take effect; it is logged as an error.
 pub fn set_signing_key(key: impl Into<Vec<u8>>) {
-    let key = key.into();
-    if let Err(rejected) = SIGNING_KEY.set(Some(key)) {
+    let key = SigningKey { bytes: key.into(), strict: true };
+    if let Err(rejected) = SIGNING_KEY.set(key) {
         if SIGNING_KEY.get() != Some(&rejected) {
             tracing::error!(
                 target: "rustango_cms::rendition",
@@ -826,14 +859,50 @@ pub fn set_signing_key(key: impl Into<Vec<u8>>) {
     }
 }
 
-/// The active key, or `None` when signing is off. Falls back to the
-/// `RCMS_RENDITION_SIGNING_KEY` env var the first time it's read.
-fn signing_key() -> Option<&'static [u8]> {
-    SIGNING_KEY
-        .get_or_init(|| {
-            crate::config::var("RENDITION_SIGNING_KEY").map(String::into_bytes)
-        })
-        .as_deref()
+/// Fix the signing key (reading or generating the CMS key file if it is
+/// derived). The rendition router calls this at boot; call
+/// [`set_signing_key`] before it.
+pub fn init_signing() {
+    let _ = signing_key();
+}
+
+/// The active key: `set_signing_key`'s, else `RCMS_RENDITION_SIGNING_KEY`
+/// (both strict), else one derived from the CMS secret (lenient).
+fn signing_key() -> &'static SigningKey {
+    SIGNING_KEY.get_or_init(|| match crate::config::var("RENDITION_SIGNING_KEY") {
+        Some(k) => SigningKey { bytes: k.into_bytes(), strict: true },
+        None => {
+            tracing::info!(
+                target: "rustango_cms::rendition",
+                max_variants = max_unsigned_variants(),
+                "image URLs the CMS renders are signed; unsigned ones (API clients) are capped per \
+                 image — set RCMS_RENDITION_SIGNING_KEY to require a signature on every request"
+            );
+            SigningKey { bytes: crate::signing::derived_key("rendition-url"), strict: false }
+        }
+    })
+}
+
+/// Default for [`max_unsigned_variants`].
+pub const DEFAULT_MAX_UNSIGNED_VARIANTS: usize = 128;
+
+/// Without a strict key, the most distinct renditions unsigned anonymous
+/// requests may cause to exist for one image (#643):
+/// `RCMS_RENDITION_MAX_UNSIGNED`, else [`DEFAULT_MAX_UNSIGNED_VARIANTS`].
+/// Sizes already generated keep serving; a new one past the cap gets
+/// `429`. Signed URLs (every image URL the CMS renders) never count
+/// against it, so a visitor can't use up the slots a page needs.
+/// Signed-in editors are not capped.
+#[must_use]
+pub fn max_unsigned_variants() -> usize {
+    static MAX: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    *MAX.get_or_init(|| parse_max_unsigned(crate::config::var("RENDITION_MAX_UNSIGNED").as_deref()))
+}
+
+fn parse_max_unsigned(raw: Option<&str>) -> usize {
+    raw.and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(DEFAULT_MAX_UNSIGNED_VARIANTS)
 }
 
 /// HMAC-SHA256(key, "spec:id") truncated to 16 hex chars (64-bit — a
@@ -851,28 +920,48 @@ fn sig_ok(key: &[u8], canonical_spec: &str, media_id: i64, supplied: Option<&str
     supplied.is_some_and(|s| crate::signing::constant_time_eq(s.as_bytes(), expected.as_bytes()))
 }
 
-/// Append the `s=` signature when signing is enabled; pass the URL
-/// through untouched otherwise.
+/// Append the `s=` signature.
 fn maybe_sign(url: String, canonical_spec: &str, media_id: i64) -> String {
-    match signing_key() {
-        Some(key) => {
-            let sig = rendition_sig(key, canonical_spec, media_id);
-            let sep = if url.contains('?') { '&' } else { '?' };
-            format!("{url}{sep}s={sig}")
-        }
-        None => url,
-    }
+    sign_with(&signing_key().bytes, url, canonical_spec, media_id)
 }
 
-/// Verify a rendition request's `s=` signature. Returns `true` when
-/// signing is disabled (open contract) OR `sig` matches `(spec, id)`.
-/// The route calls this before the DB lookup + rendition work so a
-/// forged request costs nothing.
+fn sign_with(key: &[u8], url: String, canonical_spec: &str, media_id: i64) -> String {
+    let sig = rendition_sig(key, canonical_spec, media_id);
+    let sep = if url.contains('?') { '&' } else { '?' };
+    format!("{url}{sep}s={sig}")
+}
+
+/// What a rendition request's `s=` signature says.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenditionSig {
+    /// A valid signature: serve, uncapped.
+    Valid,
+    /// No valid signature, and no strict key: serve, capped for
+    /// anonymous visitors ([`max_unsigned_variants`]).
+    Unsigned,
+    /// No valid signature under a strict key: refuse.
+    Rejected,
+}
+
+/// Check a rendition request's signature. The route calls this before
+/// the DB lookup + rendition work so a forged request costs nothing.
 #[must_use]
-pub fn verify_rendition_sig(canonical_spec: &str, media_id: i64, sig: Option<&str>) -> bool {
-    match signing_key() {
-        None => true,
-        Some(key) => sig_ok(key, canonical_spec, media_id, sig),
+pub fn check_rendition_sig(canonical_spec: &str, media_id: i64, sig: Option<&str>) -> RenditionSig {
+    let key = signing_key();
+    classify_sig(&key.bytes, key.strict, canonical_spec, media_id, sig)
+}
+
+/// Under a derived (lenient) key a signature that doesn't verify counts
+/// as none: it may come from another replica's or an earlier process's
+/// generated key, or a page cached before a restart, and refusing it would
+/// break those images while a forged one gains nothing over no signature.
+fn classify_sig(key: &[u8], strict: bool, canonical_spec: &str, media_id: i64, sig: Option<&str>) -> RenditionSig {
+    if sig_ok(key, canonical_spec, media_id, sig) {
+        RenditionSig::Valid
+    } else if strict {
+        RenditionSig::Rejected
+    } else {
+        RenditionSig::Unsigned
     }
 }
 
@@ -927,7 +1016,7 @@ fn attr_escape(s: &str) -> String {
 fn format_mime(fmt: &str) -> Option<&'static str> {
     Some(match fmt {
         "avif" => "image/avif",
-        "webp" | "auto" => "image/webp",
+        "webp" => "image/webp",
         "jpeg" | "jpg" => "image/jpeg",
         "png" => "image/png",
         _ => return None,
@@ -1191,7 +1280,7 @@ mod tests {
             &[],
         )
         .unwrap();
-        assert_eq!(out, "/__media__/width-1600/42");
+        assert_eq!(crate::rendition::strip_sig(&out), "/__media__/width-1600/42");
     }
 
     #[test]
@@ -1203,7 +1292,7 @@ mod tests {
             &[("v", tera::Value::String("99".to_owned()))],
         )
         .unwrap();
-        assert_eq!(out, "/__media__/width-1600/99");
+        assert_eq!(crate::rendition::strip_sig(&out), "/__media__/width-1600/99");
     }
 
     #[test]
@@ -1213,7 +1302,7 @@ mod tests {
             &[("v", tera::Value::String("  17  ".to_owned()))],
         )
         .unwrap();
-        assert_eq!(out, "/__media__/max-1200x900/17");
+        assert_eq!(crate::rendition::strip_sig(&out), "/__media__/max-1200x900/17");
     }
 
     #[test]
@@ -1245,7 +1334,7 @@ mod tests {
             &[],
         )
         .unwrap();
-        assert_eq!(out, "/__media__/width-800/42?v=abc123def456");
+        assert_eq!(crate::rendition::strip_sig(&out), "/__media__/width-800/42?v=abc123def456");
     }
 
     // --- #79 — encoding pipeline -------------------------------
@@ -1324,11 +1413,67 @@ mod tests {
         assert_eq!(super::parse_hex_rgb("ff"), None);
         assert_eq!(super::parse_hex_rgb("ffffff00"), None); // RGBA not supported
     }
+
+    /// `rcms_image_url` takes the same pipelines as the srcset and
+    /// picture helpers; it used to reject anything after a `|`.
+    #[test]
+    fn image_url_accepts_a_pipeline() {
+        let out = render_one(
+            r#"{{ rcms_image_url(media_id=42, filter="width-800|format-jpeg|quality-80") }}"#,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(crate::rendition::strip_sig(&out), "/__media__/width-800|format-jpeg|quality-80/42");
+    }
+
+    fn rgba(px: [u8; 4]) -> image::DynamicImage {
+        image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(4, 4, image::Rgba(px)))
+    }
+
+    #[test]
+    fn auto_format_picks_jpeg_for_opaque_and_keeps_transparency() {
+        let opaque_rgb = image::DynamicImage::new_rgb8(4, 4);
+        assert_eq!(auto_format(&opaque_rgb, "image/png"), EncodeFormat::Jpeg);
+        // An alpha channel nobody uses is still opaque.
+        assert_eq!(auto_format(&rgba([9, 9, 9, 255]), "image/png"), EncodeFormat::Jpeg);
+        let mut one_clear = image::RgbaImage::from_pixel(4, 4, image::Rgba([9, 9, 9, 255]));
+        one_clear.put_pixel(3, 3, image::Rgba([0, 0, 0, 0]));
+        let one_clear = image::DynamicImage::ImageRgba8(one_clear);
+        assert_eq!(auto_format(&one_clear, "image/png"), EncodeFormat::Png);
+        assert_eq!(auto_format(&one_clear, "image/webp"), EncodeFormat::Webp);
+        assert_eq!(auto_format(&opaque_rgb, "image/jpeg"), EncodeFormat::Jpeg);
+    }
+
+    /// No format given: an opaque PNG photo comes out as a JPEG (the
+    /// built-in image block's case), a transparent one stays PNG, and
+    /// an explicit format still wins.
+    #[test]
+    fn encode_without_a_format_follows_auto_format() {
+        let none = EncodingOps { format: None, quality: None, background: None };
+        let (_, mime, ext) = encode(&rgba([200, 90, 40, 255]), &none, "image/png").unwrap();
+        assert_eq!((mime.as_str(), ext.as_str()), ("image/jpeg", "jpg"));
+        let (_, mime, _) = encode(&rgba([200, 90, 40, 0]), &none, "image/png").unwrap();
+        assert_eq!(mime, "image/png");
+        let auto = EncodingOps { format: Some(EncodeFormat::Auto), ..none };
+        let (_, mime, _) = encode(&rgba([200, 90, 40, 255]), &auto, "image/png").unwrap();
+        assert_eq!(mime, "image/jpeg");
+        let png = EncodingOps { format: Some(EncodeFormat::Png), ..none };
+        let (_, mime, _) = encode(&rgba([200, 90, 40, 255]), &png, "image/png").unwrap();
+        assert_eq!(mime, "image/png");
+    }
 }
 
 #[cfg(test)]
 mod responsive_tests {
-    use super::{build_dpi_srcset, build_picture, build_srcset, FilterPipeline};
+    use super::{build_picture, FilterPipeline};
+
+    // URLs carry a process-key signature; these tests compare the rest.
+    fn build_srcset(id: i64, specs: &[FilterPipeline], v: Option<&str>) -> String {
+        crate::rendition::strip_sig(&super::build_srcset(id, specs, v))
+    }
+    fn build_dpi_srcset(id: i64, base: &FilterPipeline, densities: &[u32], v: Option<&str>) -> String {
+        crate::rendition::strip_sig(&super::build_dpi_srcset(id, base, densities, v))
+    }
 
     fn specs(raw: &[&str]) -> Vec<FilterPipeline> {
         raw.iter()
@@ -1390,10 +1535,10 @@ mod responsive_tests {
 
     #[test]
     fn rendition_url_for_parses_and_rejects_bad_spec() {
-        // #431 — the public API builder: canonicalizes + (with no
-        // signing key in tests) emits the plain URL; bad spec → None.
+        // #431 — the public API builder: canonicalizes (and signs);
+        // bad spec → None.
         assert_eq!(
-            super::rendition_url_for(42, "width-800", Some("abc123def456ZZ")),
+            super::rendition_url_for(42, "width-800", Some("abc123def456ZZ")).map(|u| crate::rendition::strip_sig(&u)),
             Some("/__media__/width-800/42?v=abc123def456".to_owned())
         );
         assert_eq!(super::rendition_url_for(42, "not-a-spec", None), None);
@@ -1409,6 +1554,7 @@ mod responsive_tests {
             Some("100vw"),
             None,
         );
+        let html = crate::rendition::strip_sig(&html);
         // One <source> per format, with the format folded into the spec.
         assert!(html.contains(r#"<source type="image/avif" srcset="/__media__/width-400|format-avif/42 400w, /__media__/width-800|format-avif/42 800w" sizes="100vw">"#), "{html}");
         assert!(html.contains(r#"<source type="image/webp" srcset="/__media__/width-400|format-webp/42 400w, /__media__/width-800|format-webp/42 800w" sizes="100vw">"#), "{html}");
@@ -1425,6 +1571,15 @@ mod responsive_tests {
             html.starts_with("<picture>") && html.ends_with("</picture>"),
             "{html}"
         );
+    }
+
+    /// `auto` is decided per image, so it can't be declared as a
+    /// `<source type>`; the `<img>` fallback covers it.
+    #[test]
+    fn picture_does_not_declare_auto_as_a_source_type() {
+        let html = crate::rendition::strip_sig(&build_picture(5, &specs(&["width-500"]), &["auto".to_owned()], "", None, None));
+        assert!(!html.contains("<source"), "{html}");
+        assert!(html.contains(r#"<img src="/__media__/width-500/5""#), "{html}");
     }
 
     #[test]
@@ -1453,7 +1608,7 @@ mod responsive_tests {
         )
         .unwrap();
         assert_eq!(
-            tera.render("s.html", &tera::Context::new()).unwrap(),
+            crate::rendition::strip_sig(&tera.render("s.html", &tera::Context::new()).unwrap()),
             "/__media__/width-400/42 400w, /__media__/width-800/42 800w"
         );
         tera.add_raw_template(
@@ -1468,9 +1623,17 @@ mod responsive_tests {
     }
 }
 
+/// A rendition URL with its `s=` signature removed, for tests that
+/// compare whole URLs (the signature depends on the process key).
+#[cfg(test)]
+pub(crate) fn strip_sig(url: &str) -> String {
+    let re = regex::Regex::new(r"[?&]s=[0-9a-f]{16}").expect("regex");
+    re.replace_all(url, "").into_owned()
+}
+
 #[cfg(test)]
 mod sign_tests {
-    use super::{maybe_sign, rendition_sig, sig_ok, verify_rendition_sig};
+    use super::{classify_sig, parse_max_unsigned, rendition_sig, sig_ok, sign_with, RenditionSig, DEFAULT_MAX_UNSIGNED_VARIANTS};
 
     #[test]
     fn sig_is_deterministic_16_hex_and_input_sensitive() {
@@ -1495,14 +1658,40 @@ mod sign_tests {
     }
 
     #[test]
-    fn disabled_signing_is_open_and_unsigned() {
-        // No key configured (and RCMS_RENDITION_SIGNING_KEY unset in the
-        // test env) → signing off: URLs pass through untouched and every
-        // request verifies. This is the default, backward-compatible path.
-        assert_eq!(
-            maybe_sign("/__media__/width-800/7".to_owned(), "width-800", 7),
-            "/__media__/width-800/7"
-        );
-        assert!(verify_rendition_sig("width-800", 7, None));
+    fn the_unsigned_variant_cap_reads_a_positive_number() {
+        assert_eq!(parse_max_unsigned(None), DEFAULT_MAX_UNSIGNED_VARIANTS);
+        assert_eq!(parse_max_unsigned(Some(" 64 ")), 64);
+        assert_eq!(parse_max_unsigned(Some("0")), DEFAULT_MAX_UNSIGNED_VARIANTS);
+        assert_eq!(parse_max_unsigned(Some("lots")), DEFAULT_MAX_UNSIGNED_VARIANTS);
+    }
+
+    #[test]
+    fn a_lenient_key_serves_signed_free_and_unsigned_capped() {
+        let k = b"derived";
+        let good = rendition_sig(k, "width-800", 7);
+        assert_eq!(classify_sig(k, false, "width-800", 7, Some(&good)), RenditionSig::Valid);
+        // An API client's unsigned URL is served (capped by the route).
+        assert_eq!(classify_sig(k, false, "width-800", 7, None), RenditionSig::Unsigned);
+        // A signature from another key (a replica, a restart) or a forged
+        // or empty one is served like no signature: capped, not broken.
+        assert_eq!(classify_sig(k, false, "width-800", 7, Some("deadbeefdeadbeef")), RenditionSig::Unsigned);
+        assert_eq!(classify_sig(k, false, "width-800", 7, Some("")), RenditionSig::Unsigned);
+    }
+
+    #[test]
+    fn a_strict_key_requires_a_signature() {
+        let k = b"explicit";
+        let good = rendition_sig(k, "width-800", 7);
+        assert_eq!(classify_sig(k, true, "width-800", 7, Some(&good)), RenditionSig::Valid);
+        assert_eq!(classify_sig(k, true, "width-800", 7, None), RenditionSig::Rejected);
+        assert_eq!(classify_sig(k, true, "width-800", 7, Some("deadbeefdeadbeef")), RenditionSig::Rejected);
+    }
+
+    #[test]
+    fn signing_appends_s_after_any_query() {
+        let k = b"k";
+        let sig = rendition_sig(k, "width-800", 7);
+        assert_eq!(sign_with(k, "/__media__/width-800/7".into(), "width-800", 7), format!("/__media__/width-800/7?s={sig}"));
+        assert_eq!(sign_with(k, "/__media__/width-800/7?v=ab".into(), "width-800", 7), format!("/__media__/width-800/7?v=ab&s={sig}"));
     }
 }

@@ -85,7 +85,7 @@ mod tests {
             ("/old", cutoff - chrono::Duration::minutes(5)),
             ("/new", cutoff + chrono::Duration::minutes(5)),
         ] {
-            event(path, at).insert_pool(&pool).await.expect("event");
+            event(path, at).insert(&pool).await.expect("event");
         }
         prune(&pool, 1).await.expect("prune");
         let left: Vec<String> = AnalyticsEvent::objects()

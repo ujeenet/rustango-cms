@@ -110,31 +110,42 @@ async fn media_fingerprint(
     Ok((to_usize(count), latest))
 }
 
+/// `(count, newest edit)` of the public pages the viewer may see. With no
+/// view restriction in force for this viewer — the common case — both
+/// come from SQL (#647); otherwise the rows are needed to test each path.
+async fn page_fingerprint(
+    pool: &rustango::sql::Pool,
+    viewer: Option<&rustango::tenancy::auth::User>,
+) -> Result<(usize, Option<DateTime<Utc>>), rustango::sql::ExecError> {
+    let listed = || {
+        Page::objects()
+            .where_(Page::status.is_in([
+                PageStatus::Published.as_str().to_owned(),
+                PageStatus::Archived.as_str().to_owned(),
+            ]))
+            .where_(Page::locale_variant_of.is_null())
+    };
+    let access = crate::view_restriction::access_context(pool, viewer).await;
+    if access.is_unrestricted() {
+        let count = listed().count(pool).await?;
+        let latest = listed()
+            .order_by(&[("updated_at", true)])
+            .first(pool)
+            .await?
+            .and_then(|p| p.updated_at.get().copied());
+        return Ok((to_usize(count), latest));
+    }
+    let pages: Vec<Page> = listed().fetch(pool).await?;
+    let visible: Vec<&Page> = pages.iter().filter(|p| access.can_view(&p.path, p.page_type_id)).collect();
+    Ok((visible.len(), newest(visible.iter().map(|p| p.updated_at.get().copied()))))
+}
+
 pub async fn changes_inner(
     pool: &rustango::sql::Pool,
     viewer: Option<&rustango::tenancy::auth::User>,
 ) -> Result<Response, rustango::sql::ExecError> {
     // ---- pages: the same public set the list endpoint serves ----------
-    let mut pages: Vec<Page> = Page::objects()
-        .where_(Page::status.is_in([
-            PageStatus::Published.as_str().to_owned(),
-            PageStatus::Archived.as_str().to_owned(),
-        ]))
-        .fetch(pool)
-        .await?;
-    pages.retain(|p| p.locale_variant_of.is_none());
-    let triples: Vec<(i64, String, i64)> = pages
-        .iter()
-        .map(|p| {
-            (
-                p.id.get().copied().unwrap_or_default(),
-                p.path.clone(),
-                p.page_type_id,
-            )
-        })
-        .collect();
-    let denied = crate::view_restriction::denied_page_ids(pool, viewer, &triples).await;
-    pages.retain(|p| !denied.contains(&p.id.get().copied().unwrap_or_default()));
+    let pages = page_fingerprint(pool, viewer).await?;
 
     // ---- media: gated collections excluded, as in the listings --------
     // Counted in SQL (#647): every row of five tables used to be loaded
@@ -180,10 +191,7 @@ pub async fn changes_inner(
                       `latest` you held as `?updated_since=`.",
         },
         "collections": {
-            "pages": entry(
-                pages.len(),
-                newest(pages.iter().map(|p| p.updated_at.get().copied())),
-            ),
+            "pages": entry(pages.0, pages.1),
             "images": entry(images.0, images.1),
             "documents": entry(documents.0, documents.1),
             "snippets": entry(to_usize(snippets.0), snippets.1),

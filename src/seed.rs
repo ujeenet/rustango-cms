@@ -553,7 +553,7 @@ pub async fn ensure_mcp_skills(pool: &rustango::sql::Pool) -> Result<(), rustang
                             skill_id,
                             tool_name: (*tool).to_owned(),
                         };
-                        row.insert_pool(pool).await?;
+                        row.insert(pool).await?;
                     }
                 }
             }
@@ -759,7 +759,7 @@ async fn backfill_codename(
         role_id,
         codename: codename.to_owned(),
     };
-    perm.insert_pool(pool).await?;
+    perm.insert(pool).await?;
     Ok(())
 }
 
@@ -784,7 +784,7 @@ async fn seed_role_with_codenames(
         description: description.to_owned(),
         data: serde_json::Value::Object(serde_json::Map::new()),
     };
-    row.insert_pool(pool).await?;
+    row.insert(pool).await?;
     let role_id = row.id.get().copied().unwrap_or_default();
     // A role's permissions are a set. Callers assemble these lists by
     // walking the resource matrix, where one codename can be reached by
@@ -802,7 +802,7 @@ async fn seed_role_with_codenames(
             role_id,
             codename: codename.clone(),
         };
-        perm.insert_pool(pool).await?;
+        perm.insert(pool).await?;
     }
     Ok(())
 }
@@ -827,7 +827,7 @@ async fn ensure_default_locale(pool: &rustango::sql::Pool) -> Result<(), ExecErr
         sort_order: 0,
         created_at: Auto::Unset,
     };
-    row.insert_pool(pool).await?;
+    row.insert(pool).await?;
     Ok(())
 }
 
@@ -844,7 +844,7 @@ async fn ensure_root_media_collection(pool: &rustango::sql::Pool) -> Result<(), 
         sort_order: 0,
         created_at: Auto::Unset,
     };
-    row.insert_pool(pool).await?;
+    row.insert(pool).await?;
     Ok(())
 }
 
@@ -853,7 +853,7 @@ async fn ensure_root_media_collection(pool: &rustango::sql::Pool) -> Result<(), 
 /// Find-or-create rather than ON CONFLICT because the macro-emitted
 /// `upsert_on()` would conflict on the surrogate primary key — we
 /// want resolution by the `type_name` natural-key column.
-async fn upsert_page_type(
+pub(crate) async fn upsert_page_type(
     pool: &rustango::sql::Pool,
     handler: &dyn PageTypeHandler,
 ) -> Result<(), ExecError> {
@@ -876,7 +876,7 @@ async fn upsert_page_type(
         row.allowed_parent_types = parents_json;
         row.allowed_child_types = children_json;
         row.workflow = handler.workflow_slug().unwrap_or_default().to_owned();
-        row.save_pool(pool).await?;
+        row.save(pool).await?;
     } else {
         let mut row = PageType {
             id: Auto::Unset,
@@ -892,7 +892,7 @@ async fn upsert_page_type(
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         };
-        row.insert_pool(pool).await?;
+        row.insert(pool).await?;
     }
     Ok(())
 }

@@ -289,11 +289,11 @@ impl CloudflareInvalidator {
 
 #[async_trait]
 impl PageCacheInvalidator for CloudflareInvalidator {
-    async fn invalidate_url(&self, tenant_slug: &str, url_path: &str) {
-        self.purge(self.resolve_urls(tenant_slug, url_path)).await;
+    async fn invalidate_url(&self, tenant: &rustango::tenancy::TenantSlug, url_path: &str) {
+        self.purge(self.resolve_urls(&tenant.slug, url_path)).await;
     }
 
-    async fn invalidate_subtree(&self, tenant_slug: &str, url_path: &str) {
+    async fn invalidate_subtree(&self, tenant: &rustango::tenancy::TenantSlug, url_path: &str) {
         // Cloudflare's `purge_cache` API supports `prefixes` for
         // subtree purges, but it's an Enterprise-only feature. The
         // free / Pro / Business tiers only accept exact URLs. Fall
@@ -302,17 +302,17 @@ impl PageCacheInvalidator for CloudflareInvalidator {
         // subtree drop. Keeping the default to the single-URL purge
         // gives Free/Pro/Business operators a working purge for the
         // most-common case.
-        self.purge(self.resolve_urls(tenant_slug, url_path)).await;
+        self.purge(self.resolve_urls(&tenant.slug, url_path)).await;
     }
 
-    async fn invalidate_urls(&self, tenant_slug: &str, url_paths: &[String]) {
+    async fn invalidate_urls(&self, tenant: &rustango::tenancy::TenantSlug, url_paths: &[String]) {
         // #428 — batch every (path × host) into one `files` array
         // (chunked by `purge`) instead of one POST per path. A save
         // that touches a page + its descendants now costs a single
         // round-trip on the common case (≤30 URLs).
         let urls: Vec<String> = url_paths
             .iter()
-            .flat_map(|p| self.resolve_urls(tenant_slug, p))
+            .flat_map(|p| self.resolve_urls(&tenant.slug, p))
             .collect();
         self.purge(urls).await;
     }
@@ -380,7 +380,7 @@ mod tests {
         let inv = CloudflareInvalidator::new("zone-xyz", "secret-token")
             .with_origin_host("example.com")
             .with_api_base(server.base_url());
-        inv.invalidate_url("acme", "/about").await;
+        inv.invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/about").await;
         mock.assert();
     }
 
@@ -397,7 +397,7 @@ mod tests {
             .with_origin_host("example.com")
             .with_api_base(server.base_url());
         // Should swallow the error per the trait contract.
-        inv.invalidate_url("acme", "/about").await;
+        inv.invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/about").await;
     }
 
     #[tokio::test]
@@ -410,7 +410,7 @@ mod tests {
             then.status(200);
         });
         let inv = CloudflareInvalidator::new("z", "t").with_api_base(server.base_url());
-        inv.invalidate_url("acme", "/about").await;
+        inv.invalidate_url(&rustango::tenancy::TenantSlug::new(1, "acme"), "/about").await;
         assert_eq!(mock.calls(), 0, "no host registered should mean no HTTP");
     }
 
@@ -427,7 +427,7 @@ mod tests {
         let inv = CloudflareInvalidator::new("z", "t")
             .with_origin_host("example.com")
             .with_api_base(server.base_url());
-        inv.invalidate_subtree("acme", "/blog").await;
+        inv.invalidate_subtree(&rustango::tenancy::TenantSlug::new(1, "acme"), "/blog").await;
         mock.assert();
     }
 
@@ -447,7 +447,7 @@ mod tests {
         let inv = CloudflareInvalidator::new("z", "t")
             .with_origin_host("example.com")
             .with_api_base(server.base_url());
-        inv.invalidate_urls("acme", &["/a".to_owned(), "/b".to_owned(), "/c".to_owned()])
+        inv.invalidate_urls(&rustango::tenancy::TenantSlug::new(1, "acme"), &["/a".to_owned(), "/b".to_owned(), "/c".to_owned()])
             .await;
         assert_eq!(mock.calls(), 1, "three paths should batch into one POST");
     }
@@ -464,7 +464,7 @@ mod tests {
             .with_origin_host("example.com")
             .with_api_base(server.base_url());
         let paths: Vec<String> = (0..31).map(|i| format!("/p{i}")).collect();
-        inv.invalidate_urls("acme", &paths).await;
+        inv.invalidate_urls(&rustango::tenancy::TenantSlug::new(1, "acme"), &paths).await;
         assert_eq!(mock.calls(), 2, "31 URLs should split into 30 + 1");
     }
 

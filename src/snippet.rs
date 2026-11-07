@@ -154,7 +154,7 @@ pub async fn capture_revision(
         captured_by,
         captured_at: Auto::Unset,
     };
-    row.insert_pool(pool).await?;
+    row.insert(pool).await?;
     Ok(row)
 }
 

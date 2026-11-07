@@ -85,7 +85,8 @@ fn load_or_generate(path: &std::path::Path) -> Vec<u8> {
             target: "rustango_cms::signing",
             path = %path.display(),
             "could not persist the generated CMS signing key; signed links \
-             (previews, password resets) stop working at the next restart"
+             (previews, password resets) stop working at the next restart, and \
+             signed image URLs in cached pages fall back to the unsigned image limit"
         );
     }
     buf

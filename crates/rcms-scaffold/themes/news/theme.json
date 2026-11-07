@@ -1,0 +1,526 @@
+{
+  "name": "News",
+  "site": {
+    "tagline": "News that matters",
+    "footer": "© 2026 The Daily Brief. Built with Rustango-CMS.",
+    "footer_logo": "@media:rustango-cms-logo"
+  },
+  "branding": {
+    "site_name": "The Daily Brief",
+    "logo": "@media:rustango-cms-icon",
+    "favicon": "@media:rustango-cms-icon"
+  },
+  "theme": {
+    "base": "ink",
+    "slug": "starter-news",
+    "name": "Starter: News",
+    "tokens": {
+      "color_link": "#b91c1c",
+      "font_heading": "'Source Serif 4', Georgia, serif",
+      "font_body": "'Inter', system-ui, sans-serif",
+      "font_url": "https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&family=Inter:wght@400;500;600&display=swap",
+      "radius_md": "4px",
+      "radius_lg": "6px"
+    }
+  },
+  "page_types": [
+    "Home",
+    "Page",
+    "Section",
+    "Article"
+  ],
+  "pages": [
+    {
+      "key": "home",
+      "type": "Home",
+      "title": "Home",
+      "slug": "",
+      "data": {
+        "headline": "Today's news, without the noise.",
+        "intro": "Short, careful reporting from our newsroom.",
+        "cta_label": "Latest stories",
+        "cta_url": "/world",
+        "body": []
+      },
+      "children": [
+        {
+          "key": "world",
+          "type": "Section",
+          "title": "World",
+          "slug": "world",
+          "in_menu": true,
+          "data": {
+            "intro": "Stories from around the globe."
+          },
+          "children": [
+            {
+              "key": "world-1",
+              "type": "Article",
+              "title": "Cities race to plant a million trees",
+              "slug": "million-trees",
+              "seo_description": "Urban forests are back on the agenda as summers get hotter.",
+              "in_menu": true,
+              "data": {
+                "standfirst": "Urban forests are back on the agenda as summers get hotter.",
+                "published": "2026-11-02",
+                "author": "Sam Rivera",
+                "featured": true,
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Across dozens of cities, councils are setting tree-planting targets that would have seemed absurd a decade ago.</p><p>The reason is simple: shade lowers street temperatures by several degrees.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "Every tree is a small air conditioner that also cleans the air.",
+                      "attribution": "Sam Rivera"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Critics say maintenance budgets lag behind the planting promises.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:leaves"
+              }
+            },
+            {
+              "key": "world-2",
+              "type": "Article",
+              "title": "Night trains return to the timetable",
+              "slug": "night-trains-return",
+              "seo_description": "Sleeper services reopen routes that closed twenty years ago.",
+              "in_menu": true,
+              "data": {
+                "standfirst": "Sleeper services reopen routes that closed twenty years ago.",
+                "published": "2026-10-30",
+                "author": "Priya Shah",
+                "featured": false,
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Rail operators are bringing back overnight routes between capitals.</p><p>Demand is driven by travellers who want to avoid short flights.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "You go to sleep in one country and wake up in another.",
+                      "attribution": "Priya Shah"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Tickets for the first season sold out within days.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:city"
+              }
+            }
+          ]
+        },
+        {
+          "key": "tech",
+          "type": "Section",
+          "title": "Technology",
+          "slug": "technology",
+          "in_menu": true,
+          "data": {
+            "intro": "Tools, software and the people who build them."
+          },
+          "children": [
+            {
+              "key": "tech-1",
+              "type": "Article",
+              "title": "Small teams, big releases",
+              "slug": "small-teams-big-releases",
+              "seo_description": "How two-person teams are shipping products used by millions.",
+              "in_menu": true,
+              "data": {
+                "standfirst": "How two-person teams are shipping products used by millions.",
+                "published": "2026-11-01",
+                "author": "Lee Chen",
+                "featured": true,
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>A new generation of tools lets very small teams build and run large products.</p><p>The common thread is ruthless focus on a single problem.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "We don't hire to grow; we hire when it hurts.",
+                      "attribution": "Lee Chen"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Not every founder wants a big company, and that is changing the industry.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:circuit"
+              }
+            },
+            {
+              "key": "tech-2",
+              "type": "Article",
+              "title": "The quiet comeback of the personal website",
+              "slug": "personal-website-comeback",
+              "seo_description": "Tired of feeds, people are building small sites of their own again.",
+              "in_menu": true,
+              "data": {
+                "standfirst": "Tired of feeds, people are building small sites of their own again.",
+                "published": "2026-10-25",
+                "author": "Ana Ruiz",
+                "featured": false,
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Personal websites are having a moment as people look for a calmer corner of the internet.</p><p>A simple page with your writing and work is still the best business card.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "Own your words, and the place where people find them.",
+                      "attribution": "Ana Ruiz"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Hosting has never been cheaper, and good tools make it easy.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:studio"
+              }
+            }
+          ]
+        },
+        {
+          "key": "culture",
+          "type": "Section",
+          "title": "Culture",
+          "slug": "culture",
+          "in_menu": true,
+          "data": {
+            "intro": "Books, film, music and ideas."
+          },
+          "children": [
+            {
+              "key": "culture-1",
+              "type": "Article",
+              "title": "The return of the reading club",
+              "slug": "reading-clubs",
+              "seo_description": "Libraries report record sign-ups for monthly book groups.",
+              "in_menu": true,
+              "data": {
+                "standfirst": "Libraries report record sign-ups for monthly book groups.",
+                "published": "2026-10-29",
+                "author": "Jo Becker",
+                "featured": true,
+                "body": [
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Book clubs are filling library rooms again, often with long waiting lists.</p><p>Members say the conversation matters more than the book.</p>"
+                    }
+                  },
+                  {
+                    "type": "quote",
+                    "value": {
+                      "text": "Reading alone is a pleasure; reading together is a community.",
+                      "attribution": "Jo Becker"
+                    }
+                  },
+                  {
+                    "type": "rich_text",
+                    "value": {
+                      "body": "<p>Many groups now meet both in person and online.</p>"
+                    }
+                  }
+                ],
+                "cover": "@media:books"
+              }
+            }
+          ]
+        },
+        {
+          "key": "about",
+          "type": "Page",
+          "title": "About",
+          "slug": "about",
+          "in_menu": true,
+          "data": {
+            "intro": "A little about our newsroom.",
+            "body": [
+              {
+                "type": "hero",
+                "value": {
+                  "heading": "Independent news, every day",
+                  "text": "A small newsroom covering the stories that shape our world, our technology and our culture.",
+                  "height": "medium",
+                  "image": "@media:city"
+                }
+              },
+              {
+                "type": "rich_text",
+                "value": {
+                  "body": "<p>This is a sample page. Edit it in the CMS admin under <strong>Pages</strong>: change the text, add images, quotes or a call to action from the <em>Content</em> field.</p>"
+                }
+              },
+              {
+                "type": "quote",
+                "value": {
+                  "text": "Simple things should be simple, complex things should be possible.",
+                  "attribution": "Alan Kay"
+                }
+              },
+              {
+                "type": "rich_text",
+                "value": {
+                  "body": "<h2>What this site is for</h2><p>Replace this text with your own story. Every page here is yours to rewrite or delete.</p>"
+                }
+              },
+              {
+                "type": "media_text",
+                "value": {
+                  "image_side": "left",
+                  "heading": "Who we are",
+                  "text": "A team of editors and reporters who check every fact before it goes out.\n\n*Change this text and the picture in the admin.*",
+                  "image": "@media:paper",
+                  "image_alt": "Two sheets of ruled paper and a pencil on a desk"
+                }
+              },
+              {
+                "type": "media_text",
+                "value": {
+                  "image_side": "right",
+                  "heading": "How we report",
+                  "text": "We name our sources, correct our mistakes in the open and keep opinion clearly labelled.",
+                  "button_label": "Get in touch",
+                  "url": "/contact",
+                  "image": "@media:books",
+                  "image_alt": "Three shelves of books in muted colours"
+                }
+              },
+              {
+                "type": "cards",
+                "value": {
+                  "heading": "Our sections",
+                  "columns": "3",
+                  "cards": [
+                    {
+                      "type": "card",
+                      "id": "about-card-0",
+                      "value": {
+                        "title": "World",
+                        "text": "Reporting from around the globe.",
+                        "url": "/world",
+                        "image": "@media:city"
+                      }
+                    },
+                    {
+                      "type": "card",
+                      "id": "about-card-1",
+                      "value": {
+                        "title": "Technology",
+                        "text": "How tools change the way we live.",
+                        "url": "/technology",
+                        "image": "@media:circuit"
+                      }
+                    },
+                    {
+                      "type": "card",
+                      "id": "about-card-2",
+                      "value": {
+                        "title": "Culture",
+                        "text": "Books, music, film and ideas.",
+                        "url": "/culture",
+                        "image": "@media:sound"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "gallery",
+                "value": {
+                  "columns": "3",
+                  "images": [
+                    {
+                      "type": "gallery_image",
+                      "id": "about-gallery-0",
+                      "value": {
+                        "image": "@media:city",
+                        "caption": "In the city",
+                        "alt": "A city skyline at dusk with lit windows"
+                      }
+                    },
+                    {
+                      "type": "gallery_image",
+                      "id": "about-gallery-1",
+                      "value": {
+                        "image": "@media:sound",
+                        "caption": "On stage",
+                        "alt": "Pink rings spreading out across a dark purple background"
+                      }
+                    },
+                    {
+                      "type": "gallery_image",
+                      "id": "about-gallery-2",
+                      "value": {
+                        "image": "@media:books",
+                        "caption": "In print",
+                        "alt": "Three shelves of books in muted colours"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "type": "jumbo",
+                "value": {
+                  "heading": "Have a story we should cover?",
+                  "text": "Tips, corrections and ideas are always welcome.",
+                  "button_label": "Contact the newsroom",
+                  "url": "/contact",
+                  "style": "accent"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "key": "contact",
+          "type": "Page",
+          "title": "Contact",
+          "slug": "contact",
+          "in_menu": true,
+          "data": {
+            "intro": "Questions, ideas or a project in mind? Get in touch.",
+            "body": [
+              {
+                "type": "rich_text",
+                "value": {
+                  "body": "<p>Write to <a href=\"mailto:hello@example.com\">hello@example.com</a> and we'll reply within two working days.</p>"
+                }
+              },
+              {
+                "type": "cta",
+                "value": {
+                  "heading": "Prefer a call?",
+                  "text": "Book a short introduction call and we'll take it from there.",
+                  "button_label": "Book a call",
+                  "url": "mailto:hello@example.com"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "menus": [
+    {
+      "slug": "header",
+      "name": "Header",
+      "items": [
+        {
+          "page": "world"
+        },
+        {
+          "page": "tech"
+        },
+        {
+          "page": "culture"
+        },
+        {
+          "page": "about"
+        }
+      ]
+    },
+    {
+      "slug": "footer",
+      "name": "Footer",
+      "items": [
+        {
+          "label": "Sections",
+          "children": [
+            {
+              "page": "world"
+            },
+            {
+              "page": "tech"
+            },
+            {
+              "page": "culture"
+            }
+          ]
+        },
+        {
+          "label": "About",
+          "children": [
+            {
+              "page": "about"
+            },
+            {
+              "page": "contact"
+            }
+          ]
+        },
+        {
+          "label": "Elsewhere",
+          "children": [
+            {
+              "label": "GitHub",
+              "url": "https://github.com/ujeenet/rustango-cms"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "error_pages": [
+    {
+      "status": 404,
+      "title": "Story not found",
+      "slug": "page-not-found",
+      "body": [
+        {
+          "type": "paragraph",
+          "value": {
+            "body": "This story isn't here. It may have been moved or taken down, or the link may be mistyped.\n\nCatch up on the latest from the front page."
+          }
+        }
+      ]
+    },
+    {
+      "status": 503,
+      "title": "Stop the presses",
+      "slug": "maintenance",
+      "body": [
+        {
+          "type": "paragraph",
+          "value": {
+            "body": "We're updating the site and will be back with the news shortly."
+          }
+        }
+      ]
+    }
+  ]
+}

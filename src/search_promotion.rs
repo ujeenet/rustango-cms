@@ -145,7 +145,7 @@ pub async fn log_query(
         .await?;
     if let Some(mut row) = existing.into_iter().next() {
         row.hits += 1;
-        row.save_pool(pool).await?;
+        row.save(pool).await?;
         return Ok(row);
     }
     let mut row = SearchQuery {
@@ -156,7 +156,7 @@ pub async fn log_query(
         first_seen_at: Auto::Unset,
         last_seen_at: Auto::Unset,
     };
-    row.insert_pool(pool).await?;
+    row.insert(pool).await?;
     Ok(row)
 }
 

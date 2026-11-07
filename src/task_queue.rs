@@ -148,6 +148,22 @@ pub fn set_default_invalidator(invalidator: Arc<dyn PageCacheInvalidator>) {
     let _ = DEFAULT_INVALIDATOR.set(invalidator);
 }
 
+/// The mailer and `From:` address paths with no admin state use — the
+/// schedule sweep's publish emails (#945). Set by
+/// [`crate::admin::router_with_mailer`]; first call wins.
+static DEFAULT_MAILER: OnceLock<(Arc<dyn rustango::email::Mailer>, String)> = OnceLock::new();
+
+/// The process-wide mailer and its `From:` address, if one is set.
+#[must_use]
+pub fn default_mailer() -> Option<(Arc<dyn rustango::email::Mailer>, String)> {
+    DEFAULT_MAILER.get().cloned()
+}
+
+/// Set the process-wide mailer. The first call wins.
+pub fn set_default_mailer(mailer: Arc<dyn rustango::email::Mailer>, from: impl Into<String>) {
+    let _ = DEFAULT_MAILER.set((mailer, from.into()));
+}
+
 fn pool_registry() -> &'static RwLock<HashMap<String, rustango::sql::Pool>> {
     static REG: OnceLock<RwLock<HashMap<String, rustango::sql::Pool>>> = OnceLock::new();
     REG.get_or_init(|| RwLock::new(HashMap::new()))
@@ -190,17 +206,25 @@ pub(crate) async fn resolve_pool(tenant_slug: &str) -> Option<rustango::sql::Poo
     Some(pool)
 }
 
+async fn registry_org(
+    registry: &rustango::sql::Pool,
+    tenant_slug: &str,
+) -> Option<rustango::tenancy::Org> {
+    use rustango::core::Column as _;
+    use rustango::tenancy::Org;
+    Org::objects()
+        .where_(Org::slug.eq(tenant_slug.to_owned()))
+        .first(registry)
+        .await
+        .ok()?
+}
+
 async fn scoped_pool_for(
     registry: &rustango::sql::Pool,
     tenant_slug: &str,
 ) -> Option<rustango::sql::Pool> {
-    use rustango::core::Column as _;
-    use rustango::tenancy::{Org, TenantPools};
-    let org = Org::objects()
-        .where_(Org::slug.eq(tenant_slug.to_owned()))
-        .first(registry)
-        .await
-        .ok()??;
+    use rustango::tenancy::TenantPools;
+    let org = registry_org(registry, tenant_slug).await?;
     match registry {
         #[cfg(feature = "postgres")]
         rustango::sql::Pool::Postgres(pg) => {
@@ -226,6 +250,10 @@ async fn scoped_pool_for(
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CachePurgeJob {
     pub tenant_slug: String,
+    /// The tenant's org id, which the page cache keys on. Jobs queued
+    /// before 0.4.0 lack it and purge nothing; their TTL still runs out.
+    #[serde(default)]
+    pub org_id: i64,
     pub urls: Vec<String>,
 }
 
@@ -243,34 +271,34 @@ impl Job for CachePurgeJob {
         // #428 — one batch call so a bulk-purge backend (Cloudflare
         // `files`, Azure `contentPaths`) collapses the save into a
         // single round-trip; the default impl still loops per-URL.
-        invalidator
-            .invalidate_urls(&self.tenant_slug, &self.urls)
-            .await;
+        let tenant = rustango::tenancy::TenantSlug::new(self.org_id, self.tenant_slug.clone());
+        invalidator.invalidate_urls(&tenant, &self.urls).await;
         Ok(())
     }
 }
 
-/// Purge `urls` for `tenant_slug`. Dispatches a retriable
+/// Purge `urls` for `tenant`. Dispatches a retriable
 /// [`CachePurgeJob`] when a sink is installed; otherwise purges
 /// **inline** against the in-hand `invalidator` (today's behavior).
 /// Drive this from the detached `on_commit` task in
 /// [`crate::cache_invalidate::invalidate_urls_on_commit`].
 pub async fn purge_urls(
     invalidator: Arc<dyn PageCacheInvalidator>,
-    tenant_slug: String,
+    tenant: rustango::tenancy::TenantSlug,
     urls: Vec<String>,
 ) {
     if urls.is_empty() {
         return;
     }
     let Some(sink) = sink() else {
-        purge_inline(invalidator.as_ref(), &tenant_slug, &urls).await;
+        purge_inline(invalidator.as_ref(), &tenant, &urls).await;
         return;
     };
     // Make the invalidator resolvable inside the deserialized job.
-    register_invalidator(tenant_slug.clone(), invalidator.clone());
+    register_invalidator(tenant.slug.clone(), invalidator.clone());
     let job = CachePurgeJob {
-        tenant_slug: tenant_slug.clone(),
+        tenant_slug: tenant.slug.clone(),
+        org_id: tenant.org_id,
         urls: urls.clone(),
     };
     if let Err(e) = sink.dispatch_cache_purge(job).await {
@@ -279,13 +307,17 @@ pub async fn purge_urls(
             error = %e,
             "cache_purge dispatch failed; purging inline so stale entries aren't stranded",
         );
-        purge_inline(invalidator.as_ref(), &tenant_slug, &urls).await;
+        purge_inline(invalidator.as_ref(), &tenant, &urls).await;
     }
 }
 
-async fn purge_inline(invalidator: &dyn PageCacheInvalidator, tenant_slug: &str, urls: &[String]) {
+async fn purge_inline(
+    invalidator: &dyn PageCacheInvalidator,
+    tenant: &rustango::tenancy::TenantSlug,
+    urls: &[String],
+) {
     // #428 — batch fan-out (see `CachePurgeJob::run`).
-    invalidator.invalidate_urls(tenant_slug, urls).await;
+    invalidator.invalidate_urls(tenant, urls).await;
 }
 
 // ---- reference-index job -----------------------------------------
@@ -541,7 +573,7 @@ mod tests {
 
     #[async_trait]
     impl PageCacheInvalidator for Counting {
-        async fn invalidate_url(&self, _tenant_slug: &str, _url_path: &str) {
+        async fn invalidate_url(&self, _tenant: &rustango::tenancy::TenantSlug, _url_path: &str) {
             self.0.fetch_add(1, Ordering::SeqCst);
         }
     }
@@ -550,11 +582,13 @@ mod tests {
     fn job_round_trips_and_has_stable_name() {
         let job = CachePurgeJob {
             tenant_slug: "acme".to_owned(),
+            org_id: 1,
             urls: vec!["/a".to_owned(), "/b".to_owned()],
         };
         let json = serde_json::to_string(&job).unwrap();
         let back: CachePurgeJob = serde_json::from_str(&json).unwrap();
         assert_eq!(back.tenant_slug, "acme");
+        assert_eq!(back.org_id, 1);
         assert_eq!(back.urls, vec!["/a", "/b"]);
         assert_eq!(CachePurgeJob::NAME, "rcms.cache_purge");
     }
@@ -565,6 +599,7 @@ mod tests {
         register_invalidator("acme-run", Arc::new(Counting(n.clone())));
         let job = CachePurgeJob {
             tenant_slug: "acme-run".to_owned(),
+            org_id: 1,
             urls: vec!["/x".to_owned(), "/y".to_owned(), "/z".to_owned()],
         };
         assert!(job.run().await.is_ok());
@@ -575,6 +610,7 @@ mod tests {
     async fn run_is_fatal_without_registration() {
         let job = CachePurgeJob {
             tenant_slug: "never-registered-tenant".to_owned(),
+            org_id: 1,
             urls: vec!["/x".to_owned()],
         };
         match job.run().await {
@@ -591,14 +627,14 @@ mod tests {
         let inv: Arc<dyn PageCacheInvalidator> = Arc::new(Counting(n.clone()));
         purge_urls(
             inv,
-            "acme-inline".to_owned(),
+            rustango::tenancy::TenantSlug::new(1, "acme-inline"),
             vec!["/a".to_owned(), "/b".to_owned()],
         )
         .await;
         assert_eq!(n.load(Ordering::SeqCst), 2);
         // Empty url list is a no-op.
         let inv2: Arc<dyn PageCacheInvalidator> = Arc::new(Counting(n.clone()));
-        purge_urls(inv2, "acme-inline".to_owned(), vec![]).await;
+        purge_urls(inv2, rustango::tenancy::TenantSlug::new(1, "acme-inline"), vec![]).await;
         assert_eq!(n.load(Ordering::SeqCst), 2);
     }
 

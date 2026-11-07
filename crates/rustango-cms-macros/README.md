@@ -3,6 +3,8 @@
 The procedural macros behind [rustango-cms](https://github.com/ujeenet/rustango-cms):
 `#[derive(PageType)]` with its `#[field(...)]` attributes, and the block derive.
 
+⭐ **Like it? Star [Rustango-CMS](https://github.com/ujeenet/rustango-cms) and [Rustango](https://github.com/ujeenet/rustango) on GitHub.** Stars help other Rust developers find both projects.
+
 You don't add this crate yourself — rustango-cms re-exports the derives:
 
 ```rust

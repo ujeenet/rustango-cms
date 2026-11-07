@@ -4,5 +4,7 @@
 # example's own migration, emitted by `makemigrations`, is source.
 migrations/*
 !migrations/0013_create_shop_content_page_and_shop_home_page_and_shop_shop_page_etc.json
+!migrations/0018_merge.json
+!migrations/0019_create_shop_stockist.json
 system/
 var/

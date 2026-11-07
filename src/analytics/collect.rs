@@ -76,7 +76,7 @@ pub(crate) async fn handle_collect(
         } else {
             "pageview".to_owned()
         },
-        path: sanitize_path(&b.p),
+        path: sanitize_path(crate::path_prefix::site_path(&headers, &b.p)),
         referrer_host: host_of(&b.referrer),
         country: geo_country(&headers),
         device: device.to_owned(),
@@ -91,7 +91,7 @@ pub(crate) async fn handle_collect(
         created_at: chrono::Utc::now(),
     };
     // Best-effort; analytics must never surface an error to the client.
-    entry.insert_pool(pool).await.log_warn("analytics event not recorded");
+    entry.insert(pool).await.log_warn("analytics event not recorded");
     no_content()
 }
 

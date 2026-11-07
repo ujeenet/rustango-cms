@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "Revision storage" | translate(locale=LANG) }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ "Revision storage" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Revision storage" | translate(locale=LANG) }}{% endblock %}
 
 {% block description %}
@@ -59,12 +59,13 @@
                         </a>
                     </td>
                     <td><code class="rcms-text-2xs">{{ r.url_path }}</code></td>
-                    <td><span class="rcms-tag {{ r.status }}">{{ r.status }}</span></td>
+                    <td><span class="rcms-tag {{ r.status }}">{{ r.status | capitalize | translate(locale=LANG) }}</span></td>
                     <td class="rcms-actions">{{ r.revision_count }}</td>
                 </tr>
             {% endfor %}
         </tbody>
     </table>
     </div>
+    {% include "rcms_admin/_pagination.html" %}
 {% endif %}
 {% endblock %}

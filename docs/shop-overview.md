@@ -76,6 +76,7 @@ Do the chapters in this order. Each one uses what you made in the chapter before
 |---|---|
 | [Show menus and settings in templates](shop-dev-templates.md) | The template helpers `menu()`, `auto_menu()` and `site_setting()`, as the shop uses them. |
 | [The helper traits](shop-dev-helper-traits.md) | How the shop's code-made parts work: `#[derive(PageType)]`, `PageTypeOverrides`, `LibraryTypeHandler`, `TaxonomyHandler` and `register_site_setting!`. |
+| [Your own data in the admin](shop-dev-admin-screens.md) | A table of stockists with an admin editor from `#[derive(CmsAdmin)]`, an import screen of your own, and extra URLs under the shop page with a real 404. |
 | [A headless storefront](shop-dev-headless.md) | Show the shop on a second website in plain JavaScript: pages, photos, blocks and the menu from the JSON API. |
 | [Preview drafts on your own frontend](shop-dev-headless-preview.md) | Let editors see a draft in that website, inside the editor and in a new tab, with a preview token. |
 

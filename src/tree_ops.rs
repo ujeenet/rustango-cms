@@ -106,7 +106,10 @@ where
     let stash: std::sync::Arc<std::sync::Mutex<Option<TreeError>>> =
         std::sync::Arc::new(std::sync::Mutex::new(None));
     let stash_cb = std::sync::Arc::clone(&stash);
-    let out = rustango::sql::atomic(pool, move |tx| {
+    // Immediate on SQLite (#915): a move reads sort orders then writes, so
+    // a deferred block let two concurrent moves read the same order or
+    // fail with SQLITE_BUSY. Same as `atomic` on the other backends.
+    let out = rustango::sql::atomic_immediate(pool, move |tx| {
         Box::pin(async move {
             let mut guard = tx.lock().await?;
             match f(&mut guard).await {
@@ -329,7 +332,7 @@ pub async fn rebuild_all_url_paths(pool: &Pool) -> Result<usize, TreeError> {
         };
         if p.url_path != new_url {
             p.url_path = new_url.clone();
-            p.save_pool(pool).await?;
+            p.save(pool).await?;
             updated += 1;
         }
         by_id.insert(id, new_url);

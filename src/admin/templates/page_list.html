@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ "Pages — CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ "Pages" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}
     {% if parent_title %}
         {{ "Pages in" | translate(locale=LANG) }} <span class="rcms-text-primary">{{ parent_title }}</span>
@@ -35,7 +35,13 @@
         padding: 10px 14px;
         border-bottom: 1px solid var(--md-sys-color-outline-variant);
         transition: background 0.1s;
+        /* Wrap rather than squeeze: the title column keeps a readable
+           minimum width, so a tight row drops its actions to a second
+           line instead of shrinking the title under the slug. */
+        flex-wrap: wrap;
+        row-gap: 8px;
     }
+    .rcms-page-row > .rcms-flex-1 { flex: 1 1 10rem; min-width: 10rem; }
     .rcms-page-row:last-child {
         border-bottom: none;
         border-bottom-left-radius: var(--md-sys-radius-lg);
@@ -58,11 +64,15 @@
        the width cap so the dropdown fits the kebab panel. */
     .rcms-kebab-move-label select { max-width: 180px; }
     .rcms-kebab-move-label .rcms-btn { padding: 2px 10px; font-size: 12px; }
-    .rcms-page-row .rcms-title { flex: 1; font-weight: 500; color: var(--fg); text-decoration: none; min-width: 0; }
+    .rcms-page-row .rcms-title { flex: 1; font-weight: 500; color: var(--fg); text-decoration: none; min-width: 0; overflow-wrap: anywhere; }
     .rcms-page-row .rcms-title:hover { color: var(--md-sys-color-primary); }
-    .rcms-page-row .rcms-slug { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
+    .rcms-page-row .rcms-slug {
+        color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace;
+        min-width: 0; max-width: 16rem;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
     .rcms-page-row .rcms-tag-cell { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
-    .rcms-page-row .rcms-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+    .rcms-page-row .rcms-actions { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: flex-end; min-width: 0; margin-left: auto; }
     .rcms-page-row form { display: inline; margin: 0; }
     /* The list toolbar holds the "select all" checkbox + a header
        label above the row stack. Was `.reorder-status` (drag-feedback
@@ -167,15 +177,10 @@
        Wrapped lines indent ~30 px so they align under the title, past
        the checkbox column. */
     @media (max-width: 640px) {
-        .rcms-page-row {
-            flex-wrap: wrap;
-            align-items: center;
-            row-gap: 8px;
-            padding: 12px 14px;
-        }
+        .rcms-page-row { padding: 12px 14px; }
         /* Line 1: title grows to fill the row after the checkbox, which
            pushes the slug + badges onto their own line. */
-        .rcms-page-row > .rcms-flex-1 { flex: 1 1 auto; }
+        .rcms-page-row > .rcms-flex-1 { flex: 1 1 auto; min-width: 0; }
         /* Line 2: type/status badges + child count, indented to align
            under the title (past the checkbox column). The slug rides the
            tail of line 1 next to the title. */
@@ -396,7 +401,7 @@
                     <span class="rcms-slug">{% if row.slug == "" %}{{ "(root)" | translate(locale=LANG) }}{% else %}/{{ row.slug }}{% endif %}</span>
                     <span class="rcms-tag-cell">
                         <span class="rcms-tag">{{ type_map[row.page_type_id] | default(value="?") }}</span>
-                        <span class="rcms-tag {{ row.status }}">{{ row.status }}</span>
+                        <span class="rcms-tag {{ row.status }}">{{ row.status | capitalize | translate(locale=LANG) }}</span>
                         {% if row.status == "scheduled" and row.go_live_at %}
                             <span class="rcms-hint rcms-text-2xs">
                                 <span class="material-symbols-rounded sm">schedule</span>

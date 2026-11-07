@@ -56,7 +56,7 @@ async fn page_type(pool: &Pool) -> i64 {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(pool).await.expect("page type");
+    pt.save(pool).await.expect("page type");
     pt.id.get().copied().expect("type id")
 }
 
@@ -94,7 +94,7 @@ async fn page(pool: &Pool, type_id: i64, slug: &str, parent: Option<i64>) -> i64
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    p.save_pool(pool).await.expect("page");
+    p.save(pool).await.expect("page");
     p.id.get().copied().expect("page id")
 }
 
@@ -106,7 +106,7 @@ async fn collection(pool: &Pool, name: &str, parent: Option<i64>) -> i64 {
         sort_order: 0,
         created_at: Auto::Unset,
     };
-    c.save_pool(pool).await.expect("collection");
+    c.save(pool).await.expect("collection");
     c.id.get().copied().expect("collection id")
 }
 
@@ -123,17 +123,17 @@ async fn user(pool: &Pool, name: &str, superuser: bool, active: bool) -> i64 {
         password_changed_at: None,
         sessions_revoked_at: None,
     };
-    u.save_pool(pool).await.expect("user");
+    u.save(pool).await.expect("user");
     u.id.get().copied().expect("user id")
 }
 
 /// Put `uid` in a fresh role and return the role id.
 async fn role_for(pool: &Pool, uid: i64, name: &str) -> i64 {
     let mut role = Role { id: Auto::Unset, name: name.to_owned(), description: String::new(), data: json!({}) };
-    role.save_pool(pool).await.expect("role");
+    role.save(pool).await.expect("role");
     let rid = role.id.get().copied().expect("role id");
     let mut ur = UserRole { id: Auto::Unset, user_id: uid, role_id: rid };
-    ur.save_pool(pool).await.expect("membership");
+    ur.save(pool).await.expect("membership");
     rid
 }
 
@@ -155,7 +155,7 @@ async fn a_page_grant_flows_to_descendants_only() {
         permission: Action::Edit.as_str().to_owned(),
         created_at: Auto::Unset,
     };
-    grant.save_pool(&pool).await.expect("grant");
+    grant.save(&pool).await.expect("grant");
 
     for (pid, what) in [(parent, "the granted page"), (child, "a child"), (grandchild, "a grandchild")] {
         assert!(user_can(&pool, editor, pid, Action::Edit).await.expect("q"), "{what}");
@@ -190,7 +190,7 @@ async fn a_collection_grant_flows_to_child_collections_only() {
         permission: Action::Add.as_str().to_owned(),
         created_at: Auto::Unset,
     };
-    grant.save_pool(&pool).await.expect("grant");
+    grant.save(&pool).await.expect("grant");
 
     assert!(user_can_in_collection(&pool, uploader, inner, Action::Add).await.expect("q"));
     assert!(!user_can_in_collection(&pool, uploader, other, Action::Add).await.expect("q"));
@@ -204,7 +204,7 @@ async fn codenames_are_the_union_of_the_users_roles() {
     for (role, code) in [("a", "cms_page.view"), ("b", "cms_media.add")] {
         let rid = role_for(&pool, uid, role).await;
         let mut rp = RolePermission { id: Auto::Unset, role_id: rid, codename: code.to_owned() };
-        rp.save_pool(&pool).await.expect("role perm");
+        rp.save(&pool).await.expect("role perm");
     }
     let codes = user_codenames(&pool, uid).await.expect("codenames");
     assert!(codes.contains("cms_page.view") && codes.contains("cms_media.add"));
@@ -216,6 +216,7 @@ async fn call(pool: &Pool, user_id: Option<i64>, tool: &str, args: Value) -> Res
         pool: pool.clone(),
         agent: McpAgent {
             agent_id: 1,
+            org_id: 1,
             tenant: "t".to_owned(),
             skills: Vec::new(),
             tools: vec![tool.to_owned()],

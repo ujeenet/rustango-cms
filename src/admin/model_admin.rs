@@ -10,7 +10,7 @@
 //! as JSON" thunk, and the admin serves a chrome'd index at
 //! `/cms-admin/model/<slug>` driven by the model's `list_display`.
 //!
-//! It ships the registry + the read-only index. Create / edit /
+//! It ships the registry + the read-only, paged index. Create / edit /
 //! delete (generic forms from `FieldSchema`) + filter / search / order
 //! are not implemented yet.
 
@@ -20,11 +20,14 @@ use std::pin::Pin;
 use rustango::core::ModelSchema;
 use rustango::sql::Pool;
 
-/// Type-erased "fetch every row of the model as JSON" — the index
-/// data source. Built by [`register_model_admin!`](crate::register_model_admin!) from the concrete
-/// model's `objects().fetch()` (a derive-generated inherent
-/// method, so it can't be reached generically — hence the thunk).
-pub type ListRowsFn = fn(Pool) -> Pin<Box<dyn Future<Output = Vec<serde_json::Value>> + Send>>;
+/// Type-erased "fetch one page of the model's rows as JSON" — the index
+/// data source. Called with `(pool, limit, offset)`; returns that window
+/// in primary-key order plus the total row count. Built by
+/// [`register_model_admin!`](crate::register_model_admin!) from the
+/// concrete model's `objects()` (a derive-generated inherent method, so
+/// it can't be reached generically — hence the thunk).
+pub type ListRowsFn =
+    fn(Pool, i64, i64) -> Pin<Box<dyn Future<Output = (Vec<serde_json::Value>, i64)> + Send>>;
 
 /// One registered model admin.
 pub struct ModelAdmin {
@@ -34,7 +37,7 @@ pub struct ModelAdmin {
     pub label: &'static str,
     /// The model's schema — drives the index columns (`list_display`).
     pub schema: &'static ModelSchema,
-    /// Fetch all rows as JSON for the index.
+    /// Fetch one page of rows as JSON for the index, with the total.
     pub list_rows: ListRowsFn,
 }
 
@@ -114,14 +117,28 @@ macro_rules! register_model_admin {
                 slug: $slug,
                 label: $label,
                 schema: <$ty as $crate::__private::Model>::SCHEMA,
-                list_rows: |pool: $crate::__private::Pool| {
+                list_rows: |pool: $crate::__private::Pool, limit: i64, offset: i64| {
                     ::std::boxed::Box::pin(async move {
-                        use $crate::__private::FetcherPool as _;
-                        let rows: ::std::vec::Vec<$ty> =
-                            <$ty>::objects().fetch(&pool).await.unwrap_or_default();
-                        rows.iter()
+                        use $crate::__private::{CounterPool as _, FetcherPool as _};
+                        let total = <$ty>::objects().count(&pool).await.unwrap_or_default();
+                        let mut qs = <$ty>::objects();
+                        // A stable order, so paging neither repeats nor skips rows.
+                        if let ::std::option::Option::Some(pk) =
+                            <$ty as $crate::__private::Model>::SCHEMA.primary_key()
+                        {
+                            qs = qs.order_by(&[(pk.name, false)]);
+                        }
+                        let rows: ::std::vec::Vec<$ty> = qs
+                            .limit(limit)
+                            .offset(offset)
+                            .fetch(&pool)
+                            .await
+                            .unwrap_or_default();
+                        let rows = rows
+                            .iter()
                             .filter_map(|r| $crate::__private::serde_json::to_value(r).ok())
-                            .collect::<::std::vec::Vec<$crate::__private::serde_json::Value>>()
+                            .collect::<::std::vec::Vec<$crate::__private::serde_json::Value>>();
+                        (rows, total)
                     })
                 },
             }
@@ -162,5 +179,54 @@ mod tests {
         assert_eq!(row_cell(&row, "active"), "true"); // bool
         assert_eq!(row_cell(&row, "x"), ""); // null → empty
         assert_eq!(row_cell(&row, "missing"), ""); // absent → empty
+    }
+}
+
+#[cfg(all(test, feature = "sqlite"))]
+mod paging_tests {
+    use super::find;
+    use rustango::core::Model as _;
+    use rustango::sql::{Auto, Pool};
+
+    // Registered in `tests` above.
+    const SLUG: &str = "__test_locale";
+
+    #[tokio::test]
+    async fn list_rows_returns_one_window_in_key_order_and_the_total() {
+        let pool = Pool::connect("sqlite::memory:").await.expect("mem pool");
+        let ddl = rustango::migrate::ddl::create_table_if_not_exists_sql_with_dialect(
+            pool.dialect(),
+            crate::locale::Locale::SCHEMA,
+        );
+        for stmt in ddl.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+            rustango::sql::raw_execute_pool(&pool, stmt, Vec::new())
+                .await
+                .expect("ddl");
+        }
+        for (i, code) in ["en", "fr", "de", "uk", "pl"].into_iter().enumerate() {
+            let mut l = crate::locale::Locale {
+                id: Auto::Unset,
+                code: code.to_owned(),
+                name: code.to_owned(),
+                is_default: i == 0,
+                active: true,
+                // Reverse of insertion, so key order is not sort order.
+                sort_order: 10 - i as i32,
+                created_at: Auto::Unset,
+            };
+            l.save(&pool).await.expect("locale");
+        }
+        let ma = find(SLUG).expect("registered");
+        let codes = |rows: &[serde_json::Value]| -> Vec<String> {
+            rows.iter().map(|r| r["code"].as_str().unwrap_or_default().to_owned()).collect()
+        };
+        let (first, total) = (ma.list_rows)(pool.clone(), 2, 0).await;
+        assert_eq!(total, 5);
+        assert_eq!(codes(&first), ["en", "fr"]);
+        let (last, _) = (ma.list_rows)(pool.clone(), 2, 4).await;
+        assert_eq!(codes(&last), ["pl"]);
+        let (past, total) = (ma.list_rows)(pool, 2, 10).await;
+        assert!(past.is_empty());
+        assert_eq!(total, 5);
     }
 }

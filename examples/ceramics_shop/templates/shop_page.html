@@ -3,6 +3,8 @@
 <header class="mb-10 max-w-2xl">
     <h1 class="font-display text-5xl text-ink">{{ page.title }}</h1>
     {% if extension.intro %}<div class="prose-shop mt-4 text-lg">{{ extension.intro | markdown | safe }}</div>{% endif %}
+    {#- `page.stockist_count` comes from ShopPage::public_context. -#}
+    {% if page.stockist_count %}<p class="mt-4 text-lg"><a href="{{ page | page_href }}/stockists" class="hover:text-[color:var(--accent)]">Find us in {{ page.stockist_count }} {{ page.stockist_count | pluralize(singular="shop", plural="shops") }}</a></p>{% endif %}
 </header>
 {% set shown = children | visible %}
 {% if shown | length == 0 %}

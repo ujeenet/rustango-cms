@@ -36,7 +36,7 @@ async fn file_pool(tag: &str) -> Pool {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(&pool).await.expect("page type");
+    pt.save(&pool).await.expect("page type");
     pool
 }
 
@@ -60,7 +60,7 @@ async fn media(pool: &Pool, title: &str) -> i64 {
         focal_point_y: None,
         uploaded_at: Auto::Unset,
     };
-    m.save_pool(pool).await.expect("media");
+    m.save(pool).await.expect("media");
     m.id.get().copied().expect("id")
 }
 

@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{% if edit_id %}{{ "Page type settings" | translate(locale=LANG) }}{% else %}{{ "New page type" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% block title %}{% if edit_id %}{{ "Page type settings" | translate(locale=LANG) }}{% else %}{{ "New page type" | translate(locale=LANG) }}{% endif %} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{% if edit_id %}{{ "Page type settings" | translate(locale=LANG) }}{% else %}{{ "New page type" | translate(locale=LANG) }}{% endif %}{% endblock %}
 
 {% block breadcrumbs %}

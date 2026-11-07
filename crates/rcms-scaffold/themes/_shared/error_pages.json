@@ -1,0 +1,54 @@
+[
+  {
+    "status": 404,
+    "title": "Page not found",
+    "slug": "page-not-found",
+    "body": [
+      {
+        "type": "paragraph",
+        "value": {
+          "body": "The page you were looking for isn't here. It may have moved, or the address may be mistyped.\n\nTry the menu above, or start again from the home page."
+        }
+      }
+    ]
+  },
+  {
+    "status": 403,
+    "title": "Access denied",
+    "slug": "access-denied",
+    "body": [
+      {
+        "type": "paragraph",
+        "value": {
+          "body": "You don't have permission to see this page. If you think you should, sign in or get in touch with us."
+        }
+      }
+    ]
+  },
+  {
+    "status": 500,
+    "title": "Something went wrong",
+    "slug": "server-error",
+    "body": [
+      {
+        "type": "paragraph",
+        "value": {
+          "body": "We hit a problem showing this page. It's on our side, not yours. Please try again in a moment."
+        }
+      }
+    ]
+  },
+  {
+    "status": 503,
+    "title": "Back soon",
+    "slug": "maintenance",
+    "body": [
+      {
+        "type": "paragraph",
+        "value": {
+          "body": "The site is down for a short spell of maintenance. Please try again shortly."
+        }
+      }
+    ]
+  }
+]

@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{% if is_edit %}{{ "Edit component" | translate(locale=LANG) }}: {{ label }}{% else %}{{ "New component" | translate(locale=LANG) }}{% endif %} — CMS Admin{% endblock %}
+{% block title %}{% if is_edit %}{{ "Edit component" | translate(locale=LANG) }}: {{ label }}{% else %}{{ "New component" | translate(locale=LANG) }}{% endif %} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{% if is_edit %}{{ "Edit component" | translate(locale=LANG) }}{% else %}{{ "New component" | translate(locale=LANG) }}{% endif %}{% endblock %}
 
 {% block topbar_actions %}

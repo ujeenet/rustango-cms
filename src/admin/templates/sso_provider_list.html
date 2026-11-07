@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_list_base.html" %}
-{% block title %}{{ "SSO Providers" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block title %}{{ "SSO Providers" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "SSO Providers" | translate(locale=LANG) }}{% endblock %}
 
 {% block topbar_actions %}
@@ -49,7 +49,7 @@
         </tbody>
     </table>
     </div>
-    <p class="rcms-text-sm rcms-text-muted-2" style="margin-top:1rem">
+    <p class="rcms-hint rcms-mt-4">
         {{ "Register each provider’s callback URL as <code>{scheme}://{host}/login/sso/{slug}/callback</code>. SSO links to an existing user by verified email — set the user’s email to match." | translate(locale=LANG) | safe }}
     </p>
 {% endif %}

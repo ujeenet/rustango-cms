@@ -118,7 +118,7 @@ pub async fn set_enabled(
         .await?;
     if let Some(mut row) = rows.into_iter().next() {
         row.enabled = enabled;
-        row.save_pool(pool).await?;
+        row.save(pool).await?;
     } else {
         let mut row = NotificationPref {
             id: Auto::Unset,
@@ -126,7 +126,7 @@ pub async fn set_enabled(
             kind: kind.to_owned(),
             enabled,
         };
-        row.insert_pool(pool).await?;
+        row.insert(pool).await?;
     }
     Ok(())
 }

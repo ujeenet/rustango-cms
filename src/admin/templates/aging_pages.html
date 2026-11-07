@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ "Aging pages" | translate(locale=LANG) }} — {{ "CMS Admin" | translate(locale=LANG) }}{% endblock %}
+{% block title %}{{ "Aging pages" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}{{ "Aging pages" | translate(locale=LANG) }}{% endblock %}
 
 {% block topbar_actions %}
@@ -65,7 +65,7 @@
                 <tr>
                     <td><strong>{{ r.title }}</strong></td>
                     <td><code class="rcms-text-2xs">{{ r.url_path }}</code></td>
-                    <td><span class="rcms-tag {{ r.status }}">{{ r.status }}</span></td>
+                    <td><span class="rcms-tag {{ r.status }}">{{ r.status | capitalize | translate(locale=LANG) }}</span></td>
                     <td><strong>{{ r.days_stale }}</strong></td>
                     <td>
                         {% if r.updated_at %}

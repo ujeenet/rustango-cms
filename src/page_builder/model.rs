@@ -204,7 +204,7 @@ pub async fn save_draft(
 ) -> Result<PageTypeSchema, rustango::sql::ExecError> {
     if let Some(mut draft) = draft_for(pool, page_type_id).await? {
         draft.document = document;
-        draft.save_pool(pool).await?;
+        draft.save(pool).await?;
         return Ok(draft);
     }
     let next = published_for(pool, page_type_id)
@@ -220,7 +220,7 @@ pub async fn save_draft(
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    row.insert_pool(pool).await?;
+    row.insert(pool).await?;
     Ok(row)
 }
 
@@ -331,7 +331,7 @@ pub async fn create_component(
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    row.insert_pool(pool).await?;
+    row.insert(pool).await?;
     Ok(row)
 }
 
@@ -357,7 +357,7 @@ pub async fn update_component(
     row.description = description.to_owned();
     row.document = document;
     row.version += 1;
-    row.save_pool(pool).await?;
+    row.save(pool).await?;
     Ok(Some(row))
 }
 
@@ -367,7 +367,7 @@ pub async fn update_component(
 /// Propagates the delete failure.
 pub async fn delete_component(pool: &Pool, id: i64) -> Result<(), rustango::sql::ExecError> {
     if let Some(row) = component_by_id(pool, id).await? {
-        row.delete_pool(pool).await?;
+        row.delete(pool).await?;
     }
     Ok(())
 }
@@ -391,6 +391,33 @@ pub async fn component_references(
         if let Ok(doc) = crate::page_builder::schema::parse(&row.document) {
             if crate::page_builder::schema::references_component(&doc, slug) {
                 out.push((row.page_type_id, row.status));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// How many live page-type schemas reference each of `slugs`, from one
+/// scan of the schemas (what [`component_references`] would count, for
+/// every slug at once).
+///
+/// # Errors
+/// Propagates query failures.
+pub async fn component_reference_counts<'a>(
+    pool: &Pool,
+    slugs: &[&'a str],
+) -> Result<HashMap<&'a str, usize>, rustango::sql::ExecError> {
+    let rows: Vec<PageTypeSchema> = PageTypeSchema::objects().fetch(pool).await?;
+    let mut out: HashMap<&'a str, usize> = HashMap::new();
+    for row in rows {
+        if row.status == STATUS_ARCHIVED {
+            continue;
+        }
+        if let Ok(doc) = crate::page_builder::schema::parse(&row.document) {
+            for slug in slugs {
+                if crate::page_builder::schema::references_component(&doc, slug) {
+                    *out.entry(*slug).or_default() += 1;
+                }
             }
         }
     }
@@ -428,7 +455,7 @@ pub async fn upsert_data(
         row.schema_version = schema_version;
         row.component_versions = component_versions;
         row.data = data;
-        row.save_pool(pool).await?;
+        row.save(pool).await?;
     } else {
         let mut row = PageBuilderData {
             id: Auto::Unset,
@@ -438,7 +465,7 @@ pub async fn upsert_data(
             data,
             updated_at: Auto::Unset,
         };
-        row.insert_pool(pool).await?;
+        row.insert(pool).await?;
     }
     Ok(())
 }
@@ -484,8 +511,39 @@ mod tests {
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         };
-        pt.insert_pool(pool).await.expect("insert page type");
+        pt.insert(pool).await.expect("insert page type");
         pt.id.get().copied().unwrap()
+    }
+
+    #[tokio::test]
+    async fn reference_counts_match_per_slug_lookups() {
+        let pool = mem_pool().await;
+        let a = mk_page_type(&pool, "A").await;
+        let b = mk_page_type(&pool, "B").await;
+        let direct = |slug: &str| serde_json::json!({"nodes": [{"kind": "component", "ref": slug}]});
+        save_draft(&pool, a, direct("cta"), None).await.unwrap();
+        publish(&pool, a).await.unwrap();
+        save_draft(
+            &pool,
+            a,
+            serde_json::json!({"nodes": [{"kind": "flex", "key": "z", "allowed": ["c_cta", "c_hero"]}]}),
+            None,
+        )
+        .await
+        .unwrap();
+        save_draft(&pool, b, direct("hero"), None).await.unwrap();
+        publish(&pool, b).await.unwrap();
+        save_draft(&pool, b, serde_json::json!({"nodes": []}), None).await.unwrap();
+        publish(&pool, b).await.unwrap(); // archives the version naming `hero`
+
+        let slugs = ["cta", "hero", "unused"];
+        let counts = component_reference_counts(&pool, &slugs).await.unwrap();
+        for slug in slugs {
+            let one = component_references(&pool, slug).await.unwrap().len();
+            assert_eq!(counts.get(slug).copied().unwrap_or(0), one, "{slug}");
+        }
+        assert_eq!(counts.get("cta"), Some(&2));
+        assert_eq!(counts.get("hero"), Some(&1));
     }
 
     #[tokio::test]

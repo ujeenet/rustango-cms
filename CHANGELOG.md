@@ -8,7 +8,410 @@ Issue numbers such as `#258` in entries written before the public release
 refer to the project's earlier, private tracker, not to issues in this
 repository.
 
-## Unreleased
+## 0.4.0 — 2026-11-07
+
+Starter themes (a finished-looking site from one command, with no Rust
+models), admin editors for your own models, inline panels that edit
+hundreds of rows one card at a time, and rustango 0.65.
+
+### Added
+
+- `Page::page_status()`, `Page::set_page_status()` and `Page::is_public()`:
+  typed access to a page's status without changing the stored column, so
+  host code stops comparing string literals. `is_public()` counts archived
+  pages, which `status == "published"` misses (#763).
+- Per-row inline panels (`InlinePanelSpec::per_row`), for panels with many
+  rows: the editor tab lists only titles, a card's fields load when it is
+  opened, each card saves with its own Save button, and add, remove and
+  reorder apply at once (the page's Save no longer posts the panel). New
+  hooks on `PageTypeHandler` / `PageTypeOverrides` (forwarded by the
+  derive): `inline_rows`, `inline_row`, `save_inline_row`,
+  `delete_inline_row`, `reorder_inline_rows`; endpoints under
+  `/cms-admin/pages/{id}/inline/{panel}/…`, gated as page edits.
+
+- Inline panels are usable editors: rows render real widgets (selects,
+  switches, media and document choosers, checkbox lists), can sit in their
+  own editor tab (`InlinePanelSpec::in_tab`), can be reordered, and can be
+  locked (`allow(add, delete, order)`). Each row posts its `id`, and a
+  loaded row's `__title` heads its card. `#[derive(PageType)]` forwards
+  `inline_panels`, `load_inline_panel` and `save_inline_panel` to
+  `PageTypeOverrides`.
+
+- `rcms new` ends by linking the Rustango and Rustango-CMS repositories and asks for a star on each.
+
+- `#[derive(CmsAdmin)]`: an admin editor for any model of your own, at
+  `/cms-admin/x/<slug>` — a list with search and pages, add and edit forms
+  built from the same `#[field(widget = …)]` attributes as page types, and
+  delete. It adds a view/add/edit/delete row to the role matrix and checks
+  it on every request. `CmsAdminOverrides` holds the rules: read-only
+  fields, `can_create` / `can_delete`, `validate`, options for a select
+  (foreign keys), extra widgets for many-to-many lists, `after_save`,
+  `before_delete` and computed list columns. `save_record` and
+  `delete_record` run the same steps outside the admin.
+- Custom admin pages can take forms: `AdminPageHandler::post` answers a
+  `POST` to `/cms-admin/x/<slug>` or `/cms-admin/x/<slug>/<action>`, after
+  the login, CSRF and permission checks. `AdminPageCtx` gains the request
+  `uri` and `action`, and `render` (the admin chrome, CSRF token and flash
+  messages), `redirect` (with a flash message), `query`, `query_param`,
+  `has_perm` and `page_url`. `AdminForm` reads the posted form, repeated
+  names included. `permission_actions` picks the matrix columns.
+- `PageTypeHandler::route_outcome`: after `route_context`, a matched route
+  picks its template (`RouteOutcome::Template`) or answers the site's 404
+  page with a real 404 status (`RouteOutcome::NotFound`).
+- A `page` object returned from `public_context` / `route_context` adds its
+  keys to the template's `page` (`page.<key>`) without replacing the page's
+  own.
+- A site block registered with the name of a built-in block replaces it.
+- `published_children_page(pool, page, order, limit, offset)` returns one
+  window of a page's live children with their total, ordered by
+  `ChildOrder::Position`, `NewestFirst` or `OldestFirst`. Return it from
+  `children_query` so an index with hundreds of children renders only
+  the ones it shows (#690).
+- Docs: "Your own data in the admin", a new developer chapter of the shop
+  tutorial, and the shop example's stockists (editor, import screen,
+  `/shop/stockists/<city>`).
+
+- Sites served under a path on the main domain (`create-tenant acme
+  --path-prefix /acme` → `example.com/acme/`) work as a whole CMS site:
+  pages, the admin, sign-in, media, branding, forms, analytics, sitemap and
+  feeds. `path_prefix::serve` takes the prefix off each request and puts it
+  back on links, redirects and cookies; `path_prefix::tenant_header` lets
+  the framework find the site again. New projects are wired for it.
+- The scaffolder is published: `cargo install rcms-scaffold`, then
+  `rcms new <name>` from any folder, with no clone of this repository.
+  `rcms --version` shows the release it creates projects for. Generated
+  projects no longer carry a copy of the CMS migrations; they write them
+  from their `rustango-cms` dependency when they start.
+- `rcms new <name> --theme <blog|news|portfolio|blog-portfolio>`. The
+  first `cargo run -- quickstart` creates the theme's page types, sample
+  pages, header and footer menus, site name and colours. All of it is
+  editable in the admin, and the theme never runs again for that site.
+- Theme page types are defined as data (page-builder schemas), each with
+  a flexible **Content** field: rich text, image, quote, embed, plus the
+  theme's own **Gallery** and **Call to action** blocks.
+- **Settings → Branding** is the one place for the site's name, logo and
+  icon, used by the admin, the sign-in screens and the public site. The
+  logo and icon are pictures from the media library, picked with the
+  image chooser; files uploaded there before move into the media library
+  the first time the settings page opens. Starter themes fill Branding in
+  (the Rustango-CMS logo to start with) and add a footer badge under
+  **Site settings → Site**, which keeps only the theme's own text.
+- Starter themes come with sample pictures: covers for every post,
+  article and project, and pictures in the About page's blocks, a home
+  slider (Portfolio themes) or a gallery (Blog, News). They are original
+  illustrations drawn by `scripts/theme-media/generate.html`, so no
+  licence applies. The first start stores them in the media library.
+  `theme.json` takes a `media` list referenced as `"@media:<key>"`, and
+  `starter::apply_with_media` stores the supplied files.
+- Template inspector for admins: **Preferences → Show templates on the
+  site**. While it is on, the public site shows the signed-in admin a
+  panel listing the page template, the layout it extends and
+  each block template with its source (this site's copy, the project's
+  `templates/`, or built in), with links to the Templates editor; hovering
+  a block names its template. Visitors never see it, and such pages are
+  sent `no-store`. It opens from the admin bar's **Templates** button.
+- **View site** in the admin sidebar goes to the public site's home page.
+- Admin bar on the public site: signed in to the CMS admin, a small bar in
+  the corner of every page links to **Edit this page** and **Admin**, in
+  the admin's language; it collapses to its icon. Members and visitors
+  never see it, and such pages are not cached.
+- **Cards**, **Slider** and **Gallery** blocks, built into Rustango-CMS:
+  each holds a list (Add card / slide / picture). Cards: 2–4 per row with
+  image, title, text and link. Slider: one slide at a time or a row of
+  several, scrolling sideways without JavaScript; themes add previous/next
+  buttons. Gallery: any number of pictures, each opening full size; it
+  replaces the themes' four-picture gallery. A `safe_href` Tera filter
+  keeps their links (and theme buttons) to site paths and web, mail and
+  phone addresses.
+- Layout blocks for every theme's **Content** field: **Hero image**
+  (full-width picture with text over it), **Jumbo box** (one large
+  message, accent, soft or dark) and **Media and text** (image left or
+  right of a heading and text). Each has an optional button. Theme blocks
+  are now defined once, in `themes/_shared/blocks.json`, for all page
+  types. Every theme's About page shows them.
+- Every starter theme ships themed error pages (404, 403, 500, 503) in its
+  own layout and wording: editable **Error page** pages under the home
+  page, kept out of menus, the sitemap and search engines. `theme.json`
+  takes them as `error_pages`.
+- `rustango_cms::starter`: `apply` creates a site from a `theme.json`
+  (once, and only on a site with no pages), and `parse` checks one
+  without a database. Any site can be turned into a theme this way.
+- Theme packages: `cargo run -- theme pack site.zip` turns a site into one
+  `.zip` (its `theme.json` and templates, with or without its pages).
+  `theme install site.zip` puts it on another site: everything on an empty
+  site, only the look (and any error pages it lacks) on a site with
+  content. `theme check` validates a
+  package. Templates are merged, and the old folder is backed up first.
+- **Settings → Site theme** in the admin (superusers): download this site
+  as a theme package, upload one, see a preview of what changes, install
+  it, and restore the previous look. Templates go to the site's own
+  template folder, live, with no restart; other sites keep their look.
+  Projects made with `rcms new` now set up per-site templates, which the
+  **Templates** editor uses too.
+- **Help → Documentation** in the admin: every guide, read inside the
+  admin, for every signed-in user. Sections and search, guide-to-guide
+  links that stay in the admin, screenshots from cms.rustango.com, and
+  "Open on the docs site". The guides are the ones `docs/index.toml`
+  lists, bundled at build time, so they match the installed version.
+
+### Changed
+
+- **Breaking:** `PageTypeHandler::inline_panels` is async and takes the
+  pool and the page id, so a panel can read its options and locks from
+  the database.
+
+- Requires rustango 0.65. `rcms new` creates projects on rustango 0.65.
+
+- **Breaking:** the generic model admin (`register_model_admin!`) shows its
+  rows in pages. `ModelAdmin::list_rows` takes a limit and an offset and
+  returns the window with the total; the macro builds it for you (#629).
+
+### Fixed
+
+- The page history screen returned a server error for any site with
+  revisions: the lookup that flags each page's latest revision used a
+  projection the ORM only allows with an aggregate. It now reads just
+  `(id, page_id, sequence)` with `values_list` (`revision::page_sequences`).
+- Two people saving the same page no longer lose each other's changes
+  to its own fields (title, slug, status, schedule, SEO and social
+  fields, search-engine and menu switches, template, frontend route).
+  The edit form remembers what it loaded: a field you left alone keeps
+  what was saved meanwhile, a field only you changed is written, and a
+  field you both changed is not overwritten. The form comes back with
+  your values, a notice listing each such field with the saved and your
+  value, and Save keeps yours. Autosave follows the same rule. Saves
+  that don't come from the form (MCP, the API) work as before. Tags,
+  categories and the page type's own content are still saved as posted
+  (#903).
+- `/api/v2/pages/?id_in=` takes at most 200 ids (`400` beyond), so a long
+  list can't exceed a backend's bind-parameter limit; an admin list's
+  `?page=` can no longer overflow into a negative offset.
+- `GET /api/v2/pages/` read every public page on each request. Exact
+  filters (type, `child_of`, `descendant_of`, `ancestor_of`, `id_in`,
+  `tag`, `locale`, `translation_of`, `updated_since`) now run in the
+  database, and without a search, order by a text field or gated pages
+  the count and the page do too. Results and their order are unchanged
+  (#655).
+- The site search (`/api/v2/search/`) leaves locale copies and closed
+  media collections out in the database instead of after loading them
+  (#655).
+- Admin screens no longer load whole tables to count: collections count
+  their media, taxonomies their categories, menus their items, roles
+  their members and grants, and page types their pages in the database.
+  The components list reads the page-type schemas once, not once per
+  component. Category and media-collection tables are paged (#629).
+- Deleting a UI-built page type loaded every page to count its users and
+  treated a failed count as "no pages", so the delete went ahead; it
+  counts in SQL and stops on an error (#769, partly).
+- A page that went live on schedule got no "Published" page-log entry and
+  emailed no subscribers. The sweep now records both; emails go through
+  the mailer given to `admin::router_with_mailer`, which is now also
+  available as `task_queue::default_mailer` (#945).
+- Saving a live page again logged "Published", re-emailed every
+  subscriber and re-fired `after_publish_page`; that now happens only when
+  a save takes the page live. A page the scheduler published while it was
+  open in the editor stays published when the editor saves. Autosave on a
+  live or scheduled page said "Auto-saved" although it saves only drafts;
+  it now says to use Save (#903, partly).
+- Saving a page without changing anything rewrote the whole page, moved
+  its "last updated" time, added a revision and a page-log entry, purged
+  the cache and, on a page type with re-approval on edit, held the save
+  and started a review. Such a save now writes nothing and says "No
+  changes to save" (MCP returns `unchanged: true`). It also no longer
+  re-runs the reference index, search sync or hooks, so re-saving a page
+  unchanged no longer repairs those; change something to re-run them. A
+  save that does change something writes only the changed fields and
+  never the page's place in the tree (path, parent, order), so a move made
+  while the page was open is kept. A schedule time posted with seconds (MCP,
+  scripts) is compared to the second; the admin's minute inputs keep the
+  stored seconds. Tags and the reference index are updated by difference
+  instead of being deleted and re-added (#903).
+- The page form, MCP create and MCP update each parsed a page status
+  with their own list; they share `PageStatus::parse_editable` now (the
+  form still saves anything unknown as a draft, MCP still refuses it).
+  The dashboard counted pages, snippets and media by loading every row,
+  and loaded the whole page tree to name a few pages; it counts in SQL and
+  fetches only the pages it shows (#763).
+- Image renditions pick their format: with no `format-…` (the built-in
+  image block, `rcms_image_url(filter="width-1600")`) or `format-auto`, an
+  opaque image becomes a JPEG and one with transparent pixels keeps
+  transparency (PNG, or WebP for a WebP source). Before, a PNG photo stayed
+  a lossless PNG — often ten times larger — and `format-auto` meant
+  lossless WebP. An explicit `format-png` / `format-webp` still wins.
+  Renditions already stored keep their format until they are regenerated.
+  Flat graphics (screenshots, line art) that should stay lossless can ask
+  for `format-png`.
+- `rcms_image_url` accepts a full pipeline (`width-800|format-jpeg|quality-80`),
+  like `rcms_image_srcset` and `rcms_picture`; it used to reject anything
+  after the resize op and break the render. `rcms_picture` no longer emits
+  a `<source>` for `auto`, which is decided per image (#900).
+- Bulk actions read (and, for a media move, wrote) one row per selected
+  id; the media move is one UPDATE per chunk and page, user and
+  unused-media bulk actions load the selection in one query (#631).
+- The sign-in, password-reset and member screens now use the tenant's
+  admin theme and branding; window titles use the site's brand name
+  instead of "CMS Admin"; a wide logo keeps its proportions on the
+  sign-in card (#918).
+- The SSO providers page's note used a dimmer, larger text style than
+  every other table page (#633). `template-editor.js` uses `const`/`let`
+  (#664).
+- Without `RCMS_RENDITION_SIGNING_KEY`, anyone could make the server
+  decode, resize and store any number of sizes of every image (#643).
+  Image URLs the CMS renders (`rcms_image_url`, `rcms_image_srcset`,
+  `rcms_picture`, `og:image`) are now always signed — with a key derived
+  from the CMS secret when none is set — and always served. Unsigned URLs,
+  such as the ones API clients build from `download_url_template`, are
+  still served, but an anonymous request can create at most 128 sizes of
+  one image that way (`429` after; `RCMS_RENDITION_MAX_UNSIGNED` changes
+  it). Setting `RCMS_RENDITION_SIGNING_KEY` keeps the strict behaviour:
+  every request must be signed.
+- On SQLite, page create and move (`tree_ops::atomic_tree`) opened a
+  deferred transaction, so two concurrent moves into one parent could
+  read the same sort order or fail with `SQLITE_BUSY`; they now take the
+  write lock up front (`atomic_immediate`) (#915).
+- The workflows report read every workflow state ever recorded; it pages
+  now (the CSV still exports all). The search report counts each query's
+  promotions in one query instead of one per row (#628).
+- An index page also loaded every grandchild row, whatever the locale,
+  just to collect ids for translations. Grandchildren are now read as
+  ids, bounded, and only for a non-default locale; child listings filter
+  for visibility in SQL instead of loading drafts and expired pages to
+  drop them (#690, partly).
+- `/api/v2/images/`, `/documents/` and `/snippets/` loaded the whole table
+  per request. Exact filters (collection, type, `updated_since`, gated
+  collections) run in SQL, and without a text search a date/size order is
+  counted and paged there too (#655, pages list still in memory).
+- Admin lists that grew with use loaded whole tables: the users list,
+  form submissions, page history and the revisions report (which read
+  every revision's full snapshot to count them) now count and page in
+  SQL with the shared page controls (#627).
+- The media and documents libraries filter, count and page in SQL
+  instead of loading every file; search stays case-insensitive on every
+  backend (#632).
+- The account page's MCP keys read their grants in one query instead of
+  one per key (#630).
+- A public page rendered every row of every library type with a
+  template, whether the page showed it or not. `snippet_html(...)` now
+  renders only the rows a page asks for, fetched with one query per type
+  (#731).
+- `GET /api/v2/changes/` loaded every public page to count them; with no
+  view restriction in force for the caller it now counts in SQL (#647).
+- A page edited through MCP purged the page cache with org id 0 when no
+  registry was recorded, so the old page stayed cached until its TTL;
+  the purge now uses the agent's own org (#930).
+- A new site with no published page answered `/` with a bare 404, which
+  read as a broken install; it now says the site has no pages yet and
+  links to the admin sign-in. `quickstart` and the generated README say to
+  use the `demo.localhost` address: plain `localhost` is the operator
+  console, where the site's `admin` user cannot sign in (#43).
+- Inline-panel fields always rendered as text boxes, whatever their kind.
+- Switch widgets (`with_variant("switch")`) showed a checkbox and the
+  switch together: the template still used the class name from before
+  the `rcms-` prefix.
+- `#[derive(PageType)]` accepted a `#[field]` named like one of the page
+  editor's own fields; the two were posted together and one overwrote
+  the other (a `status` field unpublished the page on every save). Such a
+  field is now a compile error that says how to rename it.
+
+- Page-type hooks (`public_context`, `route_context`) ran on the registered
+  default value of the type, so `self.<field>` was always empty. They now
+  get the page's stored row.
+- Two blocks with the same name were picked in link order, so a site could
+  not tell which one it got. A site block now wins over a built-in one; two
+  site blocks with one name keep the first and log an error.
+- `/cms-admin/x/<slug>` did not check the page's `permission_resource`
+  codename; the route gate now does (`.view` to open it).
+- The ceramics shop example's migrations had branched from the CMS's, so
+  `makemigrations` refused to run; they are merged.
+- Deleting a media item that had renditions failed with a server error
+  (the renditions' foreign key); the renditions are removed first, in the
+  library, the unused-media bulk delete and crop/replace.
+- The page editor's tab strip wrapped to a second row when tight, so a
+  hovered tab whose label expanded jumped rows, lost the hover and
+  flickered; the strip now stays one row and scrolls sideways.
+- In the page list, a long title overlapped the slug at mid widths; the
+  row now drops its buttons to a second line instead.
+
+- Help → Documentation linked to a domain that does not exist; it now
+  opens the Help center.
+- Projects made with `rcms new` never mounted `/__media__/…`, so every
+  uploaded image was a broken link on the public site, in the editor's
+  preview and in the image chooser. The generated `main.rs` now mounts
+  `rendition_route::router()`.
+- Page and delivery statuses showed untranslated ("PUBLISHED") on the page
+  list, search, reports, history, media usage, page-type versions and
+  notifications.
+- **Site settings**: the badge on a row moved about with the length of
+  its name, the Ukrainian and other translations of it meant "entered",
+  and the starter theme's internal record showed as a setting. The badge
+  now reads "Form" beside the key, and the record is hidden.
+- The admin sidebar showed the tenant's display name and its slug, and
+  ignored the site name set under **Settings → Branding**. It now shows
+  one name, the Branding site name (else the tenant's brand or display
+  name), beside the Branding logo; the sign-in screens use the same.
+- **Unused media** listed pictures used in page-builder fields and blocks
+  (covers, hero, media-and-text, cards, slider and gallery items) and in
+  settings as unused, and a picture's **Used on** panel missed them: both
+  only read code page types' `*_media_id` columns. They now learn every
+  picture field from the block, page-builder and settings schemas and scan
+  pages, library elements and site settings (`rustango_cms::media_usage`).
+- **Help → Documentation**: sections stretched to the tallest one in their
+  row and the search box sat in a hand-styled card; sections now flow in
+  columns with plain link lists, and the search uses the standard field.
+- **Preferences → Profile**: the avatar field accepted SVG, which can
+  carry script and was served from the admin's own origin; avatars are
+  now PNG, JPEG, WebP or GIF, anything else is refused with a message, and
+  the chosen picture shows before saving.
+- High contrast: the focus ring on Help's guide links was cut off at the
+  sides; it is drawn inside the row now.
+- **Templates** was unstyled (a plain input, a table narrower than its
+  card) and showed its title twice; it now uses the admin's table panel.
+- A list field's add button showed the item's internal name ("Add
+  gallery_image"); it now shows its display name ("Add picture").
+- The **Call to action** block's button link refused a site path such as
+  `/contact` (the browser's URL check), so a page using one could not be
+  saved. Theme button links now take a site path or a full link, and a
+  link that is neither (such as `javascript:`) is not rendered.
+
+### Docs
+
+- Tests run under cargo-nextest (`.config/nextest.toml`, as in rustango);
+  CONTRIBUTING and CI use it, with `cargo test --doc` for doctests.
+- [Themes](docs/themes.md): starter themes, theme packages, what
+  travels and what doesn't, data vs code page types, a templates
+  reference and troubleshooting.
+- The daily install check generates every theme, runs `quickstart` and
+  loads every page.
+
+### Breaking
+
+- The behavioural hooks are async and get a `hooks::HookCtx` (the
+  tenant's pool, its slug, the acting user's id): `AfterPublishPage`,
+  `BeforeServePage`, `AdminSearchArea::search` and the new
+  `DashboardWidget::render` (replacing the static `html`). They used to be
+  plain `fn`s with no way to know which tenant they ran for, reach its
+  database or await; `HookCtx` is `#[non_exhaustive]`, so it can grow
+  without breaking a hook again (#686). `page::went_live_effects` takes the pool
+  and the acting user's id, `page::apply_sweep_effects` the pool. A hook
+  that runs longer than `hooks::HOOK_TIMEOUT` (5 s) is abandoned and
+  logged, so a hung webhook can't hang a page view or a save.
+- `rendition::verify_rendition_sig` is replaced by `check_rendition_sig`,
+  which returns `RenditionSig::{Valid, Unsigned, Rejected}`; image URLs
+  rendered by the CMS now carry `?s=` even without
+  `RCMS_RENDITION_SIGNING_KEY`.
+- Requires rustango 0.63 (built and tested against 0.63.0); see UPGRADING.md.
+- `PageCacheInvalidator` methods, `purge_urls`, `invalidate_urls_on_commit`
+  and `run_schedule_sweep_and_purge` take the request's `TenantSlug` (slug and
+  org id), since the page cache keys on both. `CachePurgeJob` gains `org_id`.
+- `BoxedCacheInvalidator` purges through `CachePageLayer::invalidate`, which
+  drops every variant of a path, for mapped and `with_default_hosts` hosts alike.
+- `admin::issue_password_reset_link` takes the tenant's `Org`; reset links are
+  bound to the org id, so a reused slug does not accept an old link.
+- Preview tokens are signed with the org id too; `preview_token::mint` and
+  `verify` take a `TenantSlug`.
+- `page_tag::replace_tags`, `category::assign::replace_for_taxonomy` and
+  `category::assign::save_from_form` return whether they changed anything
+  (`Result<bool, _>`).
 
 ## 0.3.0 — 2026-11-02
 

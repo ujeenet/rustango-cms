@@ -1,0 +1,14 @@
+{% import "_macros.html" as m %}
+{#- The "Hero image" content block: a full-width picture with a heading,
+    text and an optional button over it. Without a picture the theme
+    colour fills the background. -#}
+<section class="hero-block hero-block--{% if value.height == 'tall' %}tall{% else %}medium{% endif %}{% if not value.image %} hero-block--plain{% endif %}">
+  {%- if value.image %}
+  <img class="hero-block__image" src="{{ rcms_image_url(media_id=value.image, filter='width-2000') }}" alt="">
+  {%- endif %}
+  <div class="hero-block__inner">
+    <h2 class="hero-block__heading">{{ value.heading }}</h2>
+    {%- if value.text %}<p class="hero-block__text">{{ value.text }}</p>{% endif %}
+    {{ m::button(label=value.button_label | default(value=""), url=value.url | default(value="")) | safe }}
+  </div>
+</section>

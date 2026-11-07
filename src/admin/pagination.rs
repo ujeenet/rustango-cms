@@ -80,7 +80,43 @@ pub fn context(page: i64, per_page: usize, total: usize) -> serde_json::Value {
 /// Zero-based offset for the current page, for `.offset()`.
 #[must_use]
 pub fn offset(page: i64, per_page: usize) -> i64 {
-    (page.max(1) - 1) * per_page as i64
+    // Saturating: `?page=` is user input, and a wrapped (negative)
+    // OFFSET is an error on some backends.
+    (page.max(1) - 1).saturating_mul(i64::try_from(per_page).unwrap_or(i64::MAX))
+}
+
+/// `?page=&per_page=` for a list with no other query parameters.
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct PageQuery {
+    #[serde(default)]
+    pub page: Option<i64>,
+    #[serde(default)]
+    pub per_page: Option<usize>,
+}
+
+/// One page of a list: what to fetch and what the partial renders.
+#[derive(Debug)]
+pub struct Window {
+    pub limit: i64,
+    pub offset: i64,
+    /// The `pagination` context for `_pagination.html`.
+    pub context: serde_json::Value,
+}
+
+impl PageQuery {
+    /// The page window over `total` rows; an out-of-range `?page=`
+    /// lands on the last page.
+    #[must_use]
+    pub fn window(&self, total: usize) -> Window {
+        let per_page = clamp_per_page(self.per_page);
+        let context = context(self.page.unwrap_or(1), per_page, total);
+        let page = context["page"].as_i64().unwrap_or(1);
+        Window {
+            limit: per_page as i64,
+            offset: offset(page, per_page),
+            context,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -160,5 +196,13 @@ mod tests {
         assert_eq!(offset(1, 50), 0);
         assert_eq!(offset(3, 50), 100);
         assert_eq!(offset(0, 50), 0, "page 0 is treated as page 1");
+    }
+
+    #[test]
+    fn a_window_past_the_end_shows_the_last_page() {
+        let q = PageQuery { page: Some(99), per_page: Some(25) };
+        let w = q.window(60);
+        assert_eq!((w.limit, w.offset), (25, 50));
+        assert_eq!(w.context["page"], 3);
     }
 }

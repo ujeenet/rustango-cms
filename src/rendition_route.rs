@@ -43,7 +43,7 @@ use crate::rendition::{apply, MediaRendition};
 /// This extractor resolves the same `(org, pool)` pair through
 /// the same `TenantContext` path as `Tenant`, but stops short of
 /// the `database_acquire` step. Rendition handlers only ever call
-/// `tenant.pool()` (every `fetch` / `insert_pool` internally
+/// `tenant.pool()` (every `fetch` / `insert` internally
 /// acquires + releases) — they NEVER need a long-lived connection
 /// — so dropping the held conn is purely a win.
 pub struct TenantLite {
@@ -105,6 +105,10 @@ impl TenantLite {
 ///
 /// Both routes honour collection-level view restrictions.
 pub fn router() -> Router {
+    // Fix the signing key now, at boot: deriving it may read or write the
+    // CMS key file, which belongs at startup rather than inside the first
+    // request, and a key that can't be persisted is reported here.
+    crate::rendition::init_signing();
     Router::new()
         .route("/__media__/raw/{media_id}", get(serve_raw))
         .route("/__media__/{filter_spec}/{media_id}", get(serve))
@@ -354,11 +358,13 @@ async fn serve(
     let canonical_spec = pipeline.canonical();
     let op = pipeline.geometric;
 
-    // #425 — when signed rendition URLs are enabled, reject forged /
-    // unsigned requests BEFORE any DB lookup or rendition work, so
-    // enumeration + arbitrary-spec CPU-DoS cost an attacker nothing.
-    // No-op (always allows) when signing is disabled.
-    if !crate::rendition::verify_rendition_sig(&canonical_spec, media_id, query.s.as_deref()) {
+    // #425 / #643 — check the signature BEFORE any DB lookup or
+    // rendition work, so a forged request costs nothing. CMS-rendered
+    // URLs are signed and served uncapped; an unsigned one (an API client
+    // filling `download_url_template`) is served unless the key is
+    // strict, capped below for anonymous visitors.
+    let sig = crate::rendition::check_rendition_sig(&canonical_spec, media_id, query.s.as_deref());
+    if sig == crate::rendition::RenditionSig::Rejected {
         return (
             StatusCode::FORBIDDEN,
             "invalid or missing rendition signature",
@@ -466,6 +472,11 @@ async fn serve(
         }
     };
 
+    // Members are not exempt: anyone can sign up as one.
+    let capped = session_user.is_none() && sig == crate::rendition::RenditionSig::Unsigned;
+    if existing.is_none() && capped && variant_cap_reached(&tenant, &media).await {
+        return too_many_sizes();
+    }
     let (rendition, bytes) = match existing {
         Some(r) => {
             match crate::media_storage::disk_for(&tenant.org.slug)
@@ -475,7 +486,7 @@ async fn serve(
                 Ok(b) => (r, b),
                 Err(_) => {
                     // The row exists but the bytes are gone — regenerate.
-                    match generate_once(&tenant, &media, &pipeline, &canonical_spec).await {
+                    match generate_once(&tenant, &media, &pipeline, &canonical_spec, false).await {
                         Ok(out) => out,
                         Err(e) => {
                             tracing::error!(error = %e, "rendition regenerate failed");
@@ -489,8 +500,9 @@ async fn serve(
                 }
             }
         }
-        None => match generate_once(&tenant, &media, &pipeline, &canonical_spec).await {
+        None => match generate_once(&tenant, &media, &pipeline, &canonical_spec, capped).await {
             Ok(out) => out,
+            Err(e) if e == CAP_REACHED => return too_many_sizes(),
             Err(e) => {
                 tracing::error!(error = %e, "rendition generate failed");
                 return (StatusCode::INTERNAL_SERVER_ERROR, format!("generate: {e}"))
@@ -504,7 +516,7 @@ async fn serve(
     {
         let mut r = rendition;
         r.last_used_at = chrono::Utc::now();
-        r.save_pool(tenant.pool()).await.log_warn("rendition last_used_at not bumped");
+        r.save(tenant.pool()).await.log_warn("rendition last_used_at not bumped");
     }
 
     // 5) Stream bytes with strong caching — renditions are
@@ -532,6 +544,32 @@ fn set_media_cache(headers: &mut axum::http::HeaderMap, restricted: bool, public
         headers.insert(header::VARY, HeaderValue::from_static("Cookie"));
     } else {
         headers.insert(header::CACHE_CONTROL, HeaderValue::from_static(public));
+    }
+}
+
+/// `generate_once`'s refusal when the per-image cap is reached.
+const CAP_REACHED: &str = "rendition variant cap reached";
+
+fn too_many_sizes() -> Response {
+    (StatusCode::TOO_MANY_REQUESTS, "too many image sizes requested for this image").into_response()
+}
+
+/// Whether this image already has
+/// [`crate::rendition::max_unsigned_variants`] renditions, so an unsigned
+/// anonymous request may not add another (#643). A failed count
+/// lets the request through rather than breaking images.
+async fn variant_cap_reached(tenant: &TenantLite, media: &Media) -> bool {
+    use rustango::sql::CounterPool as _;
+    match MediaRendition::objects()
+        .where_(MediaRendition::content_hash.eq(media.content_hash.clone()))
+        .count(tenant.pool())
+        .await
+    {
+        Ok(n) => usize::try_from(n).unwrap_or(usize::MAX) >= crate::rendition::max_unsigned_variants(),
+        Err(e) => {
+            tracing::warn!(target: "rustango_cms::rendition", error = %e, "rendition count failed; cap not applied");
+            false
+        }
     }
 }
 
@@ -575,7 +613,16 @@ async fn generate_once(
     media: &Media,
     pipeline: &crate::rendition::FilterPipeline,
     canonical_spec: &str,
+    capped: bool,
 ) -> Result<(MediaRendition, Vec<u8>), String> {
+    // A capped (anonymous, unsigned) request counts and generates under
+    // one per-image lock, so a burst of new sizes can't all pass the
+    // count before any of them is stored (#643).
+    let cap_lock = capped.then(|| generation_lock(format!("{}\u{0}{}\u{0}#cap", tenant.org.slug, media.content_hash)));
+    let _cap_held = match &cap_lock {
+        Some(lock) => Some(lock.lock().await),
+        None => None,
+    };
     let key = format!("{}\u{0}{}\u{0}{canonical_spec}", tenant.org.slug, media.content_hash);
     let lock = generation_lock(key);
     let _held = lock.lock().await;
@@ -593,6 +640,9 @@ async fn generate_once(
         {
             return Ok((r, bytes));
         }
+    }
+    if capped && variant_cap_reached(tenant, media).await {
+        return Err(CAP_REACHED.to_owned());
     }
     let _permit = decode_permits()
         .acquire()
@@ -640,7 +690,7 @@ async fn generate(
 
     // Returns the bytes ready to ship + the metadata needed to
     // persist the row. The DB insert stays on the async runtime
-    // because `insert_pool` is itself async (sqlx).
+    // because `insert` is itself async (sqlx).
     struct Blocking {
         out_bytes: Vec<u8>,
         out_mime: String,
@@ -705,7 +755,7 @@ async fn generate(
         last_used_at: chrono::Utc::now(),
         created_at: Auto::Unset,
     };
-    row.insert_pool(tenant.pool())
+    row.insert(tenant.pool())
         .await
         .map_err(|e| format!("insert rendition: {e}"))?;
     Ok((row, b.out_bytes))
@@ -736,7 +786,7 @@ pub async fn gc_older_than(
             .delete(&crate::media_storage::key(tenant_slug, &r.storage_key))
             .await
             .log_warn("stored file not deleted; the blob is orphaned");
-        r.delete_pool(pool).await?;
+        r.delete(pool).await?;
         removed += 1;
     }
     Ok(removed)

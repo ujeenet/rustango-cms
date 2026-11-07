@@ -42,6 +42,17 @@ impl PageStatus {
     /// The statuses [`is_public`](Self::is_public) accepts.
     pub const PUBLIC: [Self; 2] = [Self::Published, Self::Archived];
 
+    /// The statuses an editor (the page form, an MCP agent) may set;
+    /// `expired` is reached only by the schedule sweep.
+    pub const EDITABLE: [Self; 4] = [Self::Draft, Self::Scheduled, Self::Published, Self::Archived];
+
+    /// A status an editor may set, or `None` — the one parser for every
+    /// write path (#763), so they can't accept different sets again.
+    #[must_use]
+    pub fn parse_editable(s: &str) -> Option<Self> {
+        Self::EDITABLE.into_iter().find(|v| v.as_str() == s)
+    }
+
     /// [`Self::PUBLIC`] as owned strings, for an `is_in` filter on
     /// `Page::status`.
     #[must_use]
@@ -370,16 +381,56 @@ pub struct ScheduleSweepResult {
 /// hooks run. An editor's save, a bulk publish, a workflow finish and the
 /// schedule sweep each did their own subset — the sweep did neither, so a
 /// scheduled page never reached an external search index.
-pub async fn went_live_effects(tenant_slug: &str, page: &Page) {
+pub async fn went_live_effects(pool: &rustango::sql::Pool, tenant_slug: &str, page: &Page, user_id: Option<i64>) {
     crate::task_queue::sync_page_search(tenant_slug, page).await;
-    crate::hooks::fire_after_publish_page(page);
+    crate::hooks::fire_after_publish_page(crate::hooks::HookCtx::new(pool, tenant_slug, user_id), page).await;
+}
+
+/// What a manual publish records that the sweep skipped (#945): a
+/// "Published" page-log entry and the subscriber emails, for every page
+/// the sweep took live. Emails use `mailer` (a mailer and its `From:`),
+/// else the process-wide one ([`crate::task_queue::default_mailer`]);
+/// without either only the log is written.
+pub async fn record_sweep_publishes(
+    pool: &rustango::sql::Pool,
+    tenant_slug: &str,
+    result: &ScheduleSweepResult,
+    mailer: Option<(&dyn rustango::email::Mailer, &str)>,
+) {
+    let fallback = crate::task_queue::default_mailer();
+    let mailer = mailer.or_else(|| fallback.as_ref().map(|(m, from)| (m.as_ref(), from.as_str())));
+    for page in &result.went_live {
+        let id = page.id.get().copied().unwrap_or_default();
+        crate::page_log::record_or_warn(
+            pool,
+            id,
+            crate::page_log::ACTION_PUBLISH,
+            None,
+            format!("Published “{}” on schedule.", page.title),
+            None,
+        )
+        .await;
+        if let Some((m, from)) = mailer {
+            crate::page_subscription::notify_publish(
+                Some(m),
+                from,
+                pool,
+                tenant_slug,
+                id,
+                &page.title,
+                &page.url_path,
+                None,
+            )
+            .await;
+        }
+    }
 }
 
 /// [`went_live_effects`] for every page a sweep published, and the search
 /// removal for every page it took down.
-pub async fn apply_sweep_effects(tenant_slug: &str, result: &ScheduleSweepResult) {
+pub async fn apply_sweep_effects(pool: &rustango::sql::Pool, tenant_slug: &str, result: &ScheduleSweepResult) {
     for page in &result.went_live {
-        went_live_effects(tenant_slug, page).await;
+        went_live_effects(pool, tenant_slug, page, None).await;
     }
     for id in &result.taken_down {
         crate::task_queue::remove_page_search(tenant_slug, *id).await;
@@ -509,19 +560,16 @@ async fn flip(
 /// best-effort and never errors the call).
 pub async fn run_schedule_sweep_and_purge(
     pool: &rustango::sql::Pool,
-    tenant_slug: &str,
+    tenant: &rustango::tenancy::TenantSlug,
     invalidator: std::sync::Arc<dyn crate::cache_invalidate::PageCacheInvalidator>,
 ) -> Result<ScheduleSweepResult, rustango::sql::ExecError> {
     let result = run_schedule_sweep(pool).await?;
     if !result.changed_urls.is_empty() {
-        crate::task_queue::purge_urls(
-            invalidator,
-            tenant_slug.to_owned(),
-            result.changed_urls.clone(),
-        )
-        .await;
+        crate::task_queue::purge_urls(invalidator, tenant.clone(), result.changed_urls.clone())
+            .await;
     }
-    apply_sweep_effects(tenant_slug, &result).await;
+    apply_sweep_effects(pool, &tenant.slug, &result).await;
+    record_sweep_publishes(pool, &tenant.slug, &result, None).await;
     Ok(result)
 }
 
@@ -580,7 +628,7 @@ pub async fn run_schedule_sweep_with_mailer(
             )
             .await;
             p.notification_pre_published_sent = true;
-            p.save_pool(pool)
+            p.save(pool)
                 .await
                 .log_warn("pre-publish notification flag not saved; it may be sent again");
         }
@@ -589,7 +637,8 @@ pub async fn run_schedule_sweep_with_mailer(
     // 2) — delegate to the standard sweep for the publish + expiry
     //      flips. Idempotent.
     let result = run_schedule_sweep(pool).await?;
-    apply_sweep_effects(tenant_slug, &result).await;
+    apply_sweep_effects(pool, tenant_slug, &result).await;
+    record_sweep_publishes(pool, tenant_slug, &result, mailer.map(|m| (m, from))).await;
     Ok(result)
 }
 
@@ -694,6 +743,32 @@ pub async fn plan_archive(
     Ok(plan)
 }
 
+/// Typed access to [`Page::status`] (#763). The column stays a string —
+/// changing the field's type would break every host that reads or writes
+/// it — so code goes through these instead of comparing literals, and
+/// the public-visibility rule lives in one place.
+impl Page {
+    /// The page's status, or `None` for a stored value no
+    /// [`PageStatus`] names (an old import, a typo).
+    #[must_use]
+    pub fn page_status(&self) -> Option<PageStatus> {
+        PageStatus::parse(&self.status)
+    }
+
+    /// Set the status from the enum, so only a value every reader
+    /// understands is ever written.
+    pub fn set_page_status(&mut self, status: PageStatus) {
+        self.status = status.as_str().to_owned();
+    }
+
+    /// Whether visitors may see this page: published **or** archived.
+    /// Use this, not `status == "published"`, which misses archived pages.
+    #[must_use]
+    pub fn is_public(&self) -> bool {
+        PageStatus::str_is_public(&self.status)
+    }
+}
+
 #[cfg(all(test, feature = "sqlite"))]
 mod archive_tests {
     use super::*;
@@ -732,7 +807,7 @@ mod archive_tests {
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         };
-        pt.insert_pool(&pool).await.expect("insert pt");
+        pt.insert(&pool).await.expect("insert pt");
         pool
     }
 
@@ -777,7 +852,7 @@ mod archive_tests {
             created_at: Auto::Unset,
             updated_at: Auto::Unset,
         };
-        page.insert_pool(pool).await.expect("insert page");
+        page.insert(pool).await.expect("insert page");
         page
     }
 
@@ -1023,4 +1098,33 @@ pub fn alias_hybrid(alias: &Page, source: &Page) -> Page {
     hybrid.sitemap_priority = source.sitemap_priority;
     hybrid.show_in_menus = source.show_in_menus;
     hybrid
+}
+
+#[cfg(test)]
+mod status_accessor_tests {
+    use super::*;
+
+    #[test]
+    fn typed_status_accessors_round_trip_and_know_public() {
+        let mut p: Page = serde_json::from_value(serde_json::json!({
+            "id": 1, "page_type_id": 1, "title": "T", "slug": "t", "path": "0001/",
+            "url_path": "/t", "preview_path": "", "template_override": "", "depth": 1,
+            "parent_id": null, "locale_variant_of": null, "alias_of": null, "theme_id": null,
+            "sort_order": 0, "status": "draft", "published_at": null, "last_published_at": null,
+            "go_live_at": null, "expire_at": null, "seo_title": "", "seo_description": "",
+            "robots_index": true, "sitemap_priority": 0.5, "show_in_menus": true, "og_title": "",
+            "og_description": "", "og_image_media_id": null, "twitter_card": "summary",
+            "notification_pre_published_sent": false,
+            "created_at": "2026-11-06T00:00:00Z", "updated_at": "2026-11-06T00:00:00Z"
+        }))
+        .unwrap();
+        assert_eq!(p.page_status(), Some(PageStatus::Draft));
+        assert!(!p.is_public());
+        p.set_page_status(PageStatus::Archived);
+        assert_eq!(p.status, "archived");
+        assert!(p.is_public(), "archived pages are served");
+        p.status = "bogus".into();
+        assert_eq!(p.page_status(), None);
+        assert!(!p.is_public());
+    }
 }

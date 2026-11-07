@@ -794,6 +794,7 @@ pub trait Block: Send + Sync + 'static {
 pub mod admin;
 pub mod builtin;
 pub mod enrich;
+pub mod layout;
 pub mod migrate;
 pub mod render;
 pub mod tera_helpers;

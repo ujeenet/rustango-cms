@@ -13,8 +13,10 @@
 
 use async_trait::async_trait;
 use rustango::sql::{Auto, ExecError, Pool};
+use rustango_cms::routable::{RouteMatch, RouteOutcome, RouteSpec};
 use rustango_cms::widget::{Widget, WidgetKind};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Map, Value};
 
 // ---------------------------------------------------------------- Home page
 
@@ -87,7 +89,8 @@ impl rustango_cms::PageTypeOverrides for ContentPage {}
 // ---------------------------------------------------------------- Shop page
 
 /// A listing page: its published children are the products, shown as
-/// cards and grouped by category in `shop_page.html`.
+/// cards and grouped by category in `shop_page.html`. It also serves the
+/// stockist pages (see `stockists.rs`).
 #[derive(rustango::Model, rustango_cms::PageType, Default, Debug, Clone, Serialize, Deserialize)]
 #[rustango(table = "shop_shop_page", app = "shop")]
 #[page_type(type_name = "ShopPage", verbose_name = "Shop page", template = "shop_page.html", icon = "storefront")]
@@ -114,6 +117,59 @@ impl rustango_cms::PageTypeOverrides for ShopPage {
         page: &rustango_cms::Page,
     ) -> Result<Option<Vec<rustango_cms::Page>>, ExecError> {
         Ok(Some(rustango_cms::published_children(pool, page).await?))
+    }
+
+    /// Adds `page.stockist_count` for the "Find us in a shop" link. Keys
+    /// under `page` join the page's own (`page.title`, `page.url_path`…).
+    async fn public_context(&self, pool: &Pool, _page: &rustango_cms::Page) -> Result<Map<String, Value>, ExecError> {
+        let mut ctx = Map::new();
+        let count = crate::stockists::active(pool).await.len();
+        ctx.insert("page".to_owned(), json!({ "stockist_count": count }));
+        Ok(ctx)
+    }
+
+    /// Two extra URLs under the shop page: `/shop/stockists` lists every
+    /// stockist, `/shop/stockists/<city>` the ones in one city.
+    fn routes(&self) -> Vec<RouteSpec> {
+        vec![
+            RouteSpec::new(r"stockists", "stockists"),
+            RouteSpec::new(r"stockists/(?P<city>[a-z0-9-]+)", "stockists_in_city"),
+        ]
+    }
+
+    /// The stockists the URL asks for.
+    async fn route_context(
+        &self,
+        pool: &Pool,
+        _page: &rustango_cms::Page,
+        matched: &RouteMatch,
+    ) -> Result<Map<String, Value>, ExecError> {
+        let mut stockists = crate::stockists::active(pool).await;
+        let mut ctx = Map::new();
+        if let Some(city) = matched.captures.get("city") {
+            stockists.retain(|s| &s.city_slug() == city);
+            if let Some(first) = stockists.first() {
+                ctx.insert("city".to_owned(), json!(first.city));
+            }
+        }
+        let rows: Vec<Value> = stockists
+            .iter()
+            .map(|s| {
+                let mut row = json!(s);
+                row["city_slug"] = json!(s.city_slug());
+                row
+            })
+            .collect();
+        ctx.insert("stockists".to_owned(), Value::Array(rows));
+        Ok(ctx)
+    }
+
+    /// Both URLs use `stockists.html`; a city with no stockists is a 404.
+    fn route_outcome(&self, matched: &RouteMatch, route_ctx: &Map<String, Value>) -> RouteOutcome {
+        if matched.name == "stockists_in_city" && !route_ctx.contains_key("city") {
+            return RouteOutcome::NotFound;
+        }
+        RouteOutcome::Template("stockists.html".to_owned())
     }
 }
 

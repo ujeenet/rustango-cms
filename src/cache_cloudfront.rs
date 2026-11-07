@@ -181,7 +181,7 @@ impl CloudFrontInvalidator {
 
 #[async_trait]
 impl PageCacheInvalidator for CloudFrontInvalidator {
-    async fn invalidate_url(&self, _tenant_slug: &str, url_path: &str) {
+    async fn invalidate_url(&self, _tenant: &rustango::tenancy::TenantSlug, url_path: &str) {
         // Distribution targeting is per-process; the tenant slug
         // doesn't gate which distribution receives the purge. Hosts
         // that need per-tenant distributions can build one
@@ -190,7 +190,7 @@ impl PageCacheInvalidator for CloudFrontInvalidator {
         self.invalidate(url_path).await;
     }
 
-    async fn invalidate_subtree(&self, _tenant_slug: &str, url_path: &str) {
+    async fn invalidate_subtree(&self, _tenant: &rustango::tenancy::TenantSlug, url_path: &str) {
         // CloudFront accepts wildcards in invalidation paths — a
         // `/blog/*` invalidation drops every cached entry under
         // `/blog/`. That's the right shape for slug-rename / move

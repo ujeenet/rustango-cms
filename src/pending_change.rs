@@ -78,7 +78,7 @@ pub async fn hold(
         Some(mut row) => {
             row.form = value;
             row.created_by = by;
-            row.save_pool(pool).await?;
+            row.save(pool).await?;
         }
         None => {
             let mut row = PendingChange {
@@ -88,7 +88,7 @@ pub async fn hold(
                 created_by: by,
                 updated_at: Auto::Unset,
             };
-            row.save_pool(pool).await?;
+            row.save(pool).await?;
         }
     }
     Ok(())
@@ -100,7 +100,7 @@ pub async fn hold(
 /// Driver / query failures.
 pub async fn discard(pool: &rustango::sql::Pool, page_id: i64) -> Result<(), rustango::sql::ExecError> {
     if let Some(row) = for_page(pool, page_id).await? {
-        row.delete_pool(pool).await?;
+        row.delete(pool).await?;
     }
     Ok(())
 }

@@ -449,7 +449,7 @@ pub async fn rebind_page_types(
     let n = types.len();
     for mut pt in types {
         new.clone_into(&mut pt.workflow);
-        pt.save_pool(pool).await?;
+        pt.save(pool).await?;
     }
     Ok(n)
 }
@@ -501,7 +501,7 @@ pub async fn submit_for_review(
         requested_at: Auto::Unset,
         finished_at: None,
     };
-    state.insert_pool(pool).await?;
+    state.insert(pool).await?;
 
     if let Some(task_id) = first_task_id {
         let state_id = state.id.get().copied().unwrap_or_default();
@@ -514,7 +514,7 @@ pub async fn submit_for_review(
             decided_by: None,
             decided_at: None,
         };
-        ts.insert_pool(pool).await?;
+        ts.insert(pool).await?;
     }
 
     // #191 — fire the first task's on_assign hook. If the kind
@@ -587,7 +587,7 @@ async fn advance_through_auto_approve_chain(
                     ts.decided_by = None;
                     ts.decided_at = Some(now);
                     ts.comment = format!("auto-approved by `{}` task kind", current_task.kind);
-                    ts.save_pool(pool).await?;
+                    ts.save(pool).await?;
                 }
 
                 let current_sort = current_task.sort_order;
@@ -598,7 +598,7 @@ async fn advance_through_auto_approve_chain(
                 if let Some(next_task) = next {
                     let next_id = next_task.id.get().copied().unwrap_or_default();
                     state.current_task_id = Some(next_id);
-                    // #73 — save_partial (not save_pool) so the unchanged
+                    // #73 — save_partial (not save) so the unchanged
                     // `requested_by -> rustango_users` FK is not re-bound/re-validated;
                     // a full-row UPDATE 787s on SQLite when the original submitter's
                     // user row is gone (deleted / deactivated-and-purged).
@@ -614,7 +614,7 @@ async fn advance_through_auto_approve_chain(
                         decided_by: None,
                         decided_at: None,
                     };
-                    ts.insert_pool(pool).await?;
+                    ts.insert(pool).await?;
                     // Loop continues — the next task might also be
                     // an auto-approve, in which case we chain
                     // through.
@@ -622,7 +622,7 @@ async fn advance_through_auto_approve_chain(
                     state.current_task_id = None;
                     state.status = WorkflowStatus::Approved.as_str().to_owned();
                     state.finished_at = Some(now);
-                    // #73 — save_partial (not save_pool) so the unchanged
+                    // #73 — save_partial (not save) so the unchanged
                     // `requested_by -> rustango_users` FK is not re-bound/re-validated;
                     // a full-row UPDATE 787s on SQLite when the original submitter's
                     // user row is gone (deleted / deactivated-and-purged).
@@ -725,7 +725,7 @@ pub async fn approve_current(
         let next_id = next_task.id.get().copied().unwrap_or_default();
         state.current_task_id = Some(next_id);
         state.status = WorkflowStatus::InProgress.as_str().to_owned();
-        // #73 — save_partial (not save_pool) so the unchanged
+        // #73 — save_partial (not save) so the unchanged
         // `requested_by -> rustango_users` FK is not re-bound/re-validated;
         // a full-row UPDATE 787s on SQLite when the original submitter's
         // user row is gone (deleted / deactivated-and-purged).
@@ -742,7 +742,7 @@ pub async fn approve_current(
             decided_by: None,
             decided_at: None,
         };
-        ts.insert_pool(pool).await?;
+        ts.insert(pool).await?;
 
         // #191 — if the next task is an auto-approve kind (or chain
         // of them), advance through them right now. The final state
@@ -761,7 +761,7 @@ pub async fn approve_current(
         state.current_task_id = None;
         state.status = WorkflowStatus::Approved.as_str().to_owned();
         state.finished_at = Some(now);
-        // #73 — save_partial (not save_pool) so the unchanged
+        // #73 — save_partial (not save) so the unchanged
         // `requested_by -> rustango_users` FK is not re-bound/re-validated;
         // a full-row UPDATE 787s on SQLite when the original submitter's
         // user row is gone (deleted / deactivated-and-purged).
@@ -798,7 +798,7 @@ pub async fn reject_current(
 
     state.status = WorkflowStatus::NeedsChanges.as_str().to_owned();
     state.finished_at = Some(now);
-    // #73 — save_partial (not save_pool): see approve_current; avoids
+    // #73 — save_partial (not save): see approve_current; avoids
     // re-validating the unchanged `requested_by -> rustango_users` FK.
     state
         .save_partial(&["status", "current_task_id", "finished_at"], pool)
@@ -834,13 +834,13 @@ pub async fn cancel(
         ts.status = TaskStatus::Skipped.as_str().to_owned();
         ts.decided_by = Some(decided_by);
         ts.decided_at = Some(now);
-        ts.save_pool(pool).await?;
+        ts.save(pool).await?;
     }
 
     state.status = WorkflowStatus::Cancelled.as_str().to_owned();
     state.finished_at = Some(now);
     state.current_task_id = None;
-    // #73 — save_partial (not save_pool): see approve_current; avoids
+    // #73 — save_partial (not save): see approve_current; avoids
     // re-validating the unchanged `requested_by -> rustango_users` FK.
     state
         .save_partial(&["status", "current_task_id", "finished_at"], pool)

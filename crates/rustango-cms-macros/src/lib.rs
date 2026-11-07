@@ -38,6 +38,7 @@
 //! the full surface authors interact with at runtime.
 
 mod block;
+mod cms_admin;
 mod page_type;
 
 use proc_macro::TokenStream;
@@ -83,6 +84,19 @@ pub fn derive_page_type(input: TokenStream) -> TokenStream {
 pub fn derive_block(input: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(input as syn::DeriveInput);
     block::expand(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// `#[derive(CmsAdmin)]` — an admin editor (list, search, add, edit,
+/// delete) for a `#[derive(Model)]` type, at `/cms-admin/x/<slug>`.
+/// Fields to edit carry the same `#[field(widget = …, label = "…")]`
+/// attributes as page types; the struct needs `Default` and an
+/// `impl rustango_cms::CmsAdminOverrides` (empty is fine).
+#[proc_macro_derive(CmsAdmin, attributes(cms_admin, field))]
+pub fn derive_cms_admin(input: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(input as syn::DeriveInput);
+    cms_admin::expand(input)
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }

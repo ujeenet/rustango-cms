@@ -53,7 +53,7 @@ async fn a_long_body_saves_once_widened() {
     let body = "x".repeat(100_000);
 
     assert!(
-        snippet(body.clone()).save_pool(&pool).await.is_err(),
+        snippet(body.clone()).save(&pool).await.is_err(),
         "a TEXT column refuses 100 KB in strict mode"
     );
 
@@ -66,7 +66,7 @@ async fn a_long_body_saves_once_widened() {
     );
 
     let mut row = snippet(body.clone());
-    row.save_pool(&pool).await.expect("saves once widened");
+    row.save(&pool).await.expect("saves once widened");
     let back = Snippet::objects()
         .where_(Snippet::id.eq(row.id.get().copied().expect("id")))
         .first(&pool)
@@ -100,10 +100,10 @@ async fn identity_lookups_are_exact_once_converted() {
     let pool = fresh_db("collate").await;
     let mut hero = snippet(String::new());
     hero.slug = "Hero".to_owned();
-    hero.save_pool(&pool).await.expect("Hero");
+    hero.save(&pool).await.expect("Hero");
     let mut lower = snippet(String::new());
     lower.slug = "hero".to_owned();
-    assert!(lower.save_pool(&pool).await.is_err(), "the default collation folds case");
+    assert!(lower.save(&pool).await.is_err(), "the default collation folds case");
 
     let changed = rustango_cms::mysql_text::exact_identity_columns(&pool).await.expect("collate");
     assert!(changed >= 1, "cms_snippet.slug is converted");
@@ -111,7 +111,7 @@ async fn identity_lookups_are_exact_once_converted() {
 
     let mut lower = snippet(String::new());
     lower.slug = "hero".to_owned();
-    lower.save_pool(&pool).await.expect("hero coexists with Hero");
+    lower.save(&pool).await.expect("hero coexists with Hero");
     assert!(by_slug(&pool, "HERO").await.expect("query").is_none(), "no case-folded match");
     let found = by_slug(&pool, "hero").await.expect("the row decodes").expect("row");
     assert_eq!(found.slug, "hero", "the exact row, not Hero");
@@ -135,7 +135,7 @@ async fn a_binary_column_from_an_earlier_boot_is_repaired() {
     for slug in ["Hero", "hero"] {
         let mut row = snippet(String::new());
         row.slug = slug.to_owned();
-        row.save_pool(&pool).await.expect(slug);
+        row.save(&pool).await.expect(slug);
     }
     let err = by_slug(&pool, "hero").await.expect_err("binary columns do not decode");
     assert!(err.to_string().contains("VARBINARY"), "{err}");

@@ -1,5 +1,5 @@
 {% extends "rcms_admin/_base.html" %}
-{% block title %}{{ "Sites" | translate(locale=LANG) }} — CMS Admin{% endblock %}
+{% block title %}{{ "Sites" | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
 {% block heading %}<h1>{{ "Sites" | translate(locale=LANG) }}</h1>{% endblock %}
 {% block content %}
 <div class="rcms-card-stack">

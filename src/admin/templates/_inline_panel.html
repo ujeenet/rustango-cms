@@ -1,0 +1,134 @@
+{#- One inline panel in the page editor: a list of row cards, each a set
+    of widgets named `inline__<panel>__<idx>__<field>`. The first card is
+    the blank row (flagged `template`), rendered inside a <template> that
+    the add button clones with the next free index. page_form.html's
+    script handles add, remove, move and renumbering on submit. `panel`
+    comes from handlers::inline_panel_ctx. -#}
+{% import "rcms_admin/_widget.html" as widget %}
+
+{% macro render(panel) %}
+{% if panel.spec.per_row %}
+{#- Per-row mode: headers only; a card's fields load when it opens and it
+    saves on its own; add, remove and reorder apply at once. -#}
+<div class="rcms-inline-panel-list-item" data-inline-panel="{{ panel.spec.name }}" data-per-row
+     data-endpoint="{{ panel.endpoint | default(value='') }}"
+     data-msg-saved="{{ "Saved" | translate(locale=LANG) }}"
+     data-msg-not-saved="{{ "Not saved" | translate(locale=LANG) }}"
+     data-msg-loading="{{ "Loading…" | translate(locale=LANG) }}"
+     data-msg-saving="{{ "Saving…" | translate(locale=LANG) }}"
+     data-msg-load-failed="{{ "Could not load this row." | translate(locale=LANG) }}"
+     data-msg-remove="{{ "Remove this row?" | translate(locale=LANG) }}">
+    <div class="rcms-inline-panel-list-head">
+        <span class="material-symbols-rounded sm">{{ panel.spec.icon | default(value="view_list") }}</span>
+        <strong>{{ panel.spec.label | translate(locale=LANG) }}</strong>
+        <span class="rcms-hint rcms-inline-panel-cap" data-inline-count>{{ panel.row_count }}</span>
+    </div>
+    {% if panel.spec.help %}
+        <p class="rcms-hint rcms-inline-panel-help">{{ panel.spec.help | translate(locale=LANG) }}</p>
+    {% endif %}
+    {% if not panel.endpoint %}
+        <p class="rcms-hint">{{ "Save the page first, then add rows here." | translate(locale=LANG) }}</p>
+    {% else %}
+    <div class="rcms-inline-panel-rows" data-inline-rows>
+        {% for card in panel.cards %}
+            <details class="rcms-inline-panel-row" data-inline-row data-row-id="{{ card.id }}">
+                <summary class="rcms-inline-panel-row-header">
+                    <strong data-inline-row-title>{{ card.title }}</strong>
+                    <span class="rcms-inline-panel-row-actions">
+                        {% if panel.spec.can_order %}
+                            <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-inline-up title="{{ "Move up" | translate(locale=LANG) }}" aria-label="{{ "Move up" | translate(locale=LANG) }}"><span class="material-symbols-rounded sm">arrow_upward</span></button>
+                            <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-inline-down title="{{ "Move down" | translate(locale=LANG) }}" aria-label="{{ "Move down" | translate(locale=LANG) }}"><span class="material-symbols-rounded sm">arrow_downward</span></button>
+                        {% endif %}
+                        {% if panel.spec.can_delete %}
+                            <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small rcms-inline-panel-remove" data-inline-remove><span class="material-symbols-rounded sm">delete</span> {{ "Remove" | translate(locale=LANG) }}</button>
+                        {% endif %}
+                    </span>
+                </summary>
+                <div class="rcms-inline-panel-row-body" data-inline-card-body></div>
+            </details>
+        {% endfor %}
+        {% if panel.spec.can_add %}
+            <template data-inline-new-card>
+                <details class="rcms-inline-panel-row" data-inline-row data-row-id="" open>
+                    <summary class="rcms-inline-panel-row-header">
+                        <strong data-inline-row-title data-inline-title-auto>{{ panel.spec.row_label | default(value="Row") | translate(locale=LANG) }}</strong>
+                        <span class="rcms-inline-panel-row-actions">
+                            {% if panel.spec.can_order %}
+                                <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-inline-up title="{{ "Move up" | translate(locale=LANG) }}" aria-label="{{ "Move up" | translate(locale=LANG) }}"><span class="material-symbols-rounded sm">arrow_upward</span></button>
+                                <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-inline-down title="{{ "Move down" | translate(locale=LANG) }}" aria-label="{{ "Move down" | translate(locale=LANG) }}"><span class="material-symbols-rounded sm">arrow_downward</span></button>
+                            {% endif %}
+                            <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small rcms-inline-panel-remove" data-inline-remove><span class="material-symbols-rounded sm">delete</span> {{ "Remove" | translate(locale=LANG) }}</button>
+                        </span>
+                    </summary>
+                    <div class="rcms-inline-panel-row-body" data-inline-card-body></div>
+                </details>
+            </template>
+        {% endif %}
+    </div>
+    {% if panel.spec.can_add %}
+        <button type="button" class="rcms-btn rcms-btn-tonal rcms-btn-small rcms-inline-panel-add" data-inline-add>
+            <span class="material-symbols-rounded sm">add</span>
+            {% if panel.spec.row_label %}{{ "Add" | translate(locale=LANG) }} {{ panel.spec.row_label | translate(locale=LANG) | lower }}{% else %}{{ "Add row" | translate(locale=LANG) }}{% endif %}
+        </button>
+    {% endif %}
+    {% endif %}
+</div>
+{% else %}
+<div class="rcms-inline-panel-list-item" data-inline-panel="{{ panel.spec.name }}" data-placeholder="{{ panel.placeholder }}">
+    <div class="rcms-inline-panel-list-head">
+        <span class="material-symbols-rounded sm">{{ panel.spec.icon | default(value="view_list") }}</span>
+        <strong>{{ panel.spec.label | translate(locale=LANG) }}</strong>
+        <span class="rcms-hint rcms-inline-panel-cap">{{ panel.row_count }}{% if panel.spec.max_num %} / {{ panel.spec.max_num }}{% endif %}</span>
+    </div>
+    {% if panel.spec.help %}
+        <p class="rcms-hint rcms-inline-panel-help">{{ panel.spec.help | translate(locale=LANG) }}</p>
+    {% endif %}
+    <div class="rcms-inline-panel-rows" data-inline-rows>
+        {% for card in panel.cards %}
+            {% if card.template %}
+                {% if not panel.spec.can_add %}{% continue %}{% endif %}
+                <template data-inline-template>
+            {% endif %}
+            <details class="rcms-inline-panel-row" data-inline-row data-row-idx="{{ card.idx }}"{% if card.template %} open{% endif %}>
+                <summary class="rcms-inline-panel-row-header">
+                    <strong{% if not card.title %} data-inline-title-auto{% endif %}>{% if card.title %}{{ card.title }}{% else %}{{ panel.spec.row_label | default(value="Row") | translate(locale=LANG) }}{% endif %}</strong>
+                    <span class="rcms-inline-panel-row-actions">
+                        {% if panel.spec.can_order %}
+                            <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-inline-up
+                                    title="{{ "Move up" | translate(locale=LANG) }}" aria-label="{{ "Move up" | translate(locale=LANG) }}">
+                                <span class="material-symbols-rounded sm">arrow_upward</span>
+                            </button>
+                            <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small" data-inline-down
+                                    title="{{ "Move down" | translate(locale=LANG) }}" aria-label="{{ "Move down" | translate(locale=LANG) }}">
+                                <span class="material-symbols-rounded sm">arrow_downward</span>
+                            </button>
+                        {% endif %}
+                        {% if panel.spec.can_delete or card.template %}
+                            <button type="button" class="rcms-btn rcms-btn-text rcms-btn-small rcms-inline-panel-remove" data-inline-remove>
+                                <span class="material-symbols-rounded sm">delete</span> {{ "Remove" | translate(locale=LANG) }}
+                            </button>
+                        {% endif %}
+                    </span>
+                </summary>
+                <div class="rcms-inline-panel-row-body">
+                    <input type="hidden" name="inline__{{ panel.spec.name }}__{{ card.idx }}__id" value="{{ card.id }}">
+                    {% for w in card.widgets %}
+                        {{ widget::render(w=w) }}
+                    {% endfor %}
+                </div>
+            </details>
+            {% if card.template %}
+                </template>
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% if panel.spec.can_add %}
+        <button type="button" class="rcms-btn rcms-btn-tonal rcms-btn-small rcms-inline-panel-add" data-inline-add
+                {% if panel.spec.max_num %}data-max="{{ panel.spec.max_num }}"{% endif %}>
+            <span class="material-symbols-rounded sm">add</span>
+            {% if panel.spec.row_label %}{{ "Add" | translate(locale=LANG) }} {{ panel.spec.row_label | translate(locale=LANG) | lower }}{% else %}{{ "Add row" | translate(locale=LANG) }}{% endif %}
+        </button>
+    {% endif %}
+</div>
+{% endif %}
+{% endmacro render %}

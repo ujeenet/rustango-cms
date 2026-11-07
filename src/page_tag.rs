@@ -67,8 +67,39 @@ pub async fn tags_for_page(
         .await
 }
 
-/// Replace the tag set for a page. Idempotent — repeats produce no
-/// duplicate rows. Tag names are normalized via [`normalize_name`].
+/// `names` normalized via [`normalize_name`], empties and repeats dropped.
+fn wanted_names(names: &[String]) -> Vec<String> {
+    let mut wanted: Vec<String> = Vec::new();
+    for n in names {
+        let norm = normalize_name(n);
+        if !norm.is_empty() && !wanted.contains(&norm) {
+            wanted.push(norm);
+        }
+    }
+    wanted
+}
+
+/// Whether [`replace_tags`] with `names` would change the page's tags,
+/// judged without writing.
+///
+/// # Errors
+/// Driver / query failures.
+pub async fn tags_differ(
+    pool: &rustango::sql::Pool,
+    page_id: i64,
+    names: &[String],
+) -> Result<bool, rustango::sql::ExecError> {
+    let mut wanted = wanted_names(names);
+    let mut have: Vec<String> = tags_for_page(pool, page_id).await?.into_iter().map(|t| t.name).collect();
+    wanted.sort_unstable();
+    have.sort_unstable();
+    Ok(wanted != have)
+}
+
+/// Replace the tag set for a page with `names`, writing only the
+/// difference: tags no longer named are deleted, new ones inserted, and
+/// an unchanged set writes nothing. Tag names are normalized via
+/// [`normalize_name`]. Returns whether anything changed.
 ///
 /// # Errors
 /// Driver / query failures.
@@ -76,31 +107,38 @@ pub async fn replace_tags(
     pool: &rustango::sql::Pool,
     page_id: i64,
     names: &[String],
-) -> Result<(), rustango::sql::ExecError> {
+) -> Result<bool, rustango::sql::ExecError> {
     use rustango::core::Column as _;
     use rustango::sql::FetcherPool as _;
+    let wanted = wanted_names(names);
     let existing: Vec<PageTag> = PageTag::objects()
         .where_(PageTag::page_id.eq(page_id))
         .fetch(pool)
         .await?;
+    let mut changed = false;
+    let mut kept = std::collections::HashSet::new();
     for row in existing {
-        row.delete_pool(pool).await?;
+        // A duplicate row (older versions could leave one) goes too.
+        if wanted.contains(&row.name) && kept.insert(row.name.clone()) {
+            continue;
+        }
+        row.delete(pool).await?;
+        changed = true;
     }
-    let mut seen = std::collections::HashSet::new();
-    for n in names {
-        let norm = normalize_name(n);
-        if norm.is_empty() || !seen.insert(norm.clone()) {
+    for name in wanted {
+        if kept.contains(&name) {
             continue;
         }
         let mut row = PageTag {
             id: Auto::Unset,
             page_id,
-            name: norm,
+            name,
             created_at: Auto::Unset,
         };
-        row.insert_pool(pool).await?;
+        row.insert(pool).await?;
+        changed = true;
     }
-    Ok(())
+    Ok(changed)
 }
 
 /// Pre-fetch every tag attached to any page in `page_ids`, grouped

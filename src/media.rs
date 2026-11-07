@@ -174,8 +174,10 @@ impl Media {
         if self.kind != "image" {
             return String::new();
         }
+        // Signed like every CMS-rendered image URL (#643); an unknown
+        // filter yields an empty URL.
         match self.id.get() {
-            Some(id) => format!("/__media__/{filter}/{id}"),
+            Some(id) => crate::rendition::rendition_url_for(*id, filter, None).unwrap_or_default(),
             None => String::new(),
         }
     }

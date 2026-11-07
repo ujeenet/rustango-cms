@@ -1,0 +1,36 @@
+# cargo-nextest configuration (same setup as the rustango framework).
+#
+# `cargo test` runs the integration-test binaries one at a time, threading
+# only inside each, so most cores sit idle. nextest runs every test as its
+# own process across all cores.
+#
+#   cargo nextest run --workspace                     # postgres build
+#   cargo nextest run --workspace --features sqlite   # sqlite build
+#   cargo test --workspace --doc                      # doctests: nextest can't
+#
+# Process-per-test also means a `static` shared between tests of one file
+# no longer couples them: each test starts from a fresh process.
+
+[profile.default]
+# Surface a hang as a hang instead of a silently slow run.
+slow-timeout = { period = "30s", terminate-after = 8 }
+# Never retry: a test that passes on the second try is a bug to fix.
+retries = 0
+# Report every failure in one run.
+fail-fast = false
+status-level = "fail"
+final-status-level = "slow"
+
+[profile.live]
+# Suites pointed at one shared database server (DATABASE_URL /
+# MYSQL_TEST_URL) create and drop the same tables; run them one at a time.
+test-threads = 1
+slow-timeout = { period = "60s", terminate-after = 10 }
+fail-fast = false
+failure-output = "immediate-final"
+
+[profile.ci]
+# CI runners are colder and busier: a little more patience.
+slow-timeout = { period = "60s", terminate-after = 10 }
+retries = 0
+fail-fast = false

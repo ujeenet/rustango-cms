@@ -1,0 +1,62 @@
+{#- The list screen of a `#[derive(CmsAdmin)]` model editor. -#}
+{% extends "rcms_admin/_base.html" %}
+{% block title %}{{ meta.label | translate(locale=LANG) }} — {{ site_name | default(value="CMS Admin") }}{% endblock %}
+{% block heading %}{{ meta.label | translate(locale=LANG) }}{% endblock %}
+
+{% block topbar_actions %}
+    {% if can_add %}
+        <a href="{{ meta.url }}/new" class="rcms-btn">
+            <span class="material-symbols-rounded sm">add</span> {{ "Add" | translate(locale=LANG) }} {{ meta.singular | translate(locale=LANG) }}
+        </a>
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+{% if meta.searchable %}
+    <form method="get" action="{{ meta.url }}" role="search" class="rcms-flex rcms-items-center rcms-gap-2 rcms-mb-3">
+        <label class="rcms-search-input rcms-flex-1">
+            <span class="material-symbols-rounded">search</span>
+            <input type="search" name="q" value="{{ q }}" autocomplete="off"
+                   placeholder="{{ "Search…" | translate(locale=LANG) }}">
+        </label>
+        {% if q %}<a href="{{ meta.url }}" class="rcms-btn rcms-btn-outlined rcms-btn-small">{{ "Clear" | translate(locale=LANG) }}</a>{% endif %}
+    </form>
+{% endif %}
+
+{% if items | length == 0 %}
+    <div class="rcms-empty">
+        {% if q %}
+            <p>{{ "Nothing matches your search." | translate(locale=LANG) }}</p>
+        {% else %}
+            <p>{{ "Nothing here yet." | translate(locale=LANG) }}</p>
+            {% if can_add %}
+                <a href="{{ meta.url }}/new" class="rcms-btn">{{ "Add" | translate(locale=LANG) }} {{ meta.singular | translate(locale=LANG) }}</a>
+            {% endif %}
+        {% endif %}
+    </div>
+{% else %}
+    <div class="rcms-table-wrap">
+    <table class="rcms-data">
+        <thead>
+            <tr>
+                {% for col in columns %}<th>{{ col | translate(locale=LANG) }}</th>{% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+        {% for item in items %}
+            <tr>
+                {% for cell in item.cells %}
+                    {% if loop.first %}
+                        <td><a href="{{ meta.url }}/edit?id={{ item.id }}"><strong>{{ cell | default(value="—") }}</strong></a></td>
+                    {% else %}
+                        <td>{{ cell | truncate(length=120) }}</td>
+                    {% endif %}
+                {% endfor %}
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% include "rcms_admin/_pagination.html" %}
+{% endif %}
+{% endblock %}

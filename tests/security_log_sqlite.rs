@@ -3,6 +3,7 @@
 //! `cms_security_event`.
 #![cfg(feature = "sqlite")]
 
+use rustango::tenancy::TenantSlug;
 use rustango::core::Model as _;
 use rustango::login_throttle::{self, ClientIp, LoginRefused, LoginScope};
 use rustango::sql::{Auto, Pool};
@@ -39,7 +40,7 @@ async fn pool() -> Pool {
             password_changed_at: None,
             sessions_revoked_at: None,
         }
-        .insert_pool(&pool)
+        .insert(&pool)
         .await
         .expect("insert user");
     }
@@ -53,8 +54,15 @@ fn request() -> LoginRequest {
     request
 }
 
+/// A site for `slug`, with an org id derived from it so different slugs
+/// are different sites.
+fn site(slug: &str) -> TenantSlug {
+    let id = slug.bytes().fold(7_i64, |h, b| h.wrapping_mul(31).wrapping_add(i64::from(b))).abs();
+    TenantSlug::new(id, slug)
+}
+
 async fn login(pool: &Pool, slug: &str, ident: &str, password: &str) -> Result<User, MemberLoginError> {
-    authenticate_member(pool, slug, &request(), "member", ident, password).await
+    authenticate_member(pool, &site(slug), &request(), "member", ident, password).await
 }
 
 async fn events(pool: &Pool, event: &str) -> Vec<security_log::SecurityEvent> {
@@ -104,7 +112,7 @@ async fn repeated_failures_lock_the_account_even_for_the_right_password() {
     assert!(login(&pool, "sec-lock-other", "reader", "right-pass").await.is_ok());
 
     // A password reset lifts it.
-    security_log::unlock(slug, "reader").await;
+    security_log::unlock(&site(slug), "reader").await;
     assert!(login(&pool, slug, "reader", "right-pass").await.is_ok());
 }
 
@@ -129,8 +137,8 @@ async fn unknown_and_disabled_accounts_fail_alike_but_log_why() {
 /// gate uses, or a lock set by the admin `/login` would go unseen here.
 #[tokio::test]
 async fn lock_keys_match_the_framework_gate() {
-    let slug = "sec-key";
-    let scope = LoginScope::Tenant(slug.to_owned());
+    let key = site("sec-key");
+    let scope = LoginScope::Tenant(key.clone());
     for _ in 0..5 {
         login_throttle::shared()
             .begin(&scope, &ClientIp::default(), "Admin")
@@ -139,10 +147,12 @@ async fn lock_keys_match_the_framework_gate() {
             .failed()
             .await;
     }
-    assert!(security_log::is_locked(slug, &["admin"]).await);
-    assert!(!security_log::is_locked("sec-key-other", &["admin"]).await);
-    security_log::unlock(slug, " ADMIN ").await;
-    assert!(!security_log::is_locked(slug, &["admin"]).await);
+    assert!(security_log::is_locked(&key, &["admin"]).await);
+    assert!(!security_log::is_locked(&site("sec-key-other"), &["admin"]).await);
+    // A new site that reuses the slug is a different site: no lock.
+    assert!(!security_log::is_locked(&TenantSlug::new(key.org_id + 1, "sec-key"), &["admin"]).await);
+    security_log::unlock(&key, " ADMIN ").await;
+    assert!(!security_log::is_locked(&key, &["admin"]).await);
 }
 
 #[tokio::test]

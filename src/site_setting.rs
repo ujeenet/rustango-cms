@@ -80,7 +80,7 @@ pub async fn upsert(
 ) -> Result<SiteSetting, rustango::sql::ExecError> {
     if let Some(mut row) = get(pool, scope).await? {
         row.value_json = value;
-        row.save_pool(pool).await?;
+        row.save(pool).await?;
         return Ok(row);
     }
     let mut row = SiteSetting {
@@ -89,7 +89,7 @@ pub async fn upsert(
         value_json: value,
         updated_at: Auto::Unset,
     };
-    row.insert_pool(pool).await?;
+    row.insert(pool).await?;
     Ok(row)
 }
 

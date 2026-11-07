@@ -18,7 +18,9 @@
 //! Sections with their own gate are left to it: users, roles and SSO
 //! providers are superuser-only; the page-type builder, templates,
 //! notifications and sites check their dedicated codenames. A section
-//! that isn't listed needs only admin access.
+//! that isn't listed needs only admin access. A custom admin page
+//! (`/cms-admin/x/<slug>`) needs the codenames its
+//! `permission_resource` names, when it names one.
 
 use axum::http::{Method, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
@@ -128,6 +130,14 @@ pub(crate) fn required(method: &Method, path: &str) -> Option<Requirement> {
             codename: "rustango_roles.edit".to_owned(),
             page: None,
         });
+    }
+    // Custom admin pages name their own codename prefix.
+    if let Some(rest) = path.strip_prefix("/cms-admin/x/") {
+        let mut segs = rest.split('/');
+        let slug = segs.next().unwrap_or_default();
+        let reads = method == Method::GET || method == Method::HEAD;
+        return super::admin_page::required_codename(slug, reads, segs.next())
+            .map(|codename| Requirement { codename, page: None });
     }
     let (section, prefix) = SECTIONS
         .iter()

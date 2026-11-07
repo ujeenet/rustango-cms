@@ -62,7 +62,7 @@ async fn tree() -> Tree {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(&pool).await.expect("page type");
+    pt.save(&pool).await.expect("page type");
     let type_id = pt.id.get().copied().expect("page type id");
 
     let mk = |title: &str, slug: &str, path: &str, url: &str| {
@@ -101,7 +101,7 @@ async fn tree() -> Tree {
             updated_at: Auto::Unset,
         };
         async move {
-            page.save_pool(&pool).await.expect("page");
+            page.save(&pool).await.expect("page");
             page.id.get().copied().expect("page id")
         }
     };
@@ -117,7 +117,7 @@ async fn map(pool: &Pool, hostname: &str, root_page_id: i64) {
         root_page_id,
         created_at: Auto::Unset,
     };
-    row.save_pool(pool).await.expect("site row");
+    row.save(pool).await.expect("site row");
 }
 
 /// The non-breaking guarantee: a site that has never heard of this
@@ -196,7 +196,7 @@ async fn a_mid_tree_page_serves_a_hostname_from_its_own_path() {
     shop.path = "0001/0002/".to_owned();
     shop.url_path = "/home/shop".to_owned();
     shop.depth = 2;
-    shop.save_pool(&t.pool).await.expect("move");
+    shop.save(&t.pool).await.expect("move");
 
     let prefix = site::prefix_for_host(&t.pool, "shop.example")
         .await

@@ -177,7 +177,7 @@ pub(crate) async fn create(
         enabled: true,
         created_at: rustango::sql::Auto::Unset,
     };
-    row.insert_pool(tenant.pool()).await?;
+    row.insert(tenant.pool()).await?;
     Ok(Redirect::to("/cms-admin/notifications").into_response())
 }
 
@@ -196,7 +196,7 @@ pub(crate) async fn toggle(
         .await?
     {
         t.enabled = !t.enabled;
-        t.save_pool(tenant.pool()).await?;
+        t.save(tenant.pool()).await?;
     }
     Ok(Redirect::to("/cms-admin/notifications").into_response())
 }
@@ -215,7 +215,7 @@ pub(crate) async fn delete(
         .first(tenant.pool())
         .await?
     {
-        t.delete_pool(tenant.pool()).await?;
+        t.delete(tenant.pool()).await?;
     }
     Ok(Redirect::to("/cms-admin/notifications").into_response())
 }

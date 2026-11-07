@@ -52,45 +52,79 @@ async fn list_inner(
         Err(msg) => return Ok(crate::api::error::ApiError::bad_request(msg).into_response()),
     };
 
-    let mut rows: Vec<Snippet> = Snippet::objects().fetch(pool).await?;
-
-    if let Some(t) = qs.type_name.as_deref().filter(|s| !s.is_empty()) {
-        rows.retain(|s| s.type_name == t);
-    }
-    if let Some(needle) = qs.list.search.as_deref().filter(|s| !s.trim().is_empty()) {
-        let n = crate::api::search::fold(needle);
-        rows.retain(|s| {
-            crate::api::search::contains_folded(&s.title, &n)
-                || crate::api::search::contains_folded(&s.slug, &n)
-                || crate::api::search::contains_folded(&s.type_name, &n)
-                || crate::api::search::contains_folded(&s.body_markdown, &n)
-        });
-    }
-
-    if orderings.iter().any(|o| o.random) {
-        use rand::seq::SliceRandom as _;
-        rows.shuffle(&mut rand::rng());
-    } else if !orderings.is_empty() {
-        rows.sort_by(|a, b| compare_snippet(a, b, &orderings));
-    } else {
-        rows.sort_by(|a, b| b.updated_at.get().cmp(&a.updated_at.get()));
-    }
-
     // #changes — `?updated_since=` so a polling client can ask for only
     // what moved, instead of re-fetching the collection and diffing it.
     let updated_since = match crate::api::query::parse_updated_since(&qs.list) {
         Ok(v) => v,
         Err(msg) => return Ok(crate::api::error::ApiError::bad_request(msg).into_response()),
     };
-    if let Some(since) = updated_since {
-        rows.retain(|r| r.updated_at.get().copied().is_some_and(|t| t >= since));
-    }
-
-    let total_count = rows.len();
-    let window: Vec<&Snippet> = rows.iter().skip(offset).take(limit).collect();
+    // Exact filters run in SQL (#655); so do count and paging unless a
+    // text search (accent-folded, in Rust) or a text/random order needs
+    // the narrowed set in memory.
+    let narrowed = || {
+        let mut qs_db = Snippet::objects();
+        if let Some(t) = qs.type_name.as_deref().filter(|s| !s.is_empty()) {
+            qs_db = qs_db.where_(Snippet::type_name.eq(t.to_owned()));
+        }
+        if let Some(since) = updated_since {
+            qs_db = qs_db.where_(Snippet::updated_at.gte(since));
+        }
+        qs_db
+    };
+    let search = qs.list.search.as_deref().filter(|s| !s.trim().is_empty());
+    let sql_order: Option<Vec<(&'static str, bool)>> = if search.is_some() {
+        None
+    } else if orderings.is_empty() {
+        Some(vec![("updated_at", true)])
+    } else {
+        orderings
+            .iter()
+            .map(|o| match o.field.as_str() {
+                _ if o.random => None,
+                "updated_at" => Some(("updated_at", o.descending)),
+                "created_at" => Some(("created_at", o.descending)),
+                // Text orders stay in Rust: collations differ per backend.
+                _ => None,
+            })
+            .collect()
+    };
+    let (window, total_count): (Vec<Snippet>, usize) = if let Some(mut order) = sql_order {
+        use rustango::sql::CounterPool as _;
+        order.push(("id", true));
+        let total = usize::try_from(narrowed().count(pool).await?).unwrap_or_default();
+        let rows = narrowed()
+            .order_by(&order)
+            .limit(limit as i64)
+            // A huge `?offset=` must not wrap negative (backends differ).
+            .offset(i64::try_from(offset).unwrap_or(i64::MAX))
+            .fetch(pool)
+            .await?;
+        (rows, total)
+    } else {
+        let mut rows: Vec<Snippet> = narrowed().order_by(&[("id", true)]).fetch(pool).await?;
+        if let Some(needle) = search {
+            let n = crate::api::search::fold(needle);
+            rows.retain(|s| {
+                crate::api::search::contains_folded(&s.title, &n)
+                    || crate::api::search::contains_folded(&s.slug, &n)
+                    || crate::api::search::contains_folded(&s.type_name, &n)
+                    || crate::api::search::contains_folded(&s.body_markdown, &n)
+            });
+        }
+        if orderings.iter().any(|o| o.random) {
+            use rand::seq::SliceRandom as _;
+            rows.shuffle(&mut rand::rng());
+        } else if !orderings.is_empty() {
+            rows.sort_by(|a, b| compare_snippet(a, b, &orderings));
+        } else {
+            rows.sort_by(|a, b| b.updated_at.get().cmp(&a.updated_at.get()));
+        }
+        let total = rows.len();
+        (rows.into_iter().skip(offset).take(limit).collect(), total)
+    };
 
     let mut items = Vec::with_capacity(window.len());
-    for s in window {
+    for s in &window {
         let mut obj = serialize_snippet(s);
         // Validated against the first serialized row rather than a
         // hand-written list, so it cannot drift from what we return.

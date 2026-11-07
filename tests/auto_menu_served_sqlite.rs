@@ -34,7 +34,7 @@ async fn file_pool(tag: &str) -> Pool {
         created_at: Auto::Unset,
         updated_at: Auto::Unset,
     };
-    pt.save_pool(&pool).await.expect("page type");
+    pt.save(&pool).await.expect("page type");
     pool
 }
 
@@ -92,7 +92,7 @@ async fn the_auto_menu_lists_what_the_resolver_serves() {
         p.status = status.as_str().to_owned();
         p.go_live_at = *go_live;
         p.expire_at = *expire;
-        p.insert_pool(&pool).await.expect("page");
+        p.insert(&pool).await.expect("page");
     }
     let listed: Vec<String> = rustango_cms::auto_menu::prefetch(&pool)
         .await

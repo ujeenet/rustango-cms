@@ -135,6 +135,31 @@ pub async fn render_with_route(
     .await
 }
 
+/// Most grandchild ids an index page reads for its translations; cards
+/// past it show in the default language.
+const MAX_GRANDCHILD_IDS: i64 = 500;
+
+/// Ids of the children of `children`, at most
+/// [`MAX_GRANDCHILD_IDS`] of them.
+async fn grandchild_ids(pool: &rustango::sql::Pool, children: &[Page]) -> Vec<i64> {
+    use rustango::core::Column as _;
+    let child_ids: Vec<i64> = children.iter().filter_map(|p| p.id.get().copied()).collect();
+    if child_ids.is_empty() {
+        return Vec::new();
+    }
+    Page::objects()
+        .where_(Page::parent_id.is_in(child_ids))
+        .order_by(&[("id", false)])
+        .limit(MAX_GRANDCHILD_IDS)
+        .values_list_flat("id")
+        .fetch::<i64>(pool)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(target: "rustango_cms::render", error = %e, "grandchild lookup failed");
+            Vec::new()
+        })
+}
+
 /// Render `page` using virtual extension data drawn from a posted
 /// form `HashMap` instead of the persisted row. The page row itself
 /// is still rendered verbatim, so callers should pre-overlay the
@@ -462,33 +487,11 @@ async fn render_inner(
     // map drives the current page; `translations_by_page[id]` is what
     // templates reach for inside `{% for c in children %}` loops so
     // card titles / descriptions translate too.
-    let mut related_ids: Vec<i64> = children
+    let related_ids: Vec<i64> = children
         .iter()
         .chain(ancestors.iter())
         .filter_map(|p| p.id.get().copied())
         .collect();
-    // #i18n — also cover *grandchildren* (children of children) so an
-    // index-of-index page (e.g. a homepage showing teaser cards for
-    // blog posts / portfolio items that live two levels down) can
-    // translate those card titles/excerpts via `translations_by_page`.
-    // One `IN (…)` query, skipped when there are no children.
-    {
-        use rustango::core::Column as _;
-        use rustango::sql::FetcherPool as _;
-        let child_ids: Vec<i64> = children
-            .iter()
-            .filter_map(|p| p.id.get().copied())
-            .collect();
-        if !child_ids.is_empty() {
-            if let Ok(grandchildren) = Page::objects()
-                .where_(Page::parent_id.is_in(child_ids))
-                .fetch(t.pool())
-                .await
-            {
-                related_ids.extend(grandchildren.iter().filter_map(|p| p.id.get().copied()));
-            }
-        }
-    }
     let (locale, translations, translations_by_page) =
         match crate::translation::resolve_locale(t.pool(), locale_code).await {
             Ok(Some(l)) => {
@@ -507,6 +510,11 @@ async fn render_inner(
                     let lid = l.id.get().copied().unwrap_or_default();
                     let mut all_ids = related_ids.clone();
                     all_ids.push(page_id);
+                    // #i18n — grandchildren too, so an index-of-index page
+                    // (teaser cards for posts two levels down) can translate
+                    // them via `translations_by_page`. Ids only, bounded, and
+                    // only off the default locale, where it is needed (#690).
+                    all_ids.extend(grandchild_ids(t.pool(), &children).await);
                     let by_page = crate::translation::fetch_for_pages(t.pool(), &all_ids, lid)
                         .await
                         .unwrap_or_default();
@@ -669,8 +677,17 @@ async fn render_inner(
     // precedence rule — framework keys win all). The match itself
     // surfaces as the framework-owned `route_name` + `route_captures`
     // ctx vars stamped below.
+    let mut route_template: Option<String> = None;
     if let Some(rm) = route_match {
         if let Ok(extra) = handler.route_context(t.pool(), page, rm).await {
+            match handler.route_outcome(rm, &extra) {
+                crate::routable::RouteOutcome::Render => {}
+                crate::routable::RouteOutcome::Template(name) => route_template = Some(name),
+                // The caller turns a bare 404 into the site's 404 page.
+                crate::routable::RouteOutcome::NotFound => {
+                    return axum::http::StatusCode::NOT_FOUND.into_response();
+                }
+            }
             for (k, v) in extra {
                 handler_ctx.insert(k, v);
             }
@@ -697,6 +714,12 @@ async fn render_inner(
         }
     }
 
+    // #936 — a handler extends `page` by returning a `page` object: its
+    // keys are added to the page the template sees; the framework's own
+    // keys (title, url_path, …) win on a clash.
+    if let Some(serde_json::Value::Object(extra)) = handler_ctx.remove("page") {
+        merge_page_extras(&mut page_value, extra);
+    }
     let mut ctx = Context::new();
     for (k, v) in handler_ctx {
         ctx.insert(&k, &v);
@@ -938,9 +961,8 @@ async fn render_inner(
             current: Some(page),
         },
     );
-    let (menu_rows, snippet_html_map, site_settings, curated_menus) = rustango::__private_runtime::tokio::join!(
+    let (menu_rows, site_settings, curated_menus) = rustango::__private_runtime::tokio::join!(
         menu_fut,
-        crate::snippet_render::prefetch(t.pool(), tera, snippet_locale_id),
         crate::site_setting::prefetch_for_render(t.pool(), child_locale_code.as_deref()),
         curated_fut,
     );
@@ -993,12 +1015,9 @@ async fn render_inner(
         }
     }
 
-    // #250 — `snippet_html_map` (joined above) pre-renders every snippet
-    // whose `LibraryTypeHandler::render_template()` declares a template,
-    // into a `(type, id) → html` map for the `snippet_html(type=…, id=N)`
-    // Tera function. One render per snippet row; the result is shared
-    // across every page that references the same snippet (so a Category
-    // chip referenced from N blog cards renders once).
+    // #250 / #731 — `snippet_html(type=…, id=N)` records what the page
+    // asks for during `tera.render`; `snippet_render::fill` renders just
+    // those rows afterwards (one per key, however often it is referenced).
     //
     // #245 — `site_settings` holds every `cms_site_setting` row for the
     // `site_setting(scope=…)` Tera function. Bounded by distinct-scope
@@ -1033,7 +1052,7 @@ async fn render_inner(
     let _menus_guard = crate::navigation::install(curated_menus); // #639 — menu(slug=…)
     let _cms_snippets_guard = crate::snippet::install(snippets_html, snippets_html_inline); // #845 — cms_snippet(slug=…)
     let _access_guard = crate::access::install(access); // #members — can_view / visible
-    let _snippet_html_guard = crate::snippet_render::install(snippet_html_map); // #250
+    let snippet_recorder = crate::snippet_render::record(); // #250 / #731
                                                                                 // #565 — `stream_render(name="…")` reads this thread-local (Tera 1.20
                                                                                 // functions can't see context); feeds code stream fields + builder zones.
     let _stream_html_guard = crate::block::tera_helpers::install(stream_html);
@@ -1051,17 +1070,34 @@ async fn render_inner(
     // the name is editor-typed and may point at a template that was
     // renamed or never created, and a page going dark over a typo is a
     // worse outcome than one rendering in its type's default layout.
-    let template = pick_template(
+    let template = choose_template(
+        route_template.as_deref(),
         &page.template_override,
         &pt.default_template,
         tera,
         page.id.get().copied().unwrap_or_default(),
     );
     let rendered = tera.render(template, &ctx);
-    // Every thread-local guard above is only needed for `tera.render`;
-    // from here on awaiting is safe.
+    let snippet_keys = snippet_recorder.take();
+    // Every thread-local guard above is only needed for `tera.render`.
+    // Clear them before awaiting: snippet templates rendered by `fill`
+    // must see the same (empty) helpers whichever thread resumes it.
+    drop((
+        _pageurl_guard,
+        _url_prefix_guard,
+        _site_prefix_guard,
+        _children_guard,
+        _auto_menu_guard,
+        _menus_guard,
+        _cms_snippets_guard,
+        _access_guard,
+        _stream_html_guard,
+        _site_settings_guard,
+        _switcher_guard,
+    ));
     match rendered {
         Ok(html) => {
+            let html = crate::snippet_render::fill(t.pool(), tera, snippet_locale_id, html, snippet_keys).await;
             // Rich-text internal links anywhere in the page — extension
             // fields and stream blocks alike (#682).
             let html = crate::richtext::resolve_internal_links(t.pool(), html).await;
@@ -1070,6 +1106,16 @@ async fn render_inner(
             } else {
                 html
             };
+            if crate::admin_bar::active() || crate::template_inspector::active() {
+                // A signed-in admin's own view (admin bar, template
+                // inspector): never cached.
+                let mut html = html;
+                if crate::template_inspector::active() {
+                    html = crate::template_inspector::annotate(html, tera, template, &t.org.slug);
+                }
+                let html = crate::admin_bar::add(html, page.id.get().copied().unwrap_or_default());
+                return page_response(html, true);
+            }
             page_response(html, degraded)
         }
         Err(e) => {
@@ -1114,6 +1160,30 @@ fn page_response(html: String, degraded: bool) -> Response {
 /// page going dark over a typo is a worse failure than one rendering in
 /// its type's layout. The mismatch is logged rather than swallowed, so
 /// the reason is findable.
+/// Add a handler's `page` keys to the page object; existing keys win.
+fn merge_page_extras(page: &mut serde_json::Value, extra: serde_json::Map<String, serde_json::Value>) {
+    if let serde_json::Value::Object(map) = page {
+        for (k, v) in extra {
+            map.entry(k).or_insert(v);
+        }
+    }
+}
+
+/// The template to render: a routable pattern's own template when Tera
+/// knows it, else the page's override, else its type's template.
+fn choose_template<'a>(
+    route_template: Option<&'a str>,
+    override_name: &'a str,
+    default_template: &'a str,
+    tera: &Tera,
+    page_id: i64,
+) -> &'a str {
+    match route_template {
+        Some(name) if tera.get_template_names().any(|n| n == name) => name,
+        _ => pick_template(override_name, default_template, tera, page_id),
+    }
+}
+
 fn pick_template<'a>(
     override_name: &'a str,
     default_template: &'a str,
@@ -1219,5 +1289,30 @@ mod page_response_tests {
             partial.headers().get(axum::http::header::CACHE_CONTROL).map(|v| v.to_str().unwrap_or("")),
             Some("no-store")
         );
+    }
+}
+
+#[cfg(test)]
+mod choose_template_tests {
+    use super::*;
+
+    #[test]
+    fn handler_page_keys_extend_the_page_without_overriding_it() {
+        let mut page = serde_json::json!({"title": "Real", "url_path": "/a"});
+        let extra = serde_json::json!({"title": "Fake", "goal_amount": 500});
+        let serde_json::Value::Object(extra) = extra else { unreachable!() };
+        merge_page_extras(&mut page, extra);
+        assert_eq!(page["title"], "Real", "framework keys win");
+        assert_eq!(page["goal_amount"], 500, "handler keys are added");
+    }
+
+    #[test]
+    fn a_route_template_wins_when_it_exists() {
+        let mut tera = Tera::default();
+        tera.add_raw_templates(vec![("type.html", ""), ("route.html", ""), ("override.html", "")])
+            .unwrap();
+        assert_eq!(choose_template(Some("route.html"), "override.html", "type.html", &tera, 1), "route.html");
+        assert_eq!(choose_template(Some("missing.html"), "override.html", "type.html", &tera, 1), "override.html");
+        assert_eq!(choose_template(None, "", "type.html", &tera, 1), "type.html");
     }
 }

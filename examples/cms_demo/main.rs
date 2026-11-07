@@ -177,7 +177,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     rustango::manage::Cli::new()
         .tenancy()
-        .api(api)
+        // A site can also live under a path on the main domain
+        // (`create-tenant acme --path-prefix /acme` → example.com/acme/).
+        .tenant_header(rustango_cms::path_prefix::tenant_header())
+        .api(rustango_cms::path_prefix::serve(api))
         .migrations_dir(migrations_dir)
         .with_csrf_config(csrf_cfg)
         .seed(|registry| {

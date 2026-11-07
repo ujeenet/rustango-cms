@@ -1,0 +1,32 @@
+{% extends "_base.html" %}
+{% import "_macros.html" as m %}
+{% block content %}
+<div class="wrap">
+  <header class="page-head">
+    <div class="page-head__kicker">Section</div>
+    <h1>{{ page.title }}</h1>
+    {%- if builder.intro %}<p class="page-head__intro">{{ builder.intro }}</p>{% endif %}
+  </header>
+  {%- set featured = [] %}
+  {%- for a in children %}{% if a.builder.featured %}{% set_global featured = featured | concat(with=a) %}{% endif %}{% endfor %}
+  {%- if featured | length > 0 %}
+  {%- set lead = featured | first %}
+  <a class="card card--lead" href="{{ lead.url_path }}">
+    <div class="card__media">{% if lead.builder.cover %}<img src="{{ rcms_image_url(media_id=lead.builder.cover, filter='width-1600') }}" alt="">{% else %}<div class="placeholder" aria-hidden="true"></div>{% endif %}</div>
+    <div class="card__body">
+      <span class="card__kicker">Featured · {{ m::date(value=lead.builder.published | default(value="")) }}</span>
+      <h2>{{ lead.title }}</h2>
+      {%- if lead.builder.standfirst %}<p>{{ lead.builder.standfirst }}</p>{% endif %}
+    </div>
+  </a>
+  {%- endif %}
+  <div class="cards section">
+    {%- for a in children %}
+    {%- if not featured or a.id != featured[0].id %}
+    {%- set when = m::date(value=a.builder.published | default(value="")) %}
+    {{ m::card(p=a, summary=a.builder.standfirst | default(value=""), kicker=when) }}
+    {%- endif %}
+    {%- endfor %}
+  </div>
+</div>
+{% endblock content %}

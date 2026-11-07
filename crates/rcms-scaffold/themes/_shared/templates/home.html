@@ -1,0 +1,34 @@
+{% extends "_base.html" %}
+{% block content %}
+<section class="hero">
+  <div class="wrap">
+    <h1>{{ builder.headline | default(value=page.title) }}</h1>
+    {%- if builder.intro %}<p>{{ builder.intro }}</p>{% endif %}
+    {%- if builder.cta_label and builder.cta_url %}
+    <p><a class="button" href="{{ builder.cta_url }}">{{ builder.cta_label }}</a></p>
+    {%- endif %}
+  </div>
+</section>
+<div class="wrap">
+  <div class="prose">{{ stream_render(name="body") | safe }}</div>
+  {#- Each section of the site (Blog, Projects, News sections, …) with
+      its latest entries. Pages below a section appear here when they are
+      shown in menus ("Show in menus" on the page's Promote tab). -#}
+  {%- for section in children %}
+  {%- set entries = auto_menu(parent_id=section.id, depth=1) %}
+  {%- if entries | length > 0 %}
+  <section class="section">
+    <div class="section__head">
+      <h2>{{ section.title }}</h2>
+      <a href="{{ section.url_path }}">View all →</a>
+    </div>
+    <ul class="list">
+      {%- for entry in entries | slice(end=5) %}
+      <li><a href="{{ entry.url_path }}">{{ entry.title }}</a></li>
+      {%- endfor %}
+    </ul>
+  </section>
+  {%- endif %}
+  {%- endfor %}
+</div>
+{% endblock content %}

@@ -399,7 +399,7 @@ hundreds of rows one card at a time, and rustango 0.65.
   which returns `RenditionSig::{Valid, Unsigned, Rejected}`; image URLs
   rendered by the CMS now carry `?s=` even without
   `RCMS_RENDITION_SIGNING_KEY`.
-- Requires rustango 0.63 (built and tested against 0.63.0); see UPGRADING.md.
+- Requires rustango 0.65 (built and tested against 0.65.0); see UPGRADING.md.
 - `PageCacheInvalidator` methods, `purge_urls`, `invalidate_urls_on_commit`
   and `run_schedule_sweep_and_purge` take the request's `TenantSlug` (slug and
   org id), since the page cache keys on both. `CachePurgeJob` gains `org_id`.

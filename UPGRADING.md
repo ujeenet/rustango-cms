@@ -4,6 +4,13 @@ What to change in a host application when upgrading rustango-cms. Find
 your symptom below; each entry names the change and the fix. The full list
 is in [CHANGELOG.md](CHANGELOG.md).
 
+## Unreleased
+
+### rustango 0.67
+
+Bump `rustango` to `0.67`, then follow rustango's 0.66.0 and 0.67.0
+UPGRADING notes.
+
 ## 0.4.0
 
 ### `inline_panels` no longer compiles

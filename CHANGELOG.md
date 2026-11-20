@@ -8,6 +8,12 @@ Issue numbers such as `#258` in entries written before the public release
 refer to the project's earlier, private tracker, not to issues in this
 repository.
 
+## Unreleased
+
+### Changed
+
+- Requires rustango 0.67.
+
 ## 0.4.0 — 2026-11-07
 
 Starter themes (a finished-looking site from one command, with no Rust

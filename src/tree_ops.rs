@@ -106,10 +106,9 @@ where
     let stash: std::sync::Arc<std::sync::Mutex<Option<TreeError>>> =
         std::sync::Arc::new(std::sync::Mutex::new(None));
     let stash_cb = std::sync::Arc::clone(&stash);
-    // Immediate on SQLite (#915): a move reads sort orders then writes, so
-    // a deferred block let two concurrent moves read the same order or
-    // fail with SQLITE_BUSY. Same as `atomic` on the other backends.
-    let out = rustango::sql::atomic_immediate(pool, move |tx| {
+    // `atomic` takes the SQLite write lock at BEGIN (#915): a move reads
+    // sort orders then writes, so two concurrent moves must not interleave.
+    let out = rustango::sql::atomic(pool, move |tx| {
         Box::pin(async move {
             let mut guard = tx.lock().await?;
             match f(&mut guard).await {

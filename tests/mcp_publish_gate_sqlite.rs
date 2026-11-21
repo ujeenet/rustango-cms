@@ -248,6 +248,6 @@ async fn create_page_publishes_through_the_content_edit() {
 
 fn test_org() -> rustango::tenancy::Org {
     let mut org = rustango::tenancy::Org::new("t");
-    org.backend_kind = "sqlite".to_owned();
+    org.backend_kind = rustango::tenancy::BackendKind::Sqlite;
     org
 }

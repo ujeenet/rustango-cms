@@ -88,7 +88,7 @@ search_elasticsearch = ["rustango/http-client"]
 storage_s3 = ["rustango/storage-s3"]
 
 [dependencies]
-rustango = { version = "0.67", default-features = false, features = [
+rustango = { version = "0.68", default-features = false, features = [
     "admin", "admin-sso", "auth_flows", "cache", "cache-page", "config", "email", "forms", "jobs", "manage", "passwords", "runtime", "signals", "signed_url", "storage", "tenancy", "template_views", "websocket", "mcp", "http-client",
 ] }
 # In-tree proc-macro crate for `#[derive(PageType)]` — re-exported

@@ -23421,7 +23421,7 @@ mod password_reset_key_tests {
     pub(super) fn org(id: i64, slug: &str) -> Org {
         let mut org = Org::new(slug);
         org.id = rustango::sql::Auto::Set(id);
-        org.backend_kind = "sqlite".to_owned();
+        org.backend_kind = rustango::tenancy::BackendKind::Sqlite;
         org
     }
 

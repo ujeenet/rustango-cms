@@ -101,7 +101,7 @@ fn clear_references<'a>(
                     q.where_clause = within();
                     q.projection = Some(vec![pk]);
                     let stmt = tx.dialect().compile_select(&q)?;
-                    let rows: Vec<(i64,)> = rustango::sql::raw_query_tx(tx, &stmt.sql, stmt.params).await?;
+                    let rows: Vec<(i64,)> = rustango::sql::raw_query_tx(tx, &stmt.sql, stmt.params().to_vec()).await?;
                     let child_ids: Vec<i64> = rows.into_iter().map(|(id,)| id).collect();
                     clear_references(tx, r.schema.table, &child_ids, depth + 1).await?;
                 }

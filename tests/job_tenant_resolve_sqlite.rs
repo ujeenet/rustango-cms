@@ -32,7 +32,7 @@ async fn a_job_finds_an_unregistered_tenant_through_the_registry() {
     ddl(&registry, &Org::SCHEMA).await;
     let mut org = Org::new("acme");
     org.display_name = "Acme".to_owned();
-    org.backend_kind = "sqlite".to_owned();
+    org.backend_kind = rustango::tenancy::BackendKind::Sqlite;
     org.database_url = Some(tenant_url);
     org.save(&registry).await.expect("org");
     rustango_cms::task_queue::set_registry(registry);

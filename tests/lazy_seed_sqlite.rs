@@ -22,7 +22,7 @@ async fn file_pool(tag: &str) -> Pool {
 
 fn org(slug: &str) -> rustango::tenancy::Org {
     let mut org = rustango::tenancy::Org::new(slug);
-    org.backend_kind = "sqlite".to_owned();
+    org.backend_kind = rustango::tenancy::BackendKind::Sqlite;
     org
 }
 

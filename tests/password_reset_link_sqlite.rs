@@ -37,7 +37,7 @@ fn blog() -> rustango::tenancy::Org {
     let mut org = rustango::tenancy::Org::new("blog");
     org.id = Auto::Set(1);
     org.display_name = "Blog".to_owned();
-    org.backend_kind = "sqlite".to_owned();
+    org.backend_kind = rustango::tenancy::BackendKind::Sqlite;
     org
 }
 

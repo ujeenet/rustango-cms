@@ -8,7 +8,6 @@ ignore = [
     # hyper 0.14 / rustls 0.21 client behind the optional `cache_cloudfront`
     # feature. Tracked: #699.
     "RUSTSEC-2026-0258",
-    "RUSTSEC-2026-0104",
     "RUSTSEC-2026-0098",
     "RUSTSEC-2026-0099",
     # rsa 0.9.10 (Marvin timing attack): only via sqlx-mysql, i.e. the

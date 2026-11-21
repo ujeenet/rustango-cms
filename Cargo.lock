@@ -3470,9 +3470,9 @@ dependencies = [
 
 [[package]]
 name = "rustango"
-version = "0.68.0"
+version = "0.69.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf91ff9ad717e9b4db0cacd1b7ab323c06a2cee392bcb61f93b62606b7431922"
+checksum = "5414fc9fc472e11e77859d067a4d05da0406dc4bdb56ea2462b83fc96af4a315"
 dependencies = [
  "argon2",
  "async-stream",
@@ -3571,9 +3571,9 @@ dependencies = [
 
 [[package]]
 name = "rustango-macros"
-version = "0.68.0"
+version = "0.69.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82a004ba6fbb83261a1ad172fab42ac800356ea03c235c52d5f62cb3c7462a25"
+checksum = "4df1d33ef6bfbce8c4f02c302ee05a9972da90ae08fab21d4534e3048db6e711"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",

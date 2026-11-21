@@ -41,7 +41,7 @@ It runs multi-tenant from the start — every tenant gets its own page tree, med
 ```toml
 [dependencies]
 rustango-cms = "0.4"
-rustango     = { version = "0.68", default-features = false, features = ["admin", "auth_flows", "cache", "cache-page", "config", "email", "forms", "manage", "passwords", "runtime", "signals", "signed_url", "tenancy", "template_views"] }
+rustango     = { version = "0.69", default-features = false, features = ["admin", "auth_flows", "cache", "cache-page", "config", "email", "forms", "manage", "passwords", "runtime", "signals", "signed_url", "tenancy", "template_views"] }
 axum         = { version = "0.8", default-features = false, features = ["tokio", "http1", "json", "form", "query"] }
 tera         = { version = "1.20", default-features = false }
 serde        = { version = "1", features = ["derive"] }
@@ -49,7 +49,7 @@ serde        = { version = "1", features = ["derive"] }
 
 Pick the database with a feature: `postgres` is the default, and `default-features = false, features = ["sqlite"]` (or `"mysql"`) switches it — on both `rustango-cms` and `rustango`.
 
-Use the same `rustango` minor version as the CMS (0.68 today). Two semver-incompatible copies give you two different `Tenant` and `Pool` types that do not unify. [UPGRADING.md](UPGRADING.md) has the notes for each version.
+Use the same `rustango` minor version as the CMS (0.69 today). Two semver-incompatible copies give you two different `Tenant` and `Pool` types that do not unify. [UPGRADING.md](UPGRADING.md) has the notes for each version.
 
 The fastest start is the scaffolder, which writes a ready project for you; then `cargo run -- quickstart` creates a local SQLite site and starts it, the same in bash and Windows PowerShell. See [Getting started](docs/getting-started.md). Add `--theme blog`, `news`, `portfolio` or `blog-portfolio` for a finished-looking site with pages, menus and colours, and no Rust models: see [Starter themes](docs/themes.md).
 

@@ -6,9 +6,9 @@ is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Unreleased
 
-### rustango 0.68
+### rustango 0.69
 
-Bump `rustango` to `0.68`, then follow rustango's 0.66.0 to 0.68.0
+Bump `rustango` to `0.69`, then follow rustango's 0.66.0 to 0.69.0
 UPGRADING notes. `Org.backend_kind` is now a `BackendKind` enum.
 
 ## 0.4.0

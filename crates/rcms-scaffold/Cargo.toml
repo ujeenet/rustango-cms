@@ -19,7 +19,7 @@ readme = "README.md"
 [package.metadata.rcms-scaffold]
 # The framework requirement generated projects use. Must match what
 # rustango-cms requires (a test compares it with the workspace manifest).
-rustango = "0.68"
+rustango = "0.69"
 
 [dependencies]
 # Expands a starter theme's `theme.json` (page-type names → definitions).

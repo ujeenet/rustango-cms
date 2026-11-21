@@ -12,7 +12,7 @@ repository.
 
 ### Changed
 
-- Requires rustango 0.68.
+- Requires rustango 0.69.
 
 ## 0.4.0 — 2026-11-07
 

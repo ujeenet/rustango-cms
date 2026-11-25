@@ -40,7 +40,7 @@ It runs multi-tenant from the start — every tenant gets its own page tree, med
 
 ```toml
 [dependencies]
-rustango-cms = "0.4"
+rustango-cms = "0.5"
 rustango     = { version = "0.69", default-features = false, features = ["admin", "auth_flows", "cache", "cache-page", "config", "email", "forms", "manage", "passwords", "runtime", "signals", "signed_url", "tenancy", "template_views"] }
 axum         = { version = "0.8", default-features = false, features = ["tokio", "http1", "json", "form", "query"] }
 tera         = { version = "1.20", default-features = false }

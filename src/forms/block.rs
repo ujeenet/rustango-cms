@@ -100,6 +100,10 @@ impl Block for FormBlock {
                     .and_then(|o| o.get("form"))
                     .and_then(serde_json::Value::as_str)
                     .unwrap_or("");
+                // No form chosen yet: render nothing rather than an error.
+                if slug.trim().is_empty() {
+                    return Ok(String::new());
+                }
                 Ok(format!(
                     "<div class=\"rcms-form-missing\">Form <code>{}</code> not found.</div>",
                     crate::forms::render::html_escape(slug)
@@ -126,5 +130,15 @@ mod tests {
         let without = serde_json::json!({ "_schema": schema, "_form_id": 3, "_embed": "b1", "success_message": "  " });
         let html = FormBlock.render(&without, &ctx).expect("render");
         assert!(html.contains(">Form default</div>"), "{html}");
+    }
+
+    #[test]
+    fn a_block_with_no_form_chosen_renders_nothing() {
+        let tera = tera::Tera::default();
+        let ctx = BlockRenderCtx::new(&tera);
+        let empty = FormBlock.render(&serde_json::json!({ "form": "" }), &ctx).expect("render");
+        assert_eq!(empty, "");
+        let missing = FormBlock.render(&serde_json::json!({ "form": "gone" }), &ctx).expect("render");
+        assert!(missing.contains("rcms-form-missing"), "{missing}");
     }
 }

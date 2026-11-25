@@ -254,6 +254,7 @@
             // RichText editor DOM; reset it + build a fresh editor
             // (preserving the duplicated content).
             if (window.rcmsReenhanceRichtext) window.rcmsReenhanceRichtext(clone);
+            if (window.rcmsEnhanceMarkdown) window.rcmsEnhanceMarkdown(clone);
             serializeAll();
             notifyStreamChanged(root, "duplicate");
             return;
@@ -436,6 +437,7 @@
         // #294 — give a freshly-inserted RichText block its WYSIWYG editor
         // (no-op for blocks without a richtext field).
         if (window.rcmsEnhanceRichtext) window.rcmsEnhanceRichtext(clone);
+        if (window.rcmsEnhanceMarkdown) window.rcmsEnhanceMarkdown(clone);
     }
 
     // Apply a dict of `{field_name: value}` defaults to a fresh

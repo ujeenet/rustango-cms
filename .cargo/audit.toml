@@ -14,6 +14,10 @@ ignore = [
     # rsa 0.9.10 (Marvin timing attack): only via sqlx-mysql, i.e. the
     # optional `mysql` feature. No patched release exists.
     "RUSTSEC-2023-0071",
+    # libsqlite3-sys 0.30.1 (bundled SQLite CVE-2026-119375): pinned by
+    # sqlx 0.8 through rustango's `sqlite` feature; the fix needs 0.39, which
+    # no sqlx 0.8 release allows. Tracked in rustango; drop with its bump.
+    "RUSTSEC-2026-0459",
     # rkyv 0.7.46: a lockfile entry for another target; no dependency edge
     # reaches it on any feature set of this crate.
     "RUSTSEC-2026-0235",

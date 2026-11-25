@@ -2015,8 +2015,9 @@ table.rcms-data .rcms-actions .rcms-btn-small,
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 2px;
-    padding: 6px 8px;
+    gap: 2px 4px;
+    padding: 6px 8px 6px 0;
+    overflow: hidden;
     border-bottom: 1px solid var(--md-sys-color-outline-variant);
     background: var(--md-sys-color-surface-container-high);
 }
@@ -2046,11 +2047,16 @@ table.rcms-data .rcms-actions .rcms-btn-small,
 .rcms-richtext-tool .material-symbols-rounded { font-size: 18px; }
 .rcms-richtext-tool:hover { background: var(--md-sys-color-surface-container-highest); }
 /* Active fill comes from the shared active-tool rule (minimap section). */
-.rcms-richtext-sep {
-    width: 1px;
-    align-self: stretch;
-    margin: 4px 4px;
-    background: var(--md-sys-color-outline-variant);
+.rcms-richtext-tool:disabled { opacity: 0.38; cursor: default; background: transparent; }
+/* A tool group wraps as a unit; groups are divided by a hairline. Each
+   group's divider sits 1px left of its box, so on the first group of a
+   row it falls outside the toolbar's padding box and is clipped. */
+.rcms-richtext-group {
+    display: inline-flex;
+    gap: 2px;
+    margin-left: -1px;
+    padding-left: 5px;
+    border-left: 1px solid var(--md-sys-color-outline);
 }
 .rcms-richtext-surface { padding: 12px 14px; }
 .rcms-richtext-surface .ProseMirror {
@@ -2079,6 +2085,30 @@ table.rcms-data .rcms-actions .rcms-btn-small,
     border-radius: var(--md-sys-radius-sm);
 }
 .rcms-richtext-surface .ProseMirror a { color: var(--md-sys-color-primary); }
+.rcms-richtext-surface .ProseMirror img { max-width: 100%; height: auto; }
+.rcms-richtext-surface .ProseMirror hr {
+    border: 0;
+    border-top: 1px solid var(--md-sys-color-outline-variant);
+    margin: 16px 0;
+}
+.rcms-richtext-surface .ProseMirror table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0 0 10px;
+    table-layout: fixed;
+}
+.rcms-richtext-surface .ProseMirror th,
+.rcms-richtext-surface .ProseMirror td {
+    border: 1px solid var(--md-sys-color-outline);
+    padding: 6px 8px;
+    vertical-align: top;
+    text-align: left;
+    position: relative;
+}
+.rcms-richtext-surface .ProseMirror th { background: var(--md-sys-color-surface-container-high); }
+.rcms-richtext-surface .ProseMirror th p,
+.rcms-richtext-surface .ProseMirror td p { margin: 0; }
+.rcms-richtext-surface .ProseMirror .selectedCell { background: var(--md-sys-color-primary-container); }
 /* Unscoped — hints render inside and outside `.rcms-field` (page-form
    subscribe row, stream editor, pickers); one base look everywhere. */
 .rcms-hint {
@@ -2699,9 +2729,8 @@ table.rcms-data .rcms-actions .rcms-btn-small,
 }
 .rcms-brand-badge { line-height: 0; }
 .rcms-brand-badge img {
-    width: 132px;
-    height: 132px;
-    filter: drop-shadow(0 6px 16px rgba(0, 0, 0, .12));
+    width: 216px;
+    height: auto;
 }
 
 /* Brand images that come in a light and a dark version. They follow the

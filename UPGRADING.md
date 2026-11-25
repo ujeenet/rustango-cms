@@ -4,12 +4,32 @@ What to change in a host application when upgrading rustango-cms. Find
 your symptom below; each entry names the change and the fix. The full list
 is in [CHANGELOG.md](CHANGELOG.md).
 
-## Unreleased
+## 0.5.0
 
 ### rustango 0.69
 
-Bump `rustango` to `0.69`, then follow rustango's 0.66.0 to 0.69.0
-UPGRADING notes. `Org.backend_kind` is now a `BackendKind` enum.
+Bump `rustango` to `0.69` and `rustango-cms` to `0.5`, then follow
+rustango's own 0.66.0 to 0.69.0 UPGRADING notes. What hosts usually hit:
+
+- `org.backend_kind = "sqlite".to_owned()` no longer compiles:
+  `Org.backend_kind` is a `BackendKind` and `Org.storage_mode` a
+  `StorageMode`. Write `org.backend_kind = BackendKind::Sqlite`.
+- `rustango::sql::atomic_immediate` is gone. Call `atomic`; on SQLite it
+  begins with `BEGIN IMMEDIATE` now.
+- `CompiledStatement::params` is private. Read it with `params()`.
+- Postgres schema-mode tenants log in as a role of their own. The registry
+  login needs `CREATEROLE`, and the role passwords derive from
+  `RUSTANGO_TENANT_ROLE_SECRET`. Run `manage ensure-tenant-roles` after the
+  upgrade. Database-per-tenant setups (every SQLite and MySQL one) are not
+  affected.
+- Admin, ViewSet and template-view writes that would leave a queryset
+  scope or be hidden by the "view" hook are refused with 403.
+
+### A required `choice` block is now optional
+
+The built-in `choice` block no longer marks its select required. A block
+registered with its own options that needs a value should set
+`required: true` on its field.
 
 ## 0.4.0
 

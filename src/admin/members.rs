@@ -26,6 +26,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 use axum::Extension;
 use tera::Context;
 
+use rustango::core::Column as _;
 use rustango::extractors::{Tenant, TenantContext, TenantRejection};
 use rustango::login_throttle::{self, LoginRefused, LoginScope};
 use rustango::tenancy::auth::User;
@@ -75,6 +76,8 @@ pub(crate) async fn member_login_form(
     let mut ctx = Context::new();
     ctx.insert("action", "/members/login");
     ctx.insert("signup_url", "/members/signup");
+    ctx.insert("forgot_url", RESET_REQUEST_PATH);
+    ctx.insert("password_reset_done", &(q.get("reset").map(String::as_str) == Some("done")));
     ctx.insert("next", &next);
     if let Some(err) = q.get("error") {
         ctx.insert("error", err);
@@ -176,6 +179,8 @@ pub(crate) async fn member_signup_form(
 /// (`is_superuser = false`, no tier — an admin assigns roles later),
 /// and sign them straight in with a member cookie.
 pub(crate) async fn member_signup_submit(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
     Extension(ctx): Extension<Arc<TenantContext>>,
     tenant: Tenant,
     Form(form): Form<MemberSignupForm>,
@@ -213,7 +218,12 @@ pub(crate) async fn member_signup_submit(
     };
 
     match create_member(tenant.pool(), &email, &form.password, &display_name).await {
-        Ok(user) => signed_in_redirect(&ctx, &user, &tenant.org, &next),
+        Ok(user) => {
+            // The member is signed in at once; the link only proves the
+            // address is theirs.
+            send_confirmation(&state, &headers, &tenant, &user).await;
+            signed_in_redirect(&ctx, &user, &tenant.org, &next)
+        }
         Err(e) => {
             tracing::error!(target: "rustango_cms::members", error = %e, "member signup failed");
             bounce("server_error")
@@ -234,6 +244,368 @@ pub(crate) async fn member_logout(
         security_log::record(tenant.pool(), &tenant.org.slug, entry).await;
     }
     redirect_with_cookie("/", &member_auth::clear_cookie())
+}
+
+// ===================================================================
+// Email confirmation + password reset
+// ===================================================================
+
+/// Where a confirmation link lands.
+const VERIFY_PATH: &str = "/members/verify";
+/// Where a visitor asks for a new confirmation link.
+const VERIFY_RESEND_PATH: &str = "/members/verify/resend";
+/// Where a member asks for a password-reset link.
+const RESET_REQUEST_PATH: &str = "/members/password-reset";
+/// Where a password-reset link lands.
+const RESET_CONFIRM_PATH: &str = "/members/password-reset/confirm";
+
+/// How long a confirmation link works.
+const VERIFY_TTL: std::time::Duration = std::time::Duration::from_secs(3 * 24 * 60 * 60);
+/// How long a password-reset link works. Each is also bound to the current
+/// password hash, so it stops working once the password changes.
+const RESET_TTL: std::time::Duration = std::time::Duration::from_secs(60 * 60);
+/// What signs confirmation links (reset links use the admin reset key).
+const VERIFY_KEY_PURPOSE: &str = "rcms-member-email-verify";
+
+/// `rustango_users.data` keys: the address that was confirmed, and when.
+/// Keyed by the address, so changing the email makes it unconfirmed again.
+const DATA_VERIFIED: &str = "email_verified";
+const DATA_VERIFIED_AT: &str = "email_verified_at";
+
+/// Whether `user` has confirmed the email address on their account.
+#[must_use]
+pub fn email_is_verified(user: &User) -> bool {
+    let email = super::handlers::user_email(user);
+    !email.is_empty()
+        && user.data.get(DATA_VERIFIED).and_then(serde_json::Value::as_str) == Some(email.as_str())
+}
+
+/// Record that `user` controls the address on their account.
+fn mark_verified(user: &mut User) {
+    let email = super::handlers::user_email(user);
+    if !user.data.is_object() {
+        user.data = serde_json::json!({});
+    }
+    user.data[DATA_VERIFIED] = serde_json::Value::String(email);
+    user.data[DATA_VERIFIED_AT] = serde_json::Value::String(chrono::Utc::now().to_rfc3339());
+}
+
+/// Send one member email in the background, so the response does not wait
+/// for the mail server, and its timing does not reveal whether an account
+/// exists. With no mailer it goes to the console, as admin mail does.
+fn spawn_member_mail(state: &AdminState, to: String, subject: String, body: String) {
+    let mailer = state.mailer.clone();
+    let from = if state.mailer_from.trim().is_empty() {
+        "noreply@cms.local".to_owned()
+    } else {
+        state.mailer_from.as_str().to_owned()
+    };
+    rustango::__private_runtime::tokio::spawn(async move {
+        let email = rustango::email::Email::new()
+            .to(&to)
+            .from(&from)
+            .subject(&subject)
+            .body(body);
+        let result = match mailer.as_deref() {
+            Some(m) => m.send(&email).await,
+            None => {
+                tracing::warn!(
+                    target: "rustango_cms::members",
+                    "no mailer configured: printing the member email to the console instead of sending it"
+                );
+                let console = rustango::email::ConsoleMailer;
+                <rustango::email::ConsoleMailer as rustango::email::Mailer>::send(&console, &email).await
+            }
+        };
+        if let Err(e) = result {
+            tracing::error!(target: "rustango_cms::members", error = %e, "member email could not be sent");
+        }
+    });
+}
+
+/// The site's name for email text: Settings → Branding, else the tenant.
+async fn site_name(tenant: &Tenant) -> String {
+    let branding = crate::branding::get(tenant.pool()).await;
+    crate::branding::site_name(&branding, &tenant.org)
+}
+
+/// Email `user` a link that confirms their address. Nothing is sent for an
+/// account without an email.
+async fn send_confirmation(state: &AdminState, headers: &HeaderMap, tenant: &Tenant, user: &User) {
+    let email = super::handlers::user_email(user);
+    let Some(uid) = user.id.get().copied() else { return };
+    if email.is_empty() {
+        return;
+    }
+    let link = rustango::auth_flows::EmailVerification::issue(
+        &super::handlers::password_reset_scope(&tenant.org),
+        VERIFY_PATH,
+        uid,
+        &email,
+        &crate::signing::derived_key(VERIFY_KEY_PURPOSE),
+        VERIFY_TTL,
+    );
+    let link = format!("{}{link}", crate::sitemap::base_url(headers));
+    let site = site_name(tenant).await;
+    spawn_member_mail(
+        state,
+        email,
+        format!("Confirm your email for {site}"),
+        format!(
+            "Welcome to {site}!\n\n\
+             Please confirm your email address by opening this link within three days:\n\n\
+             {link}\n\n\
+             If you did not create an account, you can ignore this email.\n"
+        ),
+    );
+}
+
+/// The signed link a request arrived on: `path` plus its query string.
+fn signed_link(path: &str, query: Option<&str>) -> String {
+    match query {
+        Some(q) if !q.is_empty() => format!("{path}?{q}"),
+        _ => path.to_owned(),
+    }
+}
+
+/// Render one of the member mail pages with the auth chrome.
+async fn render_member_page(
+    state: &AdminState,
+    headers: &HeaderMap,
+    tenant: &Tenant,
+    template: &str,
+    mut ctx: Context,
+) -> Result<Response, AdminError> {
+    add_auth_chrome(&mut ctx, tenant).await;
+    render_with_csrf(state, headers, template, &mut ctx)
+}
+
+/// GET `/members/verify?…` — confirm the address a signup link was sent to.
+pub(crate) async fn member_verify(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    tenant: Tenant,
+    axum::extract::RawQuery(query): axum::extract::RawQuery,
+) -> Result<Response, AdminError> {
+    let link = signed_link(VERIFY_PATH, query.as_deref());
+    let verified = rustango::auth_flows::EmailVerification::verify(
+        &super::handlers::password_reset_scope(&tenant.org),
+        &link,
+        &crate::signing::derived_key(VERIFY_KEY_PURPOSE),
+    );
+    let mut outcome = "invalid";
+    if let Ok((uid, email)) = verified {
+        let user = User::objects()
+            .where_(User::id.eq(uid))
+            .where_(User::active.eq(true))
+            .first(tenant.pool())
+            .await
+            .ok()
+            .flatten();
+        // A link for an address the account no longer has proves nothing.
+        if let Some(mut user) = user.filter(|u| super::handlers::user_email(u) == email) {
+            if email_is_verified(&user) {
+                // A second click must not read as a fresh confirmation.
+                outcome = "already";
+            } else {
+                mark_verified(&mut user);
+                outcome = if user.save(tenant.pool()).await.is_ok() { "verified" } else { "error" };
+            }
+        }
+    }
+    let mut ctx = Context::new();
+    ctx.insert("outcome", outcome);
+    ctx.insert("resend_url", VERIFY_RESEND_PATH);
+    render_member_page(&state, &headers, &tenant, "rcms_admin/member_verify.html", ctx).await
+}
+
+#[derive(serde::Deserialize)]
+pub(crate) struct MemberEmailForm {
+    #[serde(default)]
+    pub email: String,
+}
+
+/// GET `/members/verify/resend` — ask for a new confirmation link.
+pub(crate) async fn member_verify_resend_form(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    tenant: Tenant,
+) -> Result<Response, AdminError> {
+    let mut ctx = Context::new();
+    ctx.insert("outcome", "resend");
+    ctx.insert("resend_url", VERIFY_RESEND_PATH);
+    render_member_page(&state, &headers, &tenant, "rcms_admin/member_verify.html", ctx).await
+}
+
+/// POST `/members/verify/resend` — send a new confirmation link to an
+/// account that has not confirmed yet. The answer is the same whether or not
+/// the address belongs to an account.
+pub(crate) async fn member_verify_resend_submit(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    tenant: Tenant,
+    Form(form): Form<MemberEmailForm>,
+) -> Result<Response, AdminError> {
+    if let Some(user) = find_member(tenant.pool(), form.email.trim()).await.filter(|u| u.active) {
+        if !email_is_verified(&user) {
+            send_confirmation(&state, &headers, &tenant, &user).await;
+        }
+    }
+    let mut ctx = Context::new();
+    ctx.insert("outcome", "resent");
+    ctx.insert("resend_url", VERIFY_RESEND_PATH);
+    render_member_page(&state, &headers, &tenant, "rcms_admin/member_verify.html", ctx).await
+}
+
+/// GET `/members/password-reset` — the "forgot password" form.
+pub(crate) async fn member_reset_request_form(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    tenant: Tenant,
+) -> Result<Response, AdminError> {
+    let mut ctx = Context::new();
+    ctx.insert("action", RESET_REQUEST_PATH);
+    ctx.insert("login_url", "/members/login");
+    render_member_page(&state, &headers, &tenant, "rcms_admin/member_password_reset.html", ctx).await
+}
+
+/// POST `/members/password-reset` — email a reset link. The answer is the
+/// same whether or not the address belongs to an account.
+pub(crate) async fn member_reset_request_submit(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    tenant: Tenant,
+    request: LoginRequest,
+    Form(form): Form<MemberEmailForm>,
+) -> Result<Response, AdminError> {
+    if let Some(user) = find_member(tenant.pool(), form.email.trim()).await.filter(|u| u.active) {
+        let email = super::handlers::user_email(&user);
+        if let (Some(uid), false) = (user.id.get().copied(), email.is_empty()) {
+            let entry = security_log::Entry::new(
+                security_log::EVENT_PASSWORD_RESET_REQUESTED,
+                "member",
+                &request.meta,
+            )
+            .user(Some(uid), &user.username);
+            security_log::record(tenant.pool(), &tenant.org.slug, entry).await;
+            let key = super::handlers::password_reset_key(
+                state.signing_secret.as_slice(),
+                &tenant.org.slug,
+                &user.password_hash,
+            );
+            let link = rustango::auth_flows::PasswordReset::issue(
+                &super::handlers::password_reset_scope(&tenant.org),
+                RESET_CONFIRM_PATH,
+                uid,
+                &key,
+                RESET_TTL,
+            );
+            let link = format!("{}{link}", crate::sitemap::base_url(&headers));
+            let site = site_name(&tenant).await;
+            spawn_member_mail(
+                &state,
+                email,
+                format!("Reset your password for {site}"),
+                format!(
+                    "We received a request to reset your password for {site}.\n\n\
+                     Open this link within the next hour to choose a new one:\n\n\
+                     {link}\n\n\
+                     If you did not ask for this, you can ignore this email; your password stays the same.\n"
+                ),
+            );
+        }
+    }
+    let mut ctx = Context::new();
+    ctx.insert("sent", &true);
+    ctx.insert("action", RESET_REQUEST_PATH);
+    ctx.insert("login_url", "/members/login");
+    render_member_page(&state, &headers, &tenant, "rcms_admin/member_password_reset.html", ctx).await
+}
+
+/// GET `/members/password-reset/confirm?…` — the "choose a new password"
+/// form, or an "expired link" page.
+pub(crate) async fn member_reset_confirm_form(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    tenant: Tenant,
+    axum::extract::RawQuery(query): axum::extract::RawQuery,
+) -> Result<Response, AdminError> {
+    let link = signed_link(RESET_CONFIRM_PATH, query.as_deref());
+    let valid = super::handlers::password_reset_user(&tenant, state.signing_secret.as_slice(), &link)
+        .await
+        .is_some();
+    let mut ctx = Context::new();
+    ctx.insert("action", RESET_CONFIRM_PATH);
+    ctx.insert("forgot_url", RESET_REQUEST_PATH);
+    ctx.insert("valid", &valid);
+    if valid {
+        ctx.insert("signed_token", &link);
+    }
+    render_member_page(&state, &headers, &tenant, "rcms_admin/member_password_reset_confirm.html", ctx).await
+}
+
+#[derive(serde::Deserialize)]
+pub(crate) struct MemberResetForm {
+    #[serde(default)]
+    pub token: String,
+    #[serde(default)]
+    pub password: String,
+    #[serde(default)]
+    pub password_confirm: String,
+}
+
+/// POST `/members/password-reset/confirm` — set the new password, then send
+/// the member to sign in with it.
+pub(crate) async fn member_reset_confirm_submit(
+    State(state): State<AdminState>,
+    headers: HeaderMap,
+    tenant: Tenant,
+    request: LoginRequest,
+    Form(form): Form<MemberResetForm>,
+) -> Result<Response, AdminError> {
+    let again = |error: &str| {
+        let mut ctx = Context::new();
+        ctx.insert("action", RESET_CONFIRM_PATH);
+        ctx.insert("forgot_url", RESET_REQUEST_PATH);
+        ctx.insert("valid", &true);
+        ctx.insert("signed_token", &form.token);
+        ctx.insert("error", error);
+        ctx
+    };
+    // The same rule as sign-up.
+    if form.password.len() < 8 {
+        return render_member_page(&state, &headers, &tenant, "rcms_admin/member_password_reset_confirm.html", again("weak_password")).await;
+    }
+    if form.password != form.password_confirm {
+        return render_member_page(&state, &headers, &tenant, "rcms_admin/member_password_reset_confirm.html", again("password_mismatch")).await;
+    }
+    let Some(mut user) =
+        super::handlers::password_reset_user(&tenant, state.signing_secret.as_slice(), &form.token).await
+    else {
+        let mut ctx = Context::new();
+        ctx.insert("action", RESET_CONFIRM_PATH);
+        ctx.insert("forgot_url", RESET_REQUEST_PATH);
+        ctx.insert("valid", &false);
+        return render_member_page(&state, &headers, &tenant, "rcms_admin/member_password_reset_confirm.html", ctx).await;
+    };
+    let Ok(hash) = crate::passwords::hash(&form.password).await else {
+        return render_member_page(&state, &headers, &tenant, "rcms_admin/member_password_reset_confirm.html", again("server_error")).await;
+    };
+    user.password_hash = hash;
+    user.password_changed_at = Some(chrono::Utc::now());
+    // The link arrived by email, so the address is the member's.
+    mark_verified(&mut user);
+    if user.save(tenant.pool()).await.is_err() {
+        return render_member_page(&state, &headers, &tenant, "rcms_admin/member_password_reset_confirm.html", again("server_error")).await;
+    }
+    // Proving control of the account's mail lifts a lock a guesser set.
+    if let Some(site) = rustango::tenancy::TenantSlug::of(&tenant.org) {
+        security_log::unlock(&site, &user.username).await;
+    }
+    let entry = security_log::Entry::new(security_log::EVENT_PASSWORD_RESET, "member", &request.meta)
+        .user(user.id.get().copied(), &user.username);
+    security_log::record(tenant.pool(), &tenant.org.slug, entry).await;
+    Ok(Redirect::to("/members/login?reset=done").into_response())
 }
 
 // ===================================================================
@@ -421,6 +793,117 @@ fn redirect_with_cookie(location: &str, set_cookie: &str) -> Response {
 mod tests {
     use super::sanitize_next;
 
+    fn member(email: &str) -> super::User {
+        super::User {
+            id: rustango::sql::Auto::Set(7),
+            username: email.to_owned(),
+            password_hash: "hash".to_owned(),
+            email: Some(email.to_owned()),
+            is_superuser: false,
+            active: true,
+            created_at: chrono::Utc::now(),
+            data: serde_json::json!({ "display_name": "Ann" }),
+            password_changed_at: None,
+            sessions_revoked_at: None,
+        }
+    }
+
+    #[test]
+    fn a_confirmed_address_stops_counting_once_the_email_changes() {
+        let mut user = member("ann@example.com");
+        assert!(!super::email_is_verified(&user));
+        super::mark_verified(&mut user);
+        assert!(super::email_is_verified(&user));
+        assert_eq!(user.data["display_name"], "Ann", "other data is kept");
+        user.email = Some("new@example.com".to_owned());
+        assert!(!super::email_is_verified(&user));
+    }
+
+    #[test]
+    fn an_account_without_email_is_never_confirmed() {
+        let mut user = member("ann@example.com");
+        user.email = None;
+        super::mark_verified(&mut user);
+        assert!(!super::email_is_verified(&user));
+    }
+
+    #[test]
+    fn a_confirmation_link_verifies_from_its_path_and_query() {
+        let mut org = rustango::tenancy::Org::new("blog");
+        org.id = rustango::sql::Auto::Set(1);
+        let scope = crate::admin::handlers::password_reset_scope(&org);
+        let key = crate::signing::derived_key(super::VERIFY_KEY_PURPOSE);
+        let link = rustango::auth_flows::EmailVerification::issue(
+            &scope,
+            super::VERIFY_PATH,
+            7,
+            "ann@example.com",
+            &key,
+            super::VERIFY_TTL,
+        );
+        // The handler sees only the query string; it rebuilds the rest.
+        let query = link.split_once('?').map(|(_, q)| q);
+        let rebuilt = super::signed_link(super::VERIFY_PATH, query);
+        let (uid, email) = rustango::auth_flows::EmailVerification::verify(&scope, &rebuilt, &key)
+            .expect("the rebuilt link verifies");
+        assert_eq!((uid, email.as_str()), (7, "ann@example.com"));
+
+        let mut other = rustango::tenancy::Org::new("shop");
+        other.id = rustango::sql::Auto::Set(2);
+        assert!(
+            rustango::auth_flows::EmailVerification::verify(
+                &crate::admin::handlers::password_reset_scope(&other),
+                &rebuilt,
+                &key,
+            )
+            .is_err(),
+            "a link for one site does not verify on another"
+        );
+        let tampered = rebuilt.replace("user_id=7", "user_id=8");
+        assert!(rustango::auth_flows::EmailVerification::verify(&scope, &tampered, &key).is_err());
+    }
+
+    #[test]
+    fn the_member_mail_pages_render_in_every_state() {
+        let mut tera = tera::Tera::default();
+        crate::admin::register_templates(&mut tera).expect("admin templates");
+        let base = || {
+            let mut ctx = tera::Context::new();
+            ctx.insert("LANG", "fr");
+            ctx.insert("csrf_token", "t");
+            ctx.insert("site_name", "Acme");
+            ctx
+        };
+        for outcome in ["verified", "already", "invalid", "error", "resend", "resent"] {
+            let mut ctx = base();
+            ctx.insert("outcome", outcome);
+            ctx.insert("resend_url", super::VERIFY_RESEND_PATH);
+            let html = tera.render("rcms_admin/member_verify.html", &ctx).unwrap_or_else(|e| panic!("{outcome}: {e:?}"));
+            assert_eq!(html.contains("name=\"email\""), matches!(outcome, "invalid" | "error" | "resend"), "{outcome}");
+        }
+        for sent in [false, true] {
+            let mut ctx = base();
+            ctx.insert("action", super::RESET_REQUEST_PATH);
+            ctx.insert("login_url", "/members/login");
+            ctx.insert("sent", &sent);
+            let html = tera.render("rcms_admin/member_password_reset.html", &ctx).expect("reset request");
+            assert_eq!(html.contains("name=\"email\""), !sent);
+        }
+        for (valid, error) in [(true, None), (true, Some("weak_password")), (true, Some("password_mismatch")), (false, None)] {
+            let mut ctx = base();
+            ctx.insert("action", super::RESET_CONFIRM_PATH);
+            ctx.insert("forgot_url", super::RESET_REQUEST_PATH);
+            ctx.insert("valid", &valid);
+            ctx.insert("signed_token", "/members/password-reset/confirm?x=1");
+            if let Some(e) = error {
+                ctx.insert("error", e);
+            }
+            let html = tera.render("rcms_admin/member_password_reset_confirm.html", &ctx).expect("reset confirm");
+            assert_eq!(html.contains("name=\"password\""), valid);
+            assert_eq!(html.contains("rcms-error"), error.is_some() || !valid);
+        }
+    }
+
     #[test]
     fn next_stays_on_site() {
         assert_eq!(sanitize_next("/members/area?x=1"), "/members/area?x=1");
@@ -450,6 +933,7 @@ mod tests {
                 .render("rcms_admin/member_login.html", &ctx)
                 .unwrap_or_else(|e| panic!("{error:?}: {e:?}"));
             assert_eq!(html.contains("rcms-error"), error.is_some(), "{error:?}");
+            assert!(!html.contains("/members/password-reset"), "no forgot link unless the handler passes one");
         }
     }
 

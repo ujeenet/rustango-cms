@@ -1,6 +1,6 @@
 [package]
 name = "rustango-cms"
-version = "0.4.0"
+version = "0.5.0"
 description = "A page-tree content management system for Rust, built on rustango"
 readme = "README.md"
 keywords = ["cms", "content", "headless", "rustango", "web"]
@@ -94,13 +94,13 @@ rustango = { version = "0.69", default-features = false, features = [
 # In-tree proc-macro crate for `#[derive(PageType)]` — re-exported
 # from the lib via `pub use rustango_cms_macros::PageType` so users
 # only depend on `rustango-cms`.
-rustango-cms-macros = { path = "crates/rustango-cms-macros", version = "0.4.0" }
+rustango-cms-macros = { path = "crates/rustango-cms-macros", version = "0.5.0" }
 axum = { version = "0.8", default-features = false, features = ["tokio", "http1", "json", "form", "query", "multipart", "ws"] }
 tera = { version = "1.20", default-features = false, features = ["builtins"] }
 pulldown-cmark = { version = "0.13.6", default-features = false, features = ["html"] }
 # Theme packages (`rustango_cms::starter::package`): theme.json + templates as a .zip.
 zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
-ammonia = { version = "4", default-features = false }
+ammonia = { version = "4.2.5", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_urlencoded = "0.7"
 serde_json = "1"

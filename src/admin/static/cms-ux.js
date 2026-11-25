@@ -918,6 +918,75 @@
         return m ? decodeURIComponent(m[1]) : "";
     }
 
+    // Stage each file, then commit the staged ones into the library (into
+    // `collectionId`, or uncategorized). A file whose bytes are already in
+    // the library resolves to that existing item. Resolves with the
+    // library ids, new ones first.
+    async function uploadToLibrary(files, csrf, collectionId) {
+        const staged = [];
+        const existingIds = [];
+        const failures = [];
+        for (const file of files) {
+            const fd = new FormData();
+            fd.append("file", file, file.name);
+            const resp = await fetch("/cms-admin/media/upload-staged", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "X-CSRF-Token": csrf },
+                body: fd,
+            });
+            if (!resp.ok) {
+                failures.push(`${file.name} (HTTP ${resp.status})`);
+                continue;
+            }
+            const j = await resp.json();
+            if (j.id != null) staged.push({ id: j.id, name: file.name });
+            else if (j.duplicate_of != null) existingIds.push(j.duplicate_of);
+            else failures.push(file.name);
+        }
+        let committed = [];
+        if (staged.length > 0) {
+            const resp = await fetch("/cms-admin/media/upload-staged/commit", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: { "X-CSRF-Token": csrf, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    items: staged.map((s) => ({
+                        uploaded_file_id: s.id,
+                        title: s.name.replace(/\.[^.]+$/, ""),
+                        alt_text: "",
+                        collection_id: collectionId,
+                    })),
+                }),
+            });
+            if (resp.ok) {
+                const j = await resp.json();
+                committed = j.committed || [];
+                for (const f of j.failed || []) failures.push(f.filename || "commit failed");
+            } else {
+                failures.push(`commit failed (HTTP ${resp.status})`);
+            }
+        }
+        return {
+            ids: committed.concat(existingIds),
+            committedCount: committed.length,
+            existingCount: existingIds.length,
+            failures,
+        };
+    }
+
+    // For editors outside the picker (the rich-text editor's paste and
+    // drop): upload image files into the library; resolves with their ids.
+    window.rcmsUploadMedia = async function (fileList) {
+        const files = Array.from(fileList).filter((f) => f.type.startsWith("image/"));
+        if (files.length === 0) return [];
+        const csrf = getCsrfToken();
+        if (!csrf) throw new Error("Session expired — reload and sign in again.");
+        const { ids, failures } = await uploadToLibrary(files, csrf, null);
+        if (ids.length === 0 && failures.length) throw new Error(failures.join(", "));
+        return ids;
+    };
+
     async function mediaPickerUpload(fileList) {
         if (mediaState.uploading) return;
         const kindAttr = chooserActiveTarget?.getAttribute("data-chooser-media-kind");
@@ -937,59 +1006,16 @@
         const uploadBtn = chooserDialog?.querySelector("[data-pc-upload]");
         if (uploadBtn) uploadBtn.disabled = true;
         pickerNotice(`Uploading ${files.length} file${files.length > 1 ? "s" : ""}…`);
-        const staged = [];
-        const existingIds = [];
-        const failures = [];
         try {
-            for (const file of files) {
-                const fd = new FormData();
-                fd.append("file", file, file.name);
-                const resp = await fetch("/cms-admin/media/upload-staged", {
-                    method: "POST",
-                    credentials: "same-origin",
-                    headers: { "X-CSRF-Token": csrf },
-                    body: fd,
-                });
-                if (!resp.ok) {
-                    failures.push(`${file.name} (HTTP ${resp.status})`);
-                    continue;
-                }
-                const j = await resp.json();
-                if (j.id != null) staged.push({ id: j.id, name: file.name });
-                else if (j.duplicate_of != null) existingIds.push(j.duplicate_of);
-                else failures.push(file.name);
-            }
-            let committed = [];
-            if (staged.length > 0) {
-                const activeCollection =
-                    mediaState.collection && mediaState.collection !== "0"
-                        ? Number(mediaState.collection)
-                        : null;
-                const resp = await fetch("/cms-admin/media/upload-staged/commit", {
-                    method: "POST",
-                    credentials: "same-origin",
-                    headers: { "X-CSRF-Token": csrf, "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        items: staged.map((s) => ({
-                            uploaded_file_id: s.id,
-                            title: s.name.replace(/\.[^.]+$/, ""),
-                            alt_text: "",
-                            collection_id: activeCollection,
-                        })),
-                    }),
-                });
-                if (resp.ok) {
-                    const j = await resp.json();
-                    committed = j.committed || [];
-                    for (const f of j.failed || []) failures.push(f.filename || "commit failed");
-                } else {
-                    failures.push(`commit failed (HTTP ${resp.status})`);
-                }
-            }
-            const ids = committed.concat(existingIds);
+            const activeCollection =
+                mediaState.collection && mediaState.collection !== "0"
+                    ? Number(mediaState.collection)
+                    : null;
+            const { ids, committedCount, existingCount, failures } =
+                await uploadToLibrary(files, csrf, activeCollection);
             const bits = [];
-            if (committed.length) bits.push(`Uploaded ${committed.length}`);
-            if (existingIds.length) bits.push(`${existingIds.length} already in library — selected existing`);
+            if (committedCount) bits.push(`Uploaded ${committedCount}`);
+            if (existingCount) bits.push(`${existingCount} already in library — selected existing`);
             if (failures.length) bits.push(`Failed: ${failures.join(", ")}`);
             pickerNotice(bits.join(" · "), failures.length > 0);
             if (ids.length > 0) {
@@ -1574,100 +1600,102 @@
         });
     }
 
-    // #205 — markdown toolbar enhancer. Attaches click
-    // handlers to every `[data-md-toolbar-for]` block, mapping each
-    // button to a wrap-or-prefix transformation against the
-    // targeted textarea's selection. Plain-textarea fallback still
-    // works without JS — we just reveal the toolbar after wiring.
+    // #205 — markdown toolbar enhancer. Each button applies a wrap-or-
+    // prefix transformation to its toolbar's textarea (the next sibling,
+    // never looked up by id: blocks cloned from one template share ids).
+    // Delegated, so toolbars in blocks added later work too; those are
+    // revealed through `rcmsEnhanceMarkdown`. Without JS the toolbar stays
+    // hidden and the plain textarea still works.
+    function markdownTarget(bar) {
+        const ta = bar.nextElementSibling;
+        return ta && ta.matches('textarea[data-widget-mode="markdown"]') ? ta : null;
+    }
+
+    function markdownEdit(target, action) {
+        const notify = () => {
+            target.focus();
+            // Notify any listeners (live preview, change tracker).
+            target.dispatchEvent(new Event("input", { bubbles: true }));
+        };
+        const wrap = (before, after) => {
+            const start = target.selectionStart;
+            const end = target.selectionEnd;
+            const selected = target.value.slice(start, end);
+            target.setRangeText(`${before}${selected}${after}`, start, end, "end");
+            if (!selected) {
+                // Drop the caret between the markers so the user can
+                // type the contents in place.
+                const pos = start + before.length;
+                target.setSelectionRange(pos, pos);
+            }
+            notify();
+        };
+        const prefixLines = (prefix) => {
+            const start = target.selectionStart;
+            const end = target.selectionEnd;
+            const value = target.value;
+            // Expand the selection to whole lines so the prefix lands at
+            // the start of each line, not mid-line.
+            const lineStart = value.lastIndexOf("\n", start - 1) + 1;
+            const nl = value.indexOf("\n", end);
+            const lineEnd = nl === -1 ? value.length : nl;
+            const out = value
+                .slice(lineStart, lineEnd)
+                .split("\n")
+                .map((line, idx) => (prefix === "1. " ? `${idx + 1}. ${line}` : `${prefix}${line}`))
+                .join("\n");
+            target.setRangeText(out, lineStart, lineEnd, "end");
+            notify();
+        };
+        const insertLink = () => {
+            const start = target.selectionStart;
+            const end = target.selectionEnd;
+            const selected = target.value.slice(start, end);
+            const url = window.prompt("URL?", "https://");
+            if (!url) return;
+            target.setRangeText(`[${selected || "link text"}](${url})`, start, end, "end");
+            notify();
+        };
+        switch (action) {
+            case "bold": wrap("**", "**"); break;
+            case "italic": wrap("_", "_"); break;
+            case "h2": prefixLines("## "); break;
+            case "h3": prefixLines("### "); break;
+            case "ul": prefixLines("- "); break;
+            case "ol": prefixLines("1. "); break;
+            case "quote": prefixLines("> "); break;
+            case "code": wrap("`", "`"); break;
+            case "codeblock": wrap("\n```\n", "\n```\n"); break;
+            case "link": insertLink(); break;
+        }
+    }
+
+    function revealMarkdownToolbars(root) {
+        (root || document).querySelectorAll("[data-md-toolbar-for]").forEach((bar) => {
+            if (markdownTarget(bar)) bar.hidden = false;
+        });
+    }
+    window.rcmsEnhanceMarkdown = revealMarkdownToolbars;
+
     function wireMarkdownToolbars() {
-        const toolbars = document.querySelectorAll("[data-md-toolbar-for]");
-        toolbars.forEach((bar) => {
-            const targetId = bar.getAttribute("data-md-toolbar-for");
-            const target = document.getElementById(targetId);
+        revealMarkdownToolbars(document);
+        document.addEventListener("click", (event) => {
+            const btn = event.target.closest("[data-md-action]");
+            const bar = btn && btn.closest("[data-md-toolbar-for]");
+            const target = bar && markdownTarget(bar);
             if (!target) return;
-            bar.hidden = false;
-
-            const wrap = (before, after) => {
-                const start = target.selectionStart;
-                const end = target.selectionEnd;
-                const selected = target.value.slice(start, end);
-                const replacement = `${before}${selected || ""}${after}`;
-                target.setRangeText(replacement, start, end, "end");
-                if (!selected) {
-                    // Drop the caret between the markers so the user
-                    // can type the contents in place.
-                    const newPos = start + before.length;
-                    target.setSelectionRange(newPos, newPos);
-                }
-                target.focus();
-                // Notify any listeners (live preview, change tracker)
-                // that the value moved.
-                target.dispatchEvent(new Event("input", { bubbles: true }));
-            };
-
-            const prefixLines = (prefix) => {
-                const start = target.selectionStart;
-                const end = target.selectionEnd;
-                const value = target.value;
-                // Expand selection to whole-line boundaries so the
-                // prefix lands on the line, not in the middle.
-                const lineStart = value.lastIndexOf("\n", start - 1) + 1;
-                const lineEnd = (() => {
-                    const idx = value.indexOf("\n", end);
-                    return idx === -1 ? value.length : idx;
-                })();
-                const block = value.slice(lineStart, lineEnd);
-                const out = block
-                    .split("\n")
-                    .map((line, idx) => {
-                        if (prefix === "1. ") return `${idx + 1}. ${line}`;
-                        return `${prefix}${line}`;
-                    })
-                    .join("\n");
-                target.setRangeText(out, lineStart, lineEnd, "end");
-                target.focus();
-                target.dispatchEvent(new Event("input", { bubbles: true }));
-            };
-
-            const insertLink = () => {
-                const start = target.selectionStart;
-                const end = target.selectionEnd;
-                const selected = target.value.slice(start, end);
-                const url = window.prompt("URL?", "https://");
-                if (!url) return;
-                const label = selected || "link text";
-                target.setRangeText(`[${label}](${url})`, start, end, "end");
-                target.focus();
-                target.dispatchEvent(new Event("input", { bubbles: true }));
-            };
-
-            bar.querySelectorAll("[data-md-action]").forEach((btn) => {
-                btn.addEventListener("click", (event) => {
-                    event.preventDefault();
-                    const action = btn.getAttribute("data-md-action");
-                    switch (action) {
-                        case "bold": wrap("**", "**"); break;
-                        case "italic": wrap("_", "_"); break;
-                        case "h2": prefixLines("## "); break;
-                        case "h3": prefixLines("### "); break;
-                        case "ul": prefixLines("- "); break;
-                        case "ol": prefixLines("1. "); break;
-                        case "quote": prefixLines("> "); break;
-                        case "code": wrap("`", "`"); break;
-                        case "codeblock": wrap("\n```\n", "\n```\n"); break;
-                        case "link": insertLink(); break;
-                    }
-                });
-            });
-
-            // Cmd+B / Cmd+I / Cmd+K shortcuts within the textarea.
-            target.addEventListener("keydown", (event) => {
-                if (!(event.metaKey || event.ctrlKey)) return;
-                const k = event.key.toLowerCase();
-                if (k === "b") { event.preventDefault(); wrap("**", "**"); }
-                else if (k === "i") { event.preventDefault(); wrap("_", "_"); }
-                else if (k === "k") { event.preventDefault(); insertLink(); }
-            });
+            event.preventDefault();
+            markdownEdit(target, btn.getAttribute("data-md-action"));
+        });
+        // Cmd+B / Cmd+I / Cmd+K shortcuts within a markdown textarea.
+        document.addEventListener("keydown", (event) => {
+            const target = event.target;
+            if (!(event.metaKey || event.ctrlKey)) return;
+            if (!target.matches || !target.matches('textarea[data-widget-mode="markdown"]')) return;
+            const action = { b: "bold", i: "italic", k: "link" }[event.key.toLowerCase()];
+            if (!action) return;
+            event.preventDefault();
+            markdownEdit(target, action);
         });
     }
 

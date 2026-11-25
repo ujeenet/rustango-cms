@@ -3,7 +3,7 @@
   "site": {
     "tagline": "Designer & writer",
     "footer": "© 2026 Alex Morgan. Built with Rustango-CMS.",
-    "footer_logo": "@media:rustango-cms-logo"
+    "footer_logo": "@media:rustango-cms-icon"
   },
   "branding": {
     "site_name": "Alex Morgan",

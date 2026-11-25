@@ -8,11 +8,63 @@ Issue numbers such as `#258` in entries written before the public release
 refer to the project's earlier, private tracker, not to issues in this
 repository.
 
-## Unreleased
+## 0.5.0 — 2026-11-24
+
+Rustango 0.69, member email confirmation and password reset, a reliable
+rich-text editor with images and tables, every built-in block checked end
+to end, and the Rustango-CMS logo in the admin.
 
 ### Changed
 
-- Requires rustango 0.69.
+- **Breaking:** requires `rustango` 0.69 (was 0.65). See UPGRADING.
+- The admin icon, favicon, touch icon and sign-in logo, and the starter
+  themes' logo, are the Rustango-CMS mark used on cms.rustango.com.
+- The default `choice` block is optional: with no options a required
+  select could never be satisfied, so a page holding one could not be
+  saved.
+- A new `heading` block starts at H2 instead of no level.
+
+### Added
+
+- Members: sign-up emails a confirmation link; `/members/verify` confirms
+  the address and `/members/verify/resend` sends a new link. "Forgot your
+  password?" on the member sign-in page emails a one-hour reset link.
+  Both request forms answer the same whether or not the account exists.
+  Opening a used confirmation link says it was already confirmed.
+- `rustango_cms::mail::from_env()`: a mailer from the `[mail]` settings or
+  the `RUSTANGO__MAIL__*` variables; pass it to
+  `admin::public_router_with_mailer`.
+- Rich-text editor: insert an image from the media library, or paste or
+  drop an image file (uploaded to the library); tools that cannot apply
+  are disabled; the toolbar wraps by group.
+- `window.rcmsUploadMedia(files)` in the admin: upload images to the media
+  library from your own editor scripts. `window.rcmsEnhanceMarkdown(root)`
+  wires markdown toolbars inside markup you insert.
+- The starter stylesheet (`rcms new` without a theme, and `cms_demo`)
+  styles tables, figures, cards, sliders, galleries and the single-value
+  blocks.
+
+### Fixed
+
+- Rich-text editor: after a toolbar click the next Enter ran the tool
+  again and the next typed character was lost; tables had invisible
+  cell borders; a duplicated block could carry editor-only markup.
+- Markdown toolbar: in a block added or duplicated in a stream it was
+  hidden and did nothing, and a toolbar could edit another block's text.
+- An empty `form` block rendered "Form not found" on the public page; it
+  renders nothing until a form is chosen.
+- A translated page's canonical link pointed at the default-language page,
+  so search engines treated translations as duplicates.
+  `rcms_meta_tags` takes `fallback_description` / `fallback_image` and
+  trims the description to 160 characters.
+- Admin password-reset emails carried a relative link.
+- `/cms-admin/history` returned 500.
+
+### Security
+
+- Requires `ammonia` 4.2.5, which fixes a mutation XSS through embedded
+  SVG and MathML (RUSTSEC-2026-0533) in the HTML sanitizer that rich text
+  and raw HTML go through.
 
 ## 0.4.0 — 2026-11-07
 

@@ -24798,7 +24798,8 @@ mod bounded_list_tests {
     async fn latest_activity_is_the_newest_publish_or_creation() {
         let pool = mem_pool().await;
         let (t, empty) = (page_type(&pool, "A").await, page_type(&pool, "B").await);
-        let old = chrono::Utc::now() - chrono::Duration::days(400);
+        // Microseconds: what the database keeps (a Linux clock has nanos).
+        let old = chrono::SubsecRound::trunc_subsecs(chrono::Utc::now() - chrono::Duration::days(400), 6);
         page(&pool, t, 1, Some(old)).await;
         page(&pool, t, 2, Some(old + chrono::Duration::days(3))).await;
         assert_eq!(

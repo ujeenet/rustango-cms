@@ -60,12 +60,13 @@ pub fn add(html: String, page_id: i64) -> String {
     let bar = format!(
         "{STYLE}<div id=\"rcms-adminbar\" role=\"navigation\" aria-label=\"Rustango-CMS\">\
          <button type=\"button\" id=\"rcms-adminbar-toggle\" aria-expanded=\"true\" title=\"{hide}\">\
-         <img src=\"/cms-admin/static/brand/icon-light.png\" alt=\"Rustango-CMS\" width=\"28\" height=\"28\"></button>\
+         <img src=\"/cms-admin/static/brand/icon-light.png?v={version}\" alt=\"Rustango-CMS\" width=\"28\" height=\"28\"></button>\
          <div id=\"rcms-adminbar-links\">{edit}\
          <a href=\"/cms-admin/\" class=\"rcms-adminbar-link\">\
          <svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z\"/></svg>\
          {admin}</a>{templates}</div></div>{SCRIPT}",
         hide = escape(&labels.hide),
+        version = crate::admin::cms_asset_version(),
         admin = escape(&labels.admin),
         templates = if crate::template_inspector::active() {
             // Opens the template inspector's panel (see that module).

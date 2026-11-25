@@ -302,15 +302,27 @@ async fn render_inner(
     // other URLs the renderer emits.
     // #640 — on a hostname-mapped site, the site root's prefix is stripped
     // like every other emitted link.
-    let canonical_url = format!(
-        "{url_prefix}{}",
-        crate::site::to_public_path(
-            site_prefix,
-            canonical_source_path
-                .as_deref()
-                .unwrap_or(page.url_path.as_str())
-        )
-    );
+    // A translated variant canonicalises to its own locale URL
+    // (`/uk/portfolio`), not the default-language path: pointing it at the
+    // default URL contradicts its hreflang cluster and de-indexes it.
+    let locale_variant_url = pending_switcher.as_ref().and_then(|entries| {
+        entries
+            .iter()
+            .find(|e| e.is_current && !e.is_default)
+            .map(|e| e.url.split('?').next().unwrap_or(e.url.as_str()).to_owned())
+    });
+    let canonical_url = match (&canonical_source_path, locale_variant_url) {
+        (None, Some(variant)) => variant,
+        _ => format!(
+            "{url_prefix}{}",
+            crate::site::to_public_path(
+                site_prefix,
+                canonical_source_path
+                    .as_deref()
+                    .unwrap_or(page.url_path.as_str())
+            )
+        ),
+    };
 
     // Step 1: load the registry row for this page's type.
     let pts: Vec<PageType> = match PageType::objects()

@@ -35,6 +35,10 @@ impl Block for HeadingBlock {
     fn preview_value(&self) -> Option<serde_json::Value> {
         Some(serde_json::json!({ "text": "Example heading", "level": "2" }))
     }
+    // A new heading starts at H2, the level it renders at anyway.
+    fn default_value(&self) -> Option<serde_json::Value> {
+        Some(serde_json::json!({ "level": "2" }))
+    }
     // Reads as straight English now: "text is a required char field,
     // level is a choice of H2/H3/H4". Compare with the previous
     // ~24-line match-arm form — same shape, ~75% fewer lines.
@@ -578,11 +582,10 @@ impl Block for ChoiceBlock {
             // Empty by default — hosts override the template or
             // register a subclassed block with their own options.
             options: Vec::new(),
-            help: Some(
-                "Pick a value from the host-configured list. Edit the block to extend choices."
-                    .to_owned(),
-            ),
-            required: true,
+            help: Some("Pick one value from the list.".to_owned()),
+            // Not required: with no options a required select could never
+            // be satisfied, and the page could not be saved at all.
+            required: false,
             meta: BlockFieldMeta::default(),
         }]
     }
@@ -718,10 +721,7 @@ impl Block for MultipleChoiceBlock {
             label: "Choices".to_owned(),
             widget: WidgetKind::Checkboxes,
             options: Vec::new(),
-            help: Some(
-                "Pick zero or more values from the host-configured list. Stored as a JSON array."
-                    .to_owned(),
-            ),
+            help: Some("Pick any number of values from the list.".to_owned()),
             required: false,
             meta: BlockFieldMeta::default(),
         }]
@@ -1086,12 +1086,8 @@ impl Block for TypedTableBlock {
     }
 }
 
-/// `rich_text` — Editor surface for
-/// hosts wiring a WYSIWYG (EasyMDE / TipTap / Draftail) via the
-/// `WidgetKind::RichText` widget's `data-widget-mode="richtext"`
-/// hook. Without a host enhancer the textarea ships with the
-/// existing markdown toolbar — same editor as ParagraphBlock
-/// but stores HTML directly.
+/// `rich_text` — formatted HTML edited in the admin's built-in visual
+/// editor (`WidgetKind::RichText`, enhanced by `richtext-editor.js`).
 ///
 /// Distinct from:
 /// - `ParagraphBlock` (markdown source → rendered via the markdown
@@ -1114,7 +1110,7 @@ impl Block for RichTextBlock {
         Some("article")
     }
     fn description(&self) -> Option<&'static str> {
-        Some("Formatted text — hosts wire a WYSIWYG via the richtext widget hook.")
+        Some("Formatted text with headings, lists, links, images and tables.")
     }
     fn fields(&self) -> Vec<BlockField> {
         vec![BlockField::Widget {
@@ -1122,10 +1118,7 @@ impl Block for RichTextBlock {
             label: "Body".to_owned(),
             widget: WidgetKind::RichText,
             options: Vec::new(),
-            help: Some(
-                "Hosts swap in EasyMDE / TipTap / Draftail via the richtext widget hook. Without one, the editor falls back to the markdown toolbar."
-                    .to_owned(),
-            ),
+            help: None,
             required: true,
             meta: BlockFieldMeta::default(),
         }]

@@ -3,7 +3,7 @@
    handler (inside the host `api` router → CSRF-protected, so the form
    carries a `_csrf` field, unlike the framework's `/login`). Context:
    action, next, error, sso_error, sso_enabled, sso_providers,
-   signup_url, branding. #}
+   signup_url, forgot_url, password_reset_done, branding. #}
 {% extends "rcms_admin/_auth_layout.html" %}
 
 {% block page_title %}{{ "Sign in" | translate(locale=LANG) }}{% endblock %}
@@ -18,6 +18,7 @@
     <p class="rcms-lead">{{ "Sign in to continue." | translate(locale=LANG) }}</p>
     {#- `error` is only set after a failed attempt; test it before comparing. -#}
     {% if error %}{% if error == "throttled" %}<p class="rcms-error">{{ "Too many sign-in attempts. Wait a few minutes, then try again." | translate(locale=LANG) }}</p>{% else %}<p class="rcms-error">{{ "That email/username and password didn't match." | translate(locale=LANG) }}</p>{% endif %}{% endif %}
+    {% if password_reset_done %}<p class="rcms-notice">{{ "Your password has been updated. Sign in with the new one." | translate(locale=LANG) }}</p>{% endif %}
     {% if sso_error %}<p class="rcms-error">{{ "Single sign-on failed — try again, or sign in with your password." | translate(locale=LANG) }}</p>{% endif %}
     {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
     <label for="member-identifier">{{ "Email or username" | translate(locale=LANG) }}</label>
@@ -29,6 +30,7 @@
         <button type="submit" class="rcms-btn">{{ "Sign in" | translate(locale=LANG) }}</button>
     </div>
 </form>
+{% if forgot_url %}<div class="rcms-center-cta"><a href="{{ forgot_url }}">{{ "Forgot your password?" | translate(locale=LANG) }}</a></div>{% endif %}
 {#- Visitors arrive here from the site: give them a way back. -#}
 <p class="rcms-auth-back"><a href="/">← {{ "Back to {site}" | translate(locale=LANG, site=site_name) }}</a></p>
 {% if sso_enabled %}

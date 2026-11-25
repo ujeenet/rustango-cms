@@ -22185,11 +22185,11 @@ pub async fn password_reset_request_form(
 /// password changes, so it is single-use without any cache.
 /// The scope stamped on a reset link: the link only verifies on the tenant
 /// (slug and org id) it was issued for, alongside the tenant-bound key.
-fn password_reset_scope(org: &rustango::tenancy::Org) -> rustango::auth_flows::LinkScope {
+pub(crate) fn password_reset_scope(org: &rustango::tenancy::Org) -> rustango::auth_flows::LinkScope {
     rustango::auth_flows::LinkScope::from(org)
 }
 
-fn password_reset_key(secret: &[u8], tenant_slug: &str, password_hash: &str) -> Vec<u8> {
+pub(crate) fn password_reset_key(secret: &[u8], tenant_slug: &str, password_hash: &str) -> Vec<u8> {
     let msg = format!("rcms-password-reset\0{tenant_slug}\0{password_hash}");
     crate::signing::hmac_sha256_hex(secret, msg.as_bytes()).into_bytes()
 }
@@ -22243,7 +22243,7 @@ pub async fn issue_password_reset_link(
 /// The `user_id` in the link is read before it is trusted only to find
 /// whose key to verify against; the link is accepted solely when it
 /// verifies under that user's tenant- and password-bound key.
-async fn password_reset_user(
+pub(crate) async fn password_reset_user(
     tenant: &Tenant,
     secret: &[u8],
     signed_url: &str,
@@ -22304,8 +22304,13 @@ pub async fn password_reset_request_submit(
             // The link goes to the user's real address. The response below
             // renders "sent" either way, so the form never confirms or
             // denies that an account exists.
-            let token_url =
-                password_reset_url(state.signing_secret.as_slice(), &tenant.org, &u);
+            // Absolute: a relative link in an email has nothing to resolve
+            // against, so the reader could not click it.
+            let token_url = format!(
+                "{}{}",
+                crate::sitemap::base_url(&headers),
+                password_reset_url(state.signing_secret.as_slice(), &tenant.org, &u)
+            );
             let to_email = Some(user_email(&u)).filter(|e| !e.is_empty());
             match (to_email, state.mailer.is_some()) {
                 (Some(to), _) => {
@@ -22324,8 +22329,8 @@ pub async fn password_reset_request_submit(
                 (None, false) => {
                     println!(
                         "============= password reset =============\n\
-                         {} has no email on file. Reset link, valid for an hour \
-                         (prefix the site's address):\n{token_url}\n\
+                         {} has no email on file. Reset link, valid for an hour:\n\
+                         {token_url}\n\
                          ==========================================",
                         u.username
                     );

@@ -275,6 +275,21 @@ fn public_router_inner(
             get(members::member_signup_form).post(members::member_signup_submit),
         )
         .route("/members/logout", post(members::member_logout))
+        // Member email confirmation and password reset. Mail goes out
+        // through the mailer passed to `public_router_with_mailer`.
+        .route("/members/verify", get(members::member_verify))
+        .route(
+            "/members/verify/resend",
+            get(members::member_verify_resend_form).post(members::member_verify_resend_submit),
+        )
+        .route(
+            "/members/password-reset",
+            get(members::member_reset_request_form).post(members::member_reset_request_submit),
+        )
+        .route(
+            "/members/password-reset/confirm",
+            get(members::member_reset_confirm_form).post(members::member_reset_confirm_submit),
+        )
         // #199 — uploaded branding assets, served pre-auth so the login +
         // password-reset screens can show the tenant logo/favicon (the
         // authenticated sidebar uses the same URLs). Anonymous-OK: these are
@@ -1723,7 +1738,7 @@ async fn serve_cms_css() -> Response {
 ///   * the hot-override `static/cms_admin/cms.css` file's mtime+len
 ///     when present, so a dev edit busts the cache without a rebuild
 ///     (mirrors how [`serve_cms_css`] reads that override live).
-fn cms_asset_version() -> String {
+pub(crate) fn cms_asset_version() -> String {
     static BUNDLED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     let bundled = *BUNDLED.get_or_init(|| {
         // FNV-1a over the bundled asset bytes — cheap, stable, and
@@ -1925,6 +1940,18 @@ pub fn register_templates(tera: &mut Tera) -> Result<(), tera::Error> {
         (
             "rcms_admin/member_signup.html",
             include_str!("templates/member_signup.html"),
+        ),
+        (
+            "rcms_admin/member_verify.html",
+            include_str!("templates/member_verify.html"),
+        ),
+        (
+            "rcms_admin/member_password_reset.html",
+            include_str!("templates/member_password_reset.html"),
+        ),
+        (
+            "rcms_admin/member_password_reset_confirm.html",
+            include_str!("templates/member_password_reset_confirm.html"),
         ),
         (
             "rcms_admin/_mcp_keys_card.html",

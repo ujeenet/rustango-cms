@@ -1,0 +1,48 @@
+{# Members-area email confirmation. One page, four states (`outcome`):
+   verified — the link worked; already — it was used before; invalid / error — it did not, offer a new
+   one; resend — the "send me a new link" form; resent — that form was
+   sent. Context: outcome, resend_url, branding. #}
+{% extends "rcms_admin/_auth_layout.html" %}
+
+{% block page_title %}{{ "Confirm your email" | translate(locale=LANG) }}{% endblock %}
+{% block brand_mark %}<span class="rcms-brand-icon"><span class="material-symbols-rounded">mark_email_read</span></span>{% endblock %}
+{% block brand_name %}{{ site_name }}{% endblock %}
+{% block brand_sub %}{{ "Confirm your email" | translate(locale=LANG) }}{% endblock %}
+
+{% block body %}
+{% if outcome == "verified" or outcome == "already" %}
+    {% if outcome == "verified" %}
+    <h1>{{ "Email confirmed" | translate(locale=LANG) }}</h1>
+    <p class="rcms-lead">{{ "Thank you. Your email address is confirmed." | translate(locale=LANG) }}</p>
+    {% else %}
+    <h1>{{ "Already confirmed" | translate(locale=LANG) }}</h1>
+    <p class="rcms-lead">{{ "This email address was already confirmed. There is nothing more to do." | translate(locale=LANG) }}</p>
+    {% endif %}
+    <div class="rcms-center-cta">
+        <a href="/">{{ "Continue to {site}" | translate(locale=LANG, site=site_name) }} →</a>
+    </div>
+{% elif outcome == "resent" %}
+    <h1>{{ "Check your inbox" | translate(locale=LANG) }}</h1>
+    <p class="rcms-lead">{{ "If an account with that email is waiting for confirmation, we have sent it a new link." | translate(locale=LANG) }}</p>
+{% else %}
+    <form method="post" action="{{ resend_url }}">
+        {{ csrf_token | csrf_input | safe }}
+        {% if outcome == "resend" %}
+        <h1>{{ "Send a new link" | translate(locale=LANG) }}</h1>
+        <p class="rcms-lead">{{ "Enter the email you signed up with and we will send a new confirmation link." | translate(locale=LANG) }}</p>
+        {% else %}
+        <h1>{{ "This link does not work" | translate(locale=LANG) }}</h1>
+        <p class="rcms-error">{{ "The confirmation link is invalid or has expired." | translate(locale=LANG) }}</p>
+        <p class="rcms-lead">{{ "Enter the email you signed up with and we will send a new confirmation link." | translate(locale=LANG) }}</p>
+        {% endif %}
+        <label for="verify-email">{{ "Email" | translate(locale=LANG) }}</label>
+        <input id="verify-email" type="email" name="email" autocomplete="email" autofocus required>
+        <div class="rcms-actions">
+            <a class="rcms-forgot" href="/members/login">{{ "← Back to sign in" | translate(locale=LANG) }}</a>
+            <button type="submit" class="rcms-btn">{{ "Send link" | translate(locale=LANG) }}</button>
+        </div>
+    </form>
+{% endif %}
+{#- The success screens end in their own link to the site. -#}
+{% if outcome != "verified" and outcome != "already" %}<p class="rcms-auth-back"><a href="/">← {{ "Back to {site}" | translate(locale=LANG, site=site_name) }}</a></p>{% endif %}
+{% endblock %}

@@ -247,8 +247,14 @@ pub struct SectionedPage {
     #[field(
         widget = Stream,
         label = "Body",
-        help = "Compose the page from blocks — headings, text, quotes, tables.",
-        allowed(heading, paragraph, quote, typed_table)
+        help = "Compose the page from any of the built-in blocks.",
+        allowed(
+            heading, paragraph, rich_text, quote, image, embed, code, table,
+            typed_table, raw_html, cards, slider, gallery, text, email, url,
+            integer, float, decimal, boolean, date, time, datetime, choice,
+            multiple_choice, regex, "static", page_chooser, snippet_chooser,
+            document_chooser, form
+        )
     )]
     pub body: Option<String>,
 }

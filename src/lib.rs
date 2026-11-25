@@ -107,6 +107,7 @@ pub mod locale_mode;
 mod log_err;
 pub mod lock;
 pub mod macros;
+pub mod mail;
 pub mod markdown;
 pub mod mcp;
 pub mod media;

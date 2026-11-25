@@ -16,6 +16,8 @@
 //! Fallback rules:
 //! - Title → `page.og_title` ?? `page.seo_title` ?? `page.title`
 //! - Description → `page.og_description` ?? `page.seo_description`
+//! - Description → the `fallback_description` arg when the page has none;
+//!   `<meta name="description">` is trimmed to 160 characters on a word boundary.
 //! - Image → resolve `page.og_image_media_id` via `/__media__/fill-1200x630/<id>`
 //!   when set; else empty (no tag emitted). The renderer fills
 //!   `og_image_media_id` with the page's first photo when the editor chose
@@ -212,10 +214,26 @@ fn rcms_meta_tags(args: &HashMap<String, tera::Value>) -> tera::Result<tera::Val
     } else {
         title.clone()
     };
+    let fallback_description = args
+        .get("fallback_description")
+        .and_then(tera::Value::as_str)
+        .unwrap_or("");
     let final_description = if !og_description.is_empty() {
         og_description.clone()
-    } else {
+    } else if !seo_description.is_empty() {
         seo_description.clone()
+    } else {
+        fallback_description.to_owned()
+    };
+    let fallback_image = args
+        .get("fallback_image")
+        .and_then(tera::Value::as_str)
+        .filter(|s| !s.is_empty());
+    let image_url: Option<String> = match og_image_id {
+        Some(mid) => Some(abs(
+            &crate::rendition::rendition_url_for(mid, "fill-1200x630", None).unwrap_or_default(),
+        )),
+        None => fallback_image.map(abs),
     };
 
     let mut html = String::with_capacity(512);
@@ -232,13 +250,12 @@ fn rcms_meta_tags(args: &HashMap<String, tera::Value>) -> tera::Result<tera::Val
     // SEO description.
     if !final_description.is_empty() {
         html.push_str(r#"<meta name="description" content=""#);
-        html.push_str(&tera::escape_html(&final_description));
+        html.push_str(&tera::escape_html(&truncate_description(&final_description)));
         html.push_str("\">\n");
     }
     // robots (only emitted when noindex).
     if !robots_index {
-        html.push_str(r#"<meta name="robots" content="noindex">\n"#);
-        html.push('\n');
+        html.push_str("<meta name=\"robots\" content=\"noindex\">\n");
     }
 
     // Open Graph.
@@ -255,9 +272,9 @@ fn rcms_meta_tags(args: &HashMap<String, tera::Value>) -> tera::Result<tera::Val
     html.push_str(r#"<meta property="og:type" content=""#);
     html.push_str(&tera::escape_html(&og_type));
     html.push_str("\">\n");
-    if let Some(mid) = og_image_id {
+    if let Some(url) = &image_url {
         html.push_str(r#"<meta property="og:image" content=""#);
-        html.push_str(&abs(&crate::rendition::rendition_url_for(mid, "fill-1200x630", None).unwrap_or_default()));
+        html.push_str(url);
         html.push_str("\">\n");
     }
 
@@ -275,13 +292,29 @@ fn rcms_meta_tags(args: &HashMap<String, tera::Value>) -> tera::Result<tera::Val
         html.push_str(&tera::escape_html(&final_description));
         html.push_str("\">\n");
     }
-    if let Some(mid) = og_image_id {
+    if let Some(url) = &image_url {
         html.push_str(r#"<meta name="twitter:image" content=""#);
-        html.push_str(&abs(&crate::rendition::rendition_url_for(mid, "fill-1200x630", None).unwrap_or_default()));
+        html.push_str(url);
         html.push_str("\">\n");
     }
 
     Ok(tera::Value::String(html))
+}
+
+/// Longest description search engines show before cutting it off.
+const DESCRIPTION_MAX_CHARS: usize = 160;
+
+/// Trim to [`DESCRIPTION_MAX_CHARS`] on a word boundary, adding `…`.
+fn truncate_description(s: &str) -> String {
+    if s.chars().count() <= DESCRIPTION_MAX_CHARS {
+        return s.to_owned();
+    }
+    let cut: String = s.chars().take(DESCRIPTION_MAX_CHARS - 1).collect();
+    let head = match cut.rsplit_once(char::is_whitespace) {
+        Some((head, _)) if !head.is_empty() => head,
+        _ => cut.as_str(),
+    };
+    format!("{}…", head.trim_end_matches([' ', ',', ';', ':', '-', '.']))
 }
 
 #[cfg(test)]
@@ -456,5 +489,43 @@ mod tests {
         let article_html = render_with_extra_args(page_value(json!({})), &[("og_type", "article")]);
         assert!(article_html.contains(r#"og:type" content="article""#));
         assert!(!article_html.contains(r#"og:type" content="website""#));
+    }
+
+    #[test]
+    fn long_description_is_trimmed_for_the_meta_tag_only() {
+        let long = "word ".repeat(60);
+        let html = render(page_value(json!({ "seo_description": long.trim() })));
+        let meta = html
+            .lines()
+            .find(|l| l.starts_with(r#"<meta name="description""#))
+            .unwrap();
+        let content = meta
+            .trim_start_matches(r#"<meta name="description" content=""#)
+            .trim_end_matches("\">");
+        assert!(content.chars().count() <= 160, "{content}");
+        assert!(content.ends_with('…'));
+        assert!(html.contains(long.trim()), "og copy keeps the full text");
+    }
+
+    #[test]
+    fn fallback_description_and_image_fill_gaps() {
+        let html = render_with_extra_args(
+            page_value(json!({})),
+            &[
+                ("fallback_description", "Default text"),
+                ("fallback_image", "/static/og.png"),
+                ("origin", "https://x.dev"),
+            ],
+        );
+        assert!(html.contains(r#"name="description" content="Default text""#));
+        assert!(html.contains(r#"og:image" content="https://x.dev/static/og.png""#));
+        assert!(html.contains(r#"twitter:image" content="https://x.dev/static/og.png""#));
+    }
+
+    #[test]
+    fn noindex_tag_ends_with_a_real_newline() {
+        let html = render(page_value(json!({ "robots_index": false })));
+        assert!(html.contains("<meta name=\"robots\" content=\"noindex\">\n"));
+        assert!(!html.contains("\\n"));
     }
 }

@@ -17,8 +17,8 @@ to end, and the Rustango-CMS logo in the admin.
 ### Changed
 
 - **Breaking:** requires `rustango` 0.69 (was 0.65). See UPGRADING.
-- The admin icon, favicon, touch icon and sign-in logo are the
-  Rustango-CMS mark used on cms.rustango.com.
+- The admin icon, favicon, touch icon and sign-in logo, and the starter
+  themes' logo, are the Rustango-CMS mark used on cms.rustango.com.
 - The default `choice` block is optional: with no options a required
   select could never be satisfied, so a page holding one could not be
   saved.
